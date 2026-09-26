@@ -64,6 +64,23 @@ static void testRoutesAroundWall() {
     for (const LatLon& p : route) CHECK(!g.blocked(g.cellAt(p)));
 }
 
+static void testLongExpensiveRouteIsFound() {
+    // A one-cell-wide corridor of expensive cells: there is exactly one way through, so one wrongly dropped queue entry ends the
+    // search. Cost-so-far reaches about 1.5 million, where float rounding once made the stale-entry test drop valid entries and the
+    // search reported no route at all.
+    CostGrid g = makeGrid(3000, 1);
+    for (int c = 0; c < 3000; ++c) g.setCost({c, 0}, 500.0f);
+    const auto route = findRoute(g, g.centre({0, 0}), g.centre({2999, 0}));
+    CHECK(route.size() >= 2);
+    CHECK(!route.empty() && g.cellAt(route.back()).col == 2999);
+    g.setLaneUseFactor(0.5);  // and with the scaled distance estimate large vessels use
+    CHECK(!findRoute(g, g.centre({0, 0}), g.centre({2999, 0})).empty());
+    // Costs that differ from cell to cell make the rounding vary along the way.
+    CostGrid v = makeGrid(3000, 1);
+    for (int c = 0; c < 3000; ++c) v.setCost({c, 0}, 400.0f + static_cast<float>((c * 7919) % 300) * 0.37f);
+    CHECK(!findRoute(v, v.centre({0, 0}), v.centre({2999, 0})).empty());
+}
+
 static void testNoRoute() {
     CostGrid g = makeGrid(10, 10);
     for (int r = 0; r < 10; ++r) g.setCost({5, r}, kBlocked);  // full wall
@@ -1203,6 +1220,7 @@ int main() {
     testDepthBarrier();
     testStraightRoute();
     testRoutesAroundWall();
+    testLongExpensiveRouteIsFound();
     testNoRoute();
     testChannelCentering();
     testShoreMargin();

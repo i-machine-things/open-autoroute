@@ -8,8 +8,12 @@
 namespace oar {
 namespace {
 
+// The queue entry carries its own cost-so-far `g`. The stale-entry test compares that exact value with the best known, instead of
+// recomputing g as f - h: on a long route the costs run to hundreds of thousands, where a float cannot resolve differences under
+// about 0.01, so the recomputed value looked worse than the best and valid entries were dropped (the search then gave up).
 struct Node {
     float f;
+    float g;
     int idx;
     bool operator>(const Node& o) const { return f > o.f; }
 };
@@ -188,13 +192,13 @@ std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, d
     const auto h = [&](Cell c) { return heuristic(c, g) * hScale; };
 
     best[idxOf(s)] = 0.0f;
-    open.push({h(s), idxOf(s)});
+    open.push({h(s), 0.0f, idxOf(s)});
     while (!open.empty()) {
         const Node cur = open.top();
         open.pop();
         const Cell c{cur.idx % cols, cur.idx / cols};
         if (c == g) break;
-        if (cur.f - h(c) > best[cur.idx] + 1e-4f) continue;  // stale queue entry
+        if (cur.g > best[cur.idx]) continue;  // stale queue entry: a cheaper way here was found after this was queued
         for (int dr = -1; dr <= 1; ++dr) {
             for (int dc = -1; dc <= 1; ++dc) {
                 if (dr == 0 && dc == 0) continue;
@@ -209,7 +213,7 @@ std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, d
                 if (cand < best[idxOf(nb)]) {
                     best[idxOf(nb)] = cand;
                     parent[idxOf(nb)] = cur.idx;
-                    open.push({cand + h(nb), idxOf(nb)});
+                    open.push({cand + h(nb), cand, idxOf(nb)});
                 }
             }
         }
