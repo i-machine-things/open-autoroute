@@ -101,6 +101,7 @@ int main(int argc, char** argv) {
     std::string encDir, evalPath, outPath = "route.gpx", routeName, startName = "START", endName = "END";
     LatLon from{}, to{}, mapAt{};
     int mapRadius = 0;
+    bool trace = false;
     bool haveFrom = false, haveTo = false, applyTss = true, underSail = false;
     double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0, lengthM = 12.0, laneUse = -1.0, simplify = 0.05, laneMarginM = 1500.0, laneMarginWeight = 12.0, caution = -1.0, minLegM = 460.0;
     bool summary = false, useMarks = true, useChannels = true, useHazards = true;
@@ -143,6 +144,7 @@ int main(int argc, char** argv) {
         else if (a == "--no-marks") useMarks = false;  // ignore red/green lateral marks (for comparison)
         else if (a == "--summary") summary = true;  // one machine-readable line at the end, for benchmark scripts
         else if (a == "--simplify" && hasVal) simplify = std::atof(argv[++i]);
+        else if (a == "--trace") trace = true;  // developer: with --map, also list the raw path cells in the window with their lane and cost
         else if (a == "--no-tss") applyTss = false;
         else if (a == "--under-sail" || a == "--sail") underSail = true;  // engine off, sails doing the work
         else if (a == "--length-m" && hasVal) lengthM = std::atof(argv[++i]);
@@ -320,6 +322,19 @@ int main(int argc, char** argv) {
         std::printf("map: %d cells (%.0f m each) around %.4f,%.4f, north up. # blocked, . open, n/e/s/w lane flow, "
                     "* smoothed route, o raw A* path, N/E/S/W path in a lane\n", 2 * mapRadius + 1, grid.cellSizeM(), mapAt.lat, mapAt.lon);
         for (const auto& line : canvas) std::printf("%s\n", line.c_str());
+        if (trace) {
+            std::printf("raw path cells in the window (col,row: lane flow, zone, caution, interior, cost), in travel order:\n");
+            Cell prev{-1, -1};
+            for (const Cell& c : rawPath) {
+                if (std::abs(c.col - mc.col) > mapRadius || std::abs(c.row - mc.row) > mapRadius) continue;
+                const float lane = grid.laneDirection(c);
+                std::printf("  (%d,%d)", c.col, c.row);
+                if (prev.col >= 0) std::printf(" step %+d,%+d", c.col - prev.col, c.row - prev.row);
+                std::printf(" lane=%s%.0f zone=%d caution=%d interior=%d cost=%.2f\n", std::isnan(lane) ? "-" : "", std::isnan(lane) ? 0.0f : lane,
+                            grid.isZone(c) ? 1 : 0, grid.isCaution(c) ? 1 : 0, grid.isLaneInterior(c) ? 1 : 0, grid.cost(c));
+                prev = c;
+            }
+        }
     };
     if (!evalPath.empty()) {
         route = given;  // score as-is: no snapping, no rerouting
