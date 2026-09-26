@@ -92,7 +92,7 @@ std::map<int, Snap> nearestPerBody(const CostGrid& g, const WaterBodies& bodies,
 void usage(const char* argv0) {
     std::fprintf(stderr,
                  "usage: %s --enc DIR (--from LAT,LON --to LAT,LON | --eval ROUTE.gpx) [--draft M=1.5] [--clearance M=1.0]\n"
-                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [--length-m L=12] [--under-sail] [--lane-use F] [--lane-margin-m M=1000] [--caution F] [--simplify T=0.05] [--summary] [--map LAT,LON,CELLS] [-o route.gpx]\n", argv0);
+                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [--length-m L=12] [--under-sail] [--lane-use F] [--lane-margin-m M=1000] [--lane-margin-weight W=6] [--caution F] [--simplify T=0.05] [--summary] [--map LAT,LON,CELLS] [-o route.gpx]\n", argv0);
 }
 
 }  // namespace
@@ -102,7 +102,7 @@ int main(int argc, char** argv) {
     LatLon from{}, to{}, mapAt{};
     int mapRadius = 0;
     bool haveFrom = false, haveTo = false, applyTss = true, underSail = false;
-    double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0, lengthM = 12.0, laneUse = -1.0, simplify = 0.05, laneMarginM = 1000.0, caution = -1.0;
+    double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0, lengthM = 12.0, laneUse = -1.0, simplify = 0.05, laneMarginM = 1000.0, laneMarginWeight = 6.0, caution = -1.0;
     bool summary = false;
     const auto startedAt = std::chrono::steady_clock::now();
     double snapStartM = 0.0, snapEndM = 0.0;
@@ -122,6 +122,7 @@ int main(int argc, char** argv) {
             if (c2 == std::string::npos || !parseLatLon(v.substr(0, c2).c_str(), mapAt)) { usage(argv[0]); return 2; }
             mapRadius = std::atoi(v.c_str() + c2 + 1);
         }
+        else if (a == "--lane-margin-weight" && hasVal) laneMarginWeight = std::atof(argv[++i]);
         else if (a == "--caution" && hasVal) caution = std::atof(argv[++i]);
         else if (a == "--lane-margin-m" && hasVal) laneMarginM = std::atof(argv[++i]);
         else if (a == "--summary") summary = true;  // one machine-readable line at the end, for benchmark scripts
@@ -208,7 +209,7 @@ int main(int argc, char** argv) {
     grid.setLaneUseFactor(laneUse);
     // Leeway: a vessel that avoids lanes also keeps a wide berth from lanes, zones and the ends of lane parts, so it prefers
     // open water to a narrow strip between a shore and a lane.
-    if (avoidsLanes) grid.applyLaneMargin(laneMarginM, 6.0);
+    if (avoidsLanes) grid.applyLaneMargin(laneMarginM, laneMarginWeight);
     if (applyTss) {
         std::printf("vessel %.1f m%s: %s (lane-use factor %.2f)\n", lengthM, underSail ? ", under sail" : "",
                     avoidsLanes ? "stays out of traffic lanes, crosses square-on" : "uses traffic lanes", laneUse);
