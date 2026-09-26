@@ -21,7 +21,10 @@ float laneFactor(double headingDeg, double laneDeg);
 /// `simplifyTolerance` (a fraction, e.g. 0.05) lets a straight shortcut replace a stretch of the path even when it costs
 /// up to that much more, which merges near-equal detours into single legs and cuts the waypoint count. Hard limits (blocked
 /// cells, wrong-way lane travel) are never traded away. 0 keeps every waypoint the cost comparison requires.
-std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, double simplifyTolerance = 0.0);
+///
+/// `rawPath`, if given, receives the unsmoothed grid cells A* chose, for debugging (see the CLI's --map).
+std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, double simplifyTolerance = 0.0,
+                              std::vector<Cell>* rawPath = nullptr);
 
 /// True when the straight segment between two cells crosses no blocked cell. Exposed for testing.
 bool lineOfSight(const CostGrid& grid, Cell a, Cell b);

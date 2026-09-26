@@ -198,6 +198,7 @@ int main(int argc, char** argv) {
     grid.applyShoreMargin(marginM, marginWeight);
 
     std::vector<LatLon> route;
+    std::vector<Cell> rawPath;  // unsmoothed A* cells, drawn by --map
     if (!evalPath.empty()) {
         route = given;  // score as-is: no snapping, no rerouting
     } else {
@@ -211,7 +212,7 @@ int main(int argc, char** argv) {
         if (!(s == s2)) std::printf("start moved to nearest safe water (%.0f m)\n", haversineM(from, grid.centre(s2)));
         if (!(g == g2)) std::printf("end moved to nearest safe water (%.0f m)\n", haversineM(to, grid.centre(g2)));
 
-        route = findRoute(grid, grid.centre(s2), grid.centre(g2), simplify);
+        route = findRoute(grid, grid.centre(s2), grid.centre(g2), simplify, &rawPath);
         if (route.empty()) {
             std::fprintf(stderr, "no route found: the charts show no continuous water at least %.1f m deep between the points\n",
                          minDepth);
@@ -241,6 +242,13 @@ int main(int argc, char** argv) {
             }
             canvas.push_back(line);
         }
+        for (const Cell& c : rawPath) {  // the raw A* cells first ('o'), so the smoothed route draws over them
+            const int y = c.row - (mc.row - mapRadius), x = c.col - (mc.col - mapRadius);
+            if (y >= 0 && y < static_cast<int>(canvas.size()) && x >= 0 && x < static_cast<int>(canvas[y].size())) {
+                char& ch = canvas[y][x];
+                ch = (ch == 'n' || ch == 'e' || ch == 's' || ch == 'w') ? static_cast<char>(ch - 32) : 'o';
+            }
+        }
         for (size_t i = 1; i < route.size(); ++i) {
             const double leg = haversineM(route[i - 1], route[i]);
             const int steps = std::max(1, static_cast<int>(leg / (grid.cellSizeM() / 2)));
@@ -252,12 +260,12 @@ int main(int argc, char** argv) {
                 if (y >= 0 && y < static_cast<int>(canvas.size()) && x >= 0 && x < static_cast<int>(canvas[y].size())) {
                     char& ch = canvas[y][x];
                     if (ch == 'n' || ch == 'e' || ch == 's' || ch == 'w') ch = static_cast<char>(ch - 32);  // upper case: route in a lane
-                    else if (ch != 'N' && ch != 'E' && ch != 'S' && ch != 'W') ch = '*';
+                    else if (ch != 'N' && ch != 'E' && ch != 'S' && ch != 'W') ch = '*';  // (a raw-path 'o' is drawn over by '*')
                 }
             }
         }
         std::printf("map: %d cells (%.0f m each) around %.4f,%.4f, north up. # blocked, . open, n/e/s/w lane flow, "
-                    "* route, N/E/S/W route inside a lane\n", 2 * mapRadius + 1, grid.cellSizeM(), mapAt.lat, mapAt.lon);
+                    "* smoothed route, o raw A* path, N/E/S/W path in a lane\n", 2 * mapRadius + 1, grid.cellSizeM(), mapAt.lat, mapAt.lon);
         for (const auto& line : canvas) std::printf("%s\n", line.c_str());
     }
     std::vector<double> clearances;

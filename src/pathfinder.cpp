@@ -99,7 +99,8 @@ bool lineOfSight(const CostGrid& grid, Cell a, Cell b) {
     }
 }
 
-std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, double simplifyTolerance) {
+std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, double simplifyTolerance,
+                              std::vector<Cell>* rawPath) {
     const Cell s = grid.cellAt(start), g = grid.cellAt(goal);
     if (!grid.inBounds(s) || !grid.inBounds(g) || grid.blocked(s) || grid.blocked(g)) return {};
 
@@ -147,6 +148,7 @@ std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, d
     std::vector<Cell> cells;
     for (int i = idxOf(g); i != -1; i = parent[i]) cells.push_back({i % cols, i / cols});
     std::reverse(cells.begin(), cells.end());
+    if (rawPath) *rawPath = cells;
 
     // Cumulative cost along the grid path, so a shortcut can be compared with the stretch it replaces.
     std::vector<float> cum(cells.size(), 0.0f);
