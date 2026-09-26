@@ -43,7 +43,8 @@ shoals, shallow or depth-unknown obstructions and wrecks, and water with no char
 Rule 9 (keeping right in narrow channels) is not applied yet.
 Rule 10 (traffic separation schemes) is applied: separation zones and lines are never entered, travel against a lane's
 flow is refused, and lane crossings are priced so they are made as close to square to the flow as the grid allows. What a
-vessel does with lanes depends on its size, following Rule 10(j): under 20 m or a sailing vessel (`--sail`) stays out
+vessel does with lanes depends on its size, following Rule 10(j): under 20 m or a vessel under sail (`--under-sail`, engine
+off; a sailboat that is motoring is power-driven and judged on length) stays out
 of lanes and only crosses them, while a larger vessel is drawn into them and stays in. `--length-m` sets the length
 (default 12 m), `--no-tss` switches all of this off, and `--lane-use` overrides the lane cost directly.
 `--eval route.gpx` scores any GPX route, such as one from another planner, against the same rules.

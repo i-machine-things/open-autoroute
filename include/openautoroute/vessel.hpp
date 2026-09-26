@@ -9,10 +9,12 @@ constexpr double kSmallVesselLengthM = 20.0;
 
 struct Vessel {
     double lengthM = 12.0;
-    bool sailing = false;
+    /// True only while the vessel is actually under sail. Under Rule 3(c) a sailing vessel with its engine running is a
+    /// power-driven vessel, so a sailboat that is motoring leaves this false and is judged on length like any other.
+    bool underSail = false;
 };
 
-inline bool isSmallVessel(const Vessel& v) { return v.sailing || v.lengthM < kSmallVesselLengthM; }
+inline bool isSmallVessel(const Vessel& v) { return v.underSail || v.lengthM < kSmallVesselLengthM; }
 
 /// Default CostGrid::setLaneUseFactor value for a vessel: small craft avoid running along lanes (they may still cross
 /// them square-on), larger vessels are drawn into lanes and stay in them.

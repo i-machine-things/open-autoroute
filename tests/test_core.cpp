@@ -304,7 +304,8 @@ static void testLaneUseFactor() {
 static void testVesselClass() {
     CHECK(isSmallVessel({19.9, false}));   // Rule 10(j): under 20 m
     CHECK(!isSmallVessel({20.0, false}));  // 20 m and over is not covered
-    CHECK(isSmallVessel({60.0, true}));    // a sailing vessel is small whatever its length
+    CHECK(isSmallVessel({60.0, true}));    // a vessel under sail is small whatever its length
+    CHECK(!isSmallVessel({25.0, false}));  // the same 25 m yacht motoring is power-driven, so judged on length
     CHECK(defaultLaneUseFactor({12.0, false}) > 1.0);   // small craft keep out of lanes
     CHECK(defaultLaneUseFactor({120.0, false}) < 1.0);  // large vessels are drawn into them
 }

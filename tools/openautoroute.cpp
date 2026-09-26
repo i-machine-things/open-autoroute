@@ -82,7 +82,7 @@ bool snapToOpen(const CostGrid& g, Cell c, int radius, Cell& out) {
 void usage(const char* argv0) {
     std::fprintf(stderr,
                  "usage: %s --enc DIR (--from LAT,LON --to LAT,LON | --eval ROUTE.gpx) [--draft M=1.5] [--clearance M=1.0]\n"
-                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [--length-m L=12] [--sail] [--lane-use F] [-o route.gpx]\n", argv0);
+                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [--length-m L=12] [--under-sail] [--lane-use F] [-o route.gpx]\n", argv0);
 }
 
 }  // namespace
@@ -90,7 +90,7 @@ void usage(const char* argv0) {
 int main(int argc, char** argv) {
     std::string encDir, evalPath, outPath = "route.gpx";
     LatLon from{}, to{};
-    bool haveFrom = false, haveTo = false, applyTss = true, sailing = false;
+    bool haveFrom = false, haveTo = false, applyTss = true, underSail = false;
     double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0, lengthM = 12.0, laneUse = -1.0;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
         else if (a == "--clearance" && hasVal) clearance = std::atof(argv[++i]);
         else if (a == "--cell-m" && hasVal) cellM = std::atof(argv[++i]);
         else if (a == "--no-tss") applyTss = false;
-        else if (a == "--sail") sailing = true;
+        else if (a == "--under-sail" || a == "--sail") underSail = true;  // engine off, sails doing the work
         else if (a == "--length-m" && hasVal) lengthM = std::atof(argv[++i]);
         else if (a == "--lane-use" && hasVal) laneUse = std::atof(argv[++i]);
         else if (a == "--margin-m" && hasVal) marginM = std::atof(argv[++i]);
@@ -179,11 +179,11 @@ int main(int argc, char** argv) {
     // Keep off the shore: penalise cells near blocked water (see CostGrid::applyShoreMargin). Also measure how close the
     // finished route gets, using the distances from before the penalty changes any costs.
     // Vessel type decides how lanes are used (COLREGs Rule 10(j), see vessel.hpp). --lane-use overrides the factor.
-    const Vessel vessel{lengthM, sailing};
+    const Vessel vessel{lengthM, underSail};
     if (laneUse < 0.0) laneUse = defaultLaneUseFactor(vessel);
     grid.setLaneUseFactor(laneUse);
     if (applyTss) {
-        std::printf("vessel %.1f m%s: %s (lane-use factor %.2f)\n", lengthM, sailing ? ", sailing" : "",
+        std::printf("vessel %.1f m%s: %s (lane-use factor %.2f)\n", lengthM, underSail ? ", under sail" : "",
                     laneUse > 1.0 ? "stays out of traffic lanes, crosses square-on" : "uses traffic lanes", laneUse);
     }
     const std::vector<float> shoreDist = grid.distanceToBlockedM();
