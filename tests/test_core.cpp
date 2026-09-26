@@ -990,6 +990,65 @@ static void testHazardRestrictedAreas() {
     CHECK(stampHazards({security}).cost({1, 5}) == 10.0f);  // any other wording keeps the full cost
 }
 
+// Nature reserves and sanctuaries do not close the water; the chart's own wording decides military and security zones; and the areas a
+// route pays to cross are recorded so they can be reported.
+static void testRestrictedAreaTextAndNotes() {
+    auto resare = [](uint32_t restrn, uint32_t catrea, const char* text) {
+        ChartFeature f = areaFeature("RESARE", 45.990, 46.0, -124.000, -123.996);   // cols 0-3
+        f.restrn = restrn;
+        f.catrea = catrea;
+        f.inform = text;
+        return f;
+    };
+    // A whale sanctuary (CATREA 4 to 7, 22, 23) is passable and nearly free.
+    CostGrid sanctuary = stampHazards({resare(1u << 16, 1u << 22, "Discharging prohibited, approaching within 100 yards of a humpback whale prohibited. 15 CFR 922")});
+    CHECK(!sanctuary.blocked({1, 5}) && sanctuary.cost({1, 5}) == 1.2f);
+    // Text that closes a military or security zone blocks it, whatever the codes say; the same codes without that text do not.
+    CHECK(stampHazards({resare(1u << 8, 1u << 9, "The indicated area at Pearl Harbor is a Naval Defense Sea Area and is closed to the public.")}).blocked({1, 5}));
+    CHECK(stampHazards({resare(1u << 8, 1u << 1, "United States Coast Guard, SECURITY ZONE - KEEP OUT, Vessels Not Authorized Entry Pursuant to 33 CFR Part 165.814 are Prohibited.")}).blocked({1, 5}));
+    CHECK(!stampHazards({resare(1u << 8, 1u << 9, "Danger zone, 33 CFR 334.230")}).blocked({1, 5}));
+    ChartFeature closedMip = areaFeature("MIPARE", 45.990, 46.0, -124.000, -123.996);
+    closedMip.inform = "Restricted area, closed to the public";
+    CHECK(stampHazards({closedMip}).blocked({1, 5}));
+    // Wording that only asks for care while transiting takes a military area down from x30 to x2.
+    const char* careText = "Naval Operating Area.  Vessels should use caution while transiting this area due to naval test operations";
+    CHECK(stampHazards({resare(0, 1u << 9, careText)}).cost({1, 5}) == 2.0f);
+    ChartFeature careMip = areaFeature("MIPARE", 45.990, 46.0, -124.000, -123.996);
+    careMip.inform = careText;
+    CHECK(stampHazards({careMip}).cost({1, 5}) == 2.0f);
+    CHECK(stampHazards({resare(0, 1u << 9, "")}).cost({1, 5}) == 30.0f);  // no wording, no relief
+
+    // Notes: the costed area is recorded per cell with its wording; open cells and blocked ones carry none.
+    auto stampNoted = [](std::vector<ChartFeature> extra, AreaLayer& layer, bool withDepth = true) {
+        CostGrid g = makeGrid(12, 10);
+        g.fill(kBlocked);
+        ChartData d;
+        if (withDepth) d.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.988, 30.0));
+        for (auto& f : extra) d.features.push_back(std::move(f));
+        StampOptions o;
+        o.areas = &layer;
+        stampChart(d, o, g);
+        return g;
+    };
+    AreaLayer layer;
+    stampNoted({resare(0, 1u << 9, careText)}, layer);
+    CHECK(layer.notes.size() == 1);
+    CHECK(layer.notes[0].kind == "military area" && layer.notes[0].factor == 2.0f);
+    CHECK(layer.notes[0].text.find("Naval Operating Area") == 0);
+    CHECK(layer.id[5 * 12 + 1] == 0);
+    CHECK(layer.id[5 * 12 + 8] == -1);             // outside the area
+    // A finer chart that covers the same water and has no such area clears it, as it clears the cost; one that repeats it adds no second note.
+    stampNoted({}, layer);
+    CHECK(layer.id[5 * 12 + 1] == -1);
+    stampNoted({resare(0, 1u << 9, careText)}, layer);
+    stampNoted({resare(0, 1u << 9, careText)}, layer);
+    CHECK(layer.notes.size() == 1 && layer.id[5 * 12 + 1] == 0);
+    // Blocked areas are not "crossed": no note.
+    AreaLayer none;
+    stampNoted({resare(1u << 7, 0, "")}, none);
+    CHECK(none.id[5 * 12 + 1] == -1);
+}
+
 static void testHazardPenalties() {
     ChartFeature military = areaFeature("MIPARE", 45.996, 46.0, -124.000, -123.996);   // cols 0-3, rows 0-3: heavily costly, never a wall
     ChartFeature caution = areaFeature("CTNARE", 45.990, 45.994, -124.000, -123.996);   // cols 0-3, rows 6-9
@@ -1305,6 +1364,7 @@ int main() {
     testHazardObstructions();
     testHazardBlocksAlways();
     testHazardRestrictedAreas();
+    testRestrictedAreaTextAndNotes();
     testHazardPenalties();
     testHazardMarks();
     testHazardOverheadClearance();

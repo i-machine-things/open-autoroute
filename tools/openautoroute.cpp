@@ -286,6 +286,7 @@ int main(int argc, char** argv) {
 
     int used = 0;
     std::vector<LateralMark> marks;
+    AreaLayer areaLayer;  // restricted and dangerous areas costed rather than blocked, to report which ones the route crosses
     for (const auto& [name, path] : cells) {
         ChartData d;
         std::string err;
@@ -304,6 +305,7 @@ int main(int argc, char** argv) {
         so.vesselLengthM = lengthM;
         so.hazardObjects = useHazards;
         so.skipClasses = skipClasses;
+        so.areas = &areaLayer;
         stampChart(d, so, grid);
         if (useMarks) collectLateralMarks(d, marks);
         std::printf("  chart %s\n", name.c_str());
@@ -476,6 +478,10 @@ int main(int argc, char** argv) {
     struct LaneRun { LatLon at; double alongM = 0, lengthM = 0, thetaSum = 0, thetaMin = 180, thetaMax = 0; float lane = 0; int n = 0; };
     std::vector<LaneRun> laneRuns;
     bool inLane = false;
+    // Restricted and dangerous areas the route crosses: metres and separate stretches in each, and where the first stretch starts.
+    struct AreaCrossing { double m = 0; int stretches = 0; LatLon at{}; };
+    std::map<int32_t, AreaCrossing> crossed;
+    int32_t inArea = -1;
     for (size_t i = 1; i < route.size(); ++i) {
         const double leg = haversineM(route[i - 1], route[i]);
         const int steps = std::max(1, static_cast<int>(leg / grid.cellSizeM()));
@@ -495,6 +501,14 @@ int main(int argc, char** argv) {
                 if (grid.isNarrowChannel(hc)) narrowInM += leg / steps;
                 else if (!narrowDist.empty() && narrowDist[static_cast<size_t>(hc.row) * grid.cols() + hc.col] < 1500.0f && !grid.isChannel(hc)) narrowNearOutM += leg / steps;
             }
+            const int32_t areaId = (grid.inBounds(hc) && !areaLayer.id.empty()) ? areaLayer.id[static_cast<size_t>(hc.row) * grid.cols() + hc.col] : -1;
+            if (areaId >= 0) {
+                AreaCrossing& ac = crossed[areaId];
+                if (ac.stretches == 0) ac.at = here;
+                if (areaId != inArea) ++ac.stretches;
+                ac.m += leg / steps;
+            }
+            inArea = areaId;
             const bool caut = grid.inBounds(hc) && grid.isCaution(hc);
             if (caut) {
                 cautionM += leg / steps;
@@ -528,6 +542,25 @@ int main(int argc, char** argv) {
         std::sort(clearances.begin(), clearances.end());
         std::printf("clearance from land, shoal or uncharted water (excluding 1 km at each end): closest %.0f m, "
                     "median %.0f m\n", clearances.front(), clearances[clearances.size() / 2]);
+    }
+    // Restricted and dangerous areas crossed, dearest first. The router treats these as costs (so a harbour is never cut off), which
+    // means it will go through one when the way round is long: the skipper has to know, and check the rules for that area.
+    std::vector<std::pair<int32_t, AreaCrossing>> areasCrossed(crossed.begin(), crossed.end());
+    std::sort(areasCrossed.begin(), areasCrossed.end(), [&](const auto& a, const auto& b) {
+        const float fa = areaLayer.notes[a.first].factor, fb = areaLayer.notes[b.first].factor;
+        return fa != fb ? fa > fb : a.second.m > b.second.m;
+    });
+    double areasM = 0.0;
+    for (const auto& [id, ac] : areasCrossed) areasM += ac.m;
+    if (areasCrossed.empty()) {
+        std::printf("restricted or dangerous areas crossed: none charted\n");
+    } else {
+        std::printf("restricted or dangerous areas crossed (check the rules for each before you go):\n");
+        for (const auto& [id, ac] : areasCrossed) {
+            const AreaNote& n = areaLayer.notes[id];
+            std::printf("  %s (x%.1f): %.1f nm in %d stretch(es), first near %.4f,%.4f%s%s\n", n.kind.c_str(), n.factor, ac.m / 1852.0,
+                        ac.stretches, ac.at.lat, ac.at.lon, n.text.empty() ? "" : ": ", n.text.c_str());
+        }
     }
     // Rule 10 counts. A run within 25 degrees of the flow is normal lane use, within 25 degrees of the opposite is wrong-way
     // travel, and anything between is a crossing, judged by how far it is from square to the flow.
@@ -563,10 +596,10 @@ int main(int argc, char** argv) {
         if (!summary) return;
         const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count();
         std::printf("SUMMARY found=1 nm=%.2f straight_nm=%.2f waypoints=%zu charts=%d closest_m=%.0f median_m=%.0f blocked_m=%.0f "
-                    "vessel_m=%.0f caution_m=%.0f narrow_in_m=%.0f narrow_near_out_m=%.0f gates=%d gates_missed=%d lane_runs=%zu with_flow=%d crossings=%d wrong_way_m=%.0f worst_off_deg=%.0f snap_start_m=%.0f snap_end_m=%.0f "
+                    "vessel_m=%.0f caution_m=%.0f restricted_m=%.0f narrow_in_m=%.0f narrow_near_out_m=%.0f gates=%d gates_missed=%d lane_runs=%zu with_flow=%d crossings=%d wrong_way_m=%.0f worst_off_deg=%.0f snap_start_m=%.0f snap_end_m=%.0f "
                     "seconds=%.1f\n", nm, haversineM(from, to) / 1852.0, route.size(), used,
                     clearances.empty() ? -1.0 : clearances.front(), clearances.empty() ? -1.0 : clearances[clearances.size() / 2],
-                    unsafeM, lengthM, cautionM, narrowInM, narrowNearOutM, gatesNear, gatesMissed, laneRuns.size(), withFlow, crossings, wrongWayM, worstOff, snapStartM, snapEndM, secs);
+                    unsafeM, lengthM, cautionM, areasM, narrowInM, narrowNearOutM, gatesNear, gatesMissed, laneRuns.size(), withFlow, crossings, wrongWayM, worstOff, snapStartM, snapEndM, secs);
     };
     if (!evalPath.empty()) {
         std::printf("unsafe by the chart rules: %.0f m of %.0f m (%.1f%%) in %zu stretch(es)\n", unsafeM, nm * 1852.0,
@@ -594,8 +627,17 @@ int main(int argc, char** argv) {
         return 0;
     }
     // OpenCPN's Route Manager shows the route name and the names of the first and last waypoints (its From and To columns).
-    char desc[200];
-    std::snprintf(desc, sizeof desc, "open-autoroute: %.1f nm, %.1f m vessel, %.1f m draft plus %.1f m clearance", nm, lengthM, draft, clearance);
+    char descBuf[200];
+    std::snprintf(descBuf, sizeof descBuf, "open-autoroute: %.1f nm, %.1f m vessel, %.1f m draft plus %.1f m clearance", nm, lengthM, draft, clearance);
+    std::string desc = descBuf;
+    if (!areasCrossed.empty()) {
+        desc += ". Crosses restricted or dangerous areas:";
+        for (const auto& [id, ac] : areasCrossed) {
+            char one[80];
+            std::snprintf(one, sizeof one, " %s %.1f nm;", areaLayer.notes[id].kind.c_str(), ac.m / 1852.0);
+            desc += one;
+        }
+    }
     if (routeName.empty()) {
         char nb[80];
         std::snprintf(nb, sizeof nb, "open-autoroute %.3f,%.3f to %.3f,%.3f", from.lat, from.lon, to.lat, to.lon);

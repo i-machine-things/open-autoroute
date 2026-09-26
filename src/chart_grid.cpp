@@ -132,16 +132,57 @@ void shutGeometry(const ChartFeature& f, const CostGrid& grid, std::vector<uint8
     }
 }
 
-void raise(std::vector<float>& penalty, const CostGrid& grid, const ChartFeature& f, float factor) {
+// Where the costed areas are recorded for the report: which note covers each cell of this chart, and the notes themselves.
+struct NoteSink {
+    AreaLayer* layer = nullptr;
+    std::vector<int32_t> at;  // this chart's dearest note per cell
+};
+
+// Index of the note with this kind, wording and factor, adding it if it is new (the same area appears on charts of several scales).
+int32_t noteIndex(AreaLayer& layer, const std::string& kind, const std::string& text, float factor) {
+    std::string t = text.substr(0, 110);
+    for (char& c : t) if (c == '\n' || c == '\r') c = ' ';
+    for (size_t i = 0; i < layer.notes.size(); ++i) {
+        const AreaNote& n = layer.notes[i];
+        if (n.kind == kind && n.text == t && n.factor == factor) return static_cast<int32_t>(i);
+    }
+    layer.notes.push_back({kind, t, factor});
+    return static_cast<int32_t>(layer.notes.size() - 1);
+}
+
+void raise(std::vector<float>& penalty, const CostGrid& grid, const ChartFeature& f, float factor, NoteSink* sink = nullptr,
+           const char* kind = "") {
     if (f.geometry != Geometry::Area) return;
+    const int32_t note = (sink && sink->layer) ? noteIndex(*sink->layer, kind, f.inform, factor) : -1;
     forEachCellInArea(f, grid, [&](int row, int col) {
-        float& p = penalty[static_cast<size_t>(row) * grid.cols() + col];
-        p = std::max(p, factor);
+        const size_t i = static_cast<size_t>(row) * grid.cols() + col;
+        if (factor > penalty[i]) {
+            penalty[i] = factor;
+            if (note >= 0) sink->at[i] = note;
+        } else if (note >= 0 && factor == penalty[i] && sink->at[i] < 0) {
+            sink->at[i] = note;
+        }
     });
 }
 
+// What a chart's own wording says about entering an area. The codes cannot tell a closed naval area from a danger zone that is open
+// most of the time, but the text often can: NOAA charts say "closed to the public", "SECURITY ZONE - KEEP OUT", "Naval Operating Area.
+// Vessels should use caution while transiting", and so on.
+enum class AreaText { None, KeepOut, Caution };
+
+AreaText readAreaText(const std::string& inform) {
+    std::string t = inform;
+    std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    static const char* kKeepOut[] = {"closed to the public", "keep out", "no entry", "entry is prohibited", "entry prohibited",
+                                     "only ships or other craft authorized", "not authorized entry"};
+    for (const char* p : kKeepOut) if (t.find(p) != std::string::npos) return AreaText::KeepOut;
+    static const char* kCaution[] = {"use caution", "exercise caution", "use extreme caution", "caution while transiting"};
+    for (const char* p : kCaution) if (t.find(p) != std::string::npos) return AreaText::Caution;
+    return AreaText::None;
+}
+
 void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const CostGrid& grid, std::vector<uint8_t>& shut,
-                        std::vector<float>& penalty) {
+                        std::vector<float>& penalty, NoteSink& sink) {
     // Fixed things standing in the water, and areas nobody should enter, that the depth areas call open water.
     static const char* kBlockAlways[] = {"UNSARE", "FSHFAC", "MARCUL", "PRDARE", "OSPARE", "HULKES", "SLCONS", "PONTON", "PILPNT",
                                          "MORFAC", "FNCLNE", "DYKCON", "CAUSWY", "CONVYR", "PYLONS", "FLODOC", "DRYDOC", "GATCON", "DAMCON",
@@ -185,35 +226,52 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
             std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             const bool regulatedNavArea = text.find("regulated navigation area") != std::string::npos;
             const bool ship = opt.vesselLengthM >= 50.0;  // "area to be avoided" designations (ATBA) are aimed at large ships
-            const bool forbidden = (restrn & (1u << 7)) || ((restrn & (1u << 14)) && ship);
+            const AreaText words = readAreaText(f.inform);
+            const bool forbidden = (restrn & (1u << 7)) || ((restrn & (1u << 14)) && ship) || words == AreaText::KeepOut;
             if (forbidden) {
                 shutGeometry(f, grid, shut, scratch);
             } else {
                 float factor = 1.0f;
-                if (restrn & (1u << 14)) factor = 20.0f;                                   // area to be avoided, for a smaller vessel
+                const char* kind = "restricted area";
+                const auto bump = [&](float value, const char* label) {
+                    if (value > factor) { factor = value; kind = label; }
+                };
+                if (restrn & (1u << 14)) bump(20.0f, "area to be avoided");                // for a smaller vessel
                 // A military area (CATREA 9) is dear only if the chart restricts ENTRY (RESTRN 8) or says nothing about what is restricted.
                 // When it lists only anchoring, fishing, trawling, dragging and similar (RESTRN 1 to 6, 9 to 13, 15, 16, 24), a vessel may
-                // pass through: 33 CFR 334.360 at the mouth of Hampton Roads is one, and x30 there pushed a route miles off its line.
+                // pass through: 33 CFR 334.360 at the mouth of Hampton Roads is one, and x30 there pushed a route miles off its line. Chart text
+                // that only asks vessels to use caution while transiting (a "Naval Operating Area") counts the same.
                 if (catrea & (1u << 9)) {
                     const uint32_t transitLimits = restrn & ~((1u << 7) | (1u << 8) | (1u << 14));
-                    factor = std::max(factor, (transitLimits != 0 && !(restrn & (1u << 8))) ? 2.0f : 30.0f);
+                    const bool onlyCare = (transitLimits != 0 && !(restrn & (1u << 8))) || words == AreaText::Caution;
+                    bump(onlyCare ? 2.0f : 30.0f, "military area");
                 }
                 // A charted minefield (CATREA 14) in NOAA data is a FORMER one: the chart text says surface navigation is unrestricted and the
                 // residual danger is to anchoring, dredging and trawling. So it is a caution here; only an explicit entry prohibition blocks.
-                if (catrea & (1u << 14)) factor = std::max(factor, 5.0f);
-                if ((restrn & (1u << 8)) || (catrea & (1u << 1))) factor = std::max(factor, regulatedNavArea ? 1.5f : 10.0f);  // entry restricted; an offshore safety zone (security zones use it)
-                if (catrea & (1u << 18)) factor = std::max(factor, 20.0f);                 // swimming area
-                if (catrea & ((1u << 21) | (1u << 8) | (1u << 12))) factor = std::max(factor, 8.0f);  // dredging, degaussing range, aid safety zone
-                if (catrea & ((1u << 4) | (1u << 5) | (1u << 6) | (1u << 7) | (1u << 10) | (1u << 20) | (1u << 22) | (1u << 23))) factor = std::max(factor, 5.0f);  // reserves, sanctuaries, wreck and research areas
-                if (catrea & ((1u << 25) | (1u << 26))) factor = std::max(factor, 3.0f);   // swinging and water-skiing areas
-                if (factor > 1.0f) raise(penalty, grid, f, factor);
+                if (catrea & (1u << 14)) bump(5.0f, "former minefield");
+                if ((restrn & (1u << 8)) || (catrea & (1u << 1))) bump(regulatedNavArea ? 1.5f : 10.0f, regulatedNavArea ? "regulated navigation area" : "entry restricted or security zone");
+                if (catrea & (1u << 18)) bump(20.0f, "swimming area");
+                if (catrea & ((1u << 21) | (1u << 8) | (1u << 12))) bump(8.0f, "dredging, degaussing or aid safety zone");
+                if (catrea & ((1u << 10) | (1u << 20))) bump(5.0f, "historic wreck or research area");
+                // Nature reserves and sanctuaries (the Hawaiian Islands Humpback Whale sanctuary is one) protect wildlife, they do not close
+                // the water: a vessel may pass, keeping clear of animals. Just enough cost to prefer going round when it is free.
+                if (catrea & ((1u << 4) | (1u << 5) | (1u << 6) | (1u << 7) | (1u << 22) | (1u << 23))) bump(1.2f, "reserve or sanctuary");
+                if (catrea & ((1u << 25) | (1u << 26))) bump(3.0f, "swinging or water-skiing area");
+                if (factor > 1.0f) raise(penalty, grid, f, factor, &sink, kind);
             }
         } else if (cls == "MIPARE") {
             // Military practice and danger areas usually restrict passage only while in use, and one can span a whole waterway (Puget
             // Sound), so blocking it would cut the water in two. Very costly instead: avoided whenever there is any way round. But if the
-            // chart lists only limits that do not stop a transit (anchoring, fishing, trawling...), it costs only a little.
-            const uint32_t transitLimits = f.restrn & ~((1u << 7) | (1u << 8) | (1u << 14));
-            raise(penalty, grid, f, (transitLimits != 0 && !(f.restrn & (1u << 8))) ? 2.0f : 30.0f);
+            // chart lists only limits that do not stop a transit (anchoring, fishing, trawling...) or its text only asks for care, it costs
+            // only a little; and if its text says the area is closed or keep out, it is blocked.
+            const AreaText words = readAreaText(f.inform);
+            if (words == AreaText::KeepOut) {
+                shutGeometry(f, grid, shut, scratch);
+            } else {
+                const uint32_t transitLimits = f.restrn & ~((1u << 7) | (1u << 8) | (1u << 14));
+                const bool onlyCare = (transitLimits != 0 && !(f.restrn & (1u << 8))) || words == AreaText::Caution;
+                raise(penalty, grid, f, onlyCare ? 2.0f : 30.0f, &sink, "military practice area");
+            }
         } else if (cls == "CTNARE") {
             // Overview charts carry a caution area whose text says most features are omitted and a more detailed chart should be used. That is
             // a note about chart scale, not a hazard, and the router already prefers the most detailed chart it has, so it costs only a little.
@@ -225,7 +283,7 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
             // CATDPG (attribute 23): 2 chemical waste, 3 nuclear waste, 4 explosives, 5 spoil ground, 6 vessel dumping ground. The first
             // three are dangerous however deep the water is: blocked. Spoil and vessel grounds change depth and hold debris: very costly.
             if (f.catdpg & ((1u << 2) | (1u << 3) | (1u << 4))) shutGeometry(f, grid, shut, scratch);
-            else raise(penalty, grid, f, 15.0f);
+            else raise(penalty, grid, f, 15.0f, &sink, "dumping ground");
         } else if (cls == "ACHARE") {
             raise(penalty, grid, f, 3.0f);  // vessels lie at anchor here
         } else if (cls == "WEDKLP") {
@@ -300,7 +358,13 @@ void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& g
     // multiplier (never compounded across charts: the largest wins).
     std::vector<uint8_t> shut(state.size(), 0);
     std::vector<float> penalty(state.size(), 1.0f);
-    if (options.hazardObjects) applyHazardObjects(chart, options, grid, shut, penalty);
+    NoteSink sink;
+    sink.layer = options.areas;
+    if (sink.layer) {
+        sink.at.assign(state.size(), -1);
+        if (sink.layer->id.size() != state.size()) sink.layer->id.assign(state.size(), -1);
+    }
+    if (options.hazardObjects) applyHazardObjects(chart, options, grid, shut, penalty, sink);
 
     for (int row = 0; row < grid.rows(); ++row) {
         for (int col = 0; col < grid.cols(); ++col) {
@@ -313,8 +377,14 @@ void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& g
                 grid.setCost({col, row}, static_cast<float>(cautionFactor));
                 grid.setCaution({col, row});
             }
-            if (shut[i]) grid.setCost({col, row}, kBlocked);
-            else if (penalty[i] > 1.0f && !grid.blocked({col, row})) grid.setCost({col, row}, std::max(grid.cost({col, row}), penalty[i]));
+            if (sink.layer && (s != kUnknown || shut[i])) sink.layer->id[i] = -1;  // a chart that covers the cell replaces what an older one said
+            if (shut[i]) {
+                grid.setCost({col, row}, kBlocked);
+            } else if (penalty[i] > 1.0f && !grid.blocked({col, row})) {
+                const float before = grid.cost({col, row});
+                grid.setCost({col, row}, std::max(before, penalty[i]));
+                if (sink.layer && sink.at[i] >= 0 && penalty[i] >= before) sink.layer->id[i] = sink.at[i];
+            }
         }
     }
 }

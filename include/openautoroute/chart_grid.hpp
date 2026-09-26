@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,21 @@ namespace oar {
 /// `cautionFactor` times normal to move through, since vessels there must navigate with particular caution.
 void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid, bool applyTss = true, double cautionFactor = 1.0);
 
+/// A restricted or dangerous area the router may still cross at a cost (military or security zone, reserve, dumping ground...),
+/// kept so the tool can tell the skipper which ones a route goes through.
+struct AreaNote {
+    std::string kind;   // what sort of area, e.g. "military area", "reserve or sanctuary"
+    std::string text;   // the chart's own wording (INFORM), shortened; may be empty
+    float factor = 1.0f;  // how much dearer the router treats it
+};
+
+/// Which AreaNote covers each grid cell (-1 none). It mirrors the cost the router sees: a finer chart that covers a cell with no such
+/// area clears it, and where areas overlap the dearer one is kept.
+struct AreaLayer {
+    std::vector<AreaNote> notes;
+    std::vector<int32_t> id;
+};
+
 /// Everything stampChart needs to know about the vessel and the rules to apply.
 struct StampOptions {
     double minDepthM = 2.5;     // draft plus clearance
@@ -35,6 +51,7 @@ struct StampOptions {
     double vesselLengthM = 12.0; // areas to be avoided bind ships, not small craft (see RESARE below)
     bool hazardObjects = true;  // the chart-object hazard rules below (developer switch, for comparing runs)
     std::vector<std::string> skipClasses;  // developer switch: hazard classes to ignore, to find which rule blocks a route
+    AreaLayer* areas = nullptr;  // if set, records the costed restricted areas per cell (for the crossed-areas report)
 };
 
 /// stampChart plus the hazard rules for chart objects beyond depth and land, each following the notes in .claude/CODING_NOTES.md and
@@ -48,11 +65,14 @@ struct StampOptions {
 ///   - RESARE: blocked for entry prohibited, and for an area to be avoided when the vessel is 50 m
 ///     or longer (those bind ships; a smaller vessel pays x20); a military area is x30 only if the chart restricts entry or lists no restriction (x2 when it lists only anchoring, fishing, trawling and the like), and a charted minefield x5 (in NOAA data these are former minefields open to surface navigation; both block if entry is also prohibited); costly for
 ///     entry restricted or an offshore safety zone (x10, these are usually security zones needing permission; x1.5 when the chart text says
-///     it is a Regulated Navigation Area, which binds particular vessels such as tankers and tows), swimming, dredging, reserve and sanctuary areas; anchoring, fishing and similar restrictions do not stop a transit
+///     it is a Regulated Navigation Area, which binds particular vessels such as tankers and tows), swimming and dredging areas; anchoring, fishing and similar restrictions do not stop a transit.
+///     Nature reserves and sanctuaries (whale sanctuary, bird, seal, fish, ecological) only ask for care and cost x1.2.
+///     The chart's own wording settles military and security zones: text saying the area is closed, "keep out" or "no entry" blocks it; text
+///     saying only to use caution while transiting makes it x2
 ///   - BOYISD / BCNISD: 100 m blocked; BOYCAR / BCNCAR: the danger side of the mark blocked out to 150 m
 ///   - BRIDGE, CBLOHD, PIPOHD: blocked unless the clearance (closed clearance for an opening bridge) is at least air draft plus 1 m
 ///   - DMPGRD: chemical, nuclear and explosives dumping grounds are blocked; spoil and vessel grounds x15
-///   - MIPARE x30 (danger zones usually apply only while in use and can span a waterway; x2 if only anchoring/fishing limits are listed),
+///   - MIPARE x30 (danger zones usually apply only while in use and can span a waterway; x2 if only anchoring/fishing limits or a caution note are listed; blocked if the text says keep out),
 ///     CTNARE x3 (x1.5 when the text is only the "less detail, use a more detailed chart" note), ACHARE x3, WEDKLP x1.5, WATTUR x3, SPLARE x5: costlier
 void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& grid);
 /// Fairways (FAIRWY) and dredged areas (DRGARE) are also recorded as channel cells (the dashed limits drawn on a chart) for
