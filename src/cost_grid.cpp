@@ -121,11 +121,49 @@ void CostGrid::assignZoneDirections() {
 void CostGrid::applyLaneMargin(double rangeM, double weight) {
     if ((lane_.empty() && zone_.empty()) || rangeM <= 0.0 || weight <= 0.0) return;
     const std::vector<float> dist = distanceToLaneM();
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    marginWeight_.assign(cost_.size(), 0.0f);
+    marginAxis_.assign(cost_.size(), nan);
+    // Axis of the nearest lane: breadth-first outward from every lane cell (zone cells carry their derived direction), so each
+    // nearby cell inherits the direction of the closest lane. Only cells inside the margin range are ever visited.
+    std::vector<size_t> frontier;
     for (size_t i = 0; i < cost_.size(); ++i) {
-        if (cost_[i] == kBlocked || dist[i] == 0.0f || dist[i] >= rangeM) continue;  // lane and zone cells themselves are not re-priced
-        const double t = 1.0 - dist[i] / rangeM;
-        cost_[i] *= static_cast<float>(1.0 + weight * t * t);
+        float dir = nan;
+        if (!lane_.empty() && !std::isnan(lane_[i])) dir = lane_[i];
+        else if (!zone_.empty() && zone_[i] && !std::isnan(zoneDir_[i])) dir = zoneDir_[i];
+        if (!std::isnan(dir)) { marginAxis_[i] = dir; frontier.push_back(i); }
     }
+    while (!frontier.empty()) {
+        std::vector<size_t> next;
+        for (size_t i : frontier) {
+            const int c = static_cast<int>(i % cols_), r = static_cast<int>(i / cols_);
+            const int nc[4] = {c + 1, c - 1, c, c}, nr[4] = {r, r, r + 1, r - 1};
+            for (int k = 0; k < 4; ++k) {
+                if (nc[k] < 0 || nc[k] >= cols_ || nr[k] < 0 || nr[k] >= rows_) continue;
+                const size_t j = static_cast<size_t>(nr[k]) * cols_ + nc[k];
+                if (!std::isnan(marginAxis_[j]) || dist[j] >= rangeM) continue;
+                marginAxis_[j] = marginAxis_[i];
+                next.push_back(j);
+            }
+        }
+        frontier.swap(next);
+    }
+    for (size_t i = 0; i < cost_.size(); ++i) {
+        if (cost_[i] == kBlocked || dist[i] == 0.0f || dist[i] >= rangeM || std::isnan(marginAxis_[i])) continue;  // lane/zone cells are not re-priced
+        const double t = 1.0 - dist[i] / rangeM;
+        marginWeight_[i] = static_cast<float>(weight * t * t);
+    }
+}
+
+float CostGrid::laneMarginFactor(Cell c, double headingDeg) const {
+    if (marginWeight_.empty()) return 1.0f;
+    const size_t i = index(c);
+    if (marginWeight_[i] == 0.0f) return 1.0f;
+    // cos^2 of the angle between the move and the lane axis: 1 when running alongside (either way), 0 when square across. A
+    // 20% floor keeps a little cost on passing close by at a right angle (the tip of a lane part), so it is not entirely free.
+    const double diff = (headingDeg - marginAxis_[i]) * 3.14159265358979 / 180.0;
+    const double along = 0.2 + 0.8 * std::cos(diff) * std::cos(diff);
+    return static_cast<float>(1.0 + marginWeight_[i] * along);
 }
 
 void CostGrid::applyShoreMargin(double rangeM, double weight) {

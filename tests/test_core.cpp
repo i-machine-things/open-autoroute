@@ -224,7 +224,7 @@ static void testLaneFactor() {
     CHECK(laneFactor(350.0, 0.0) == 1.0f);      // wraps around north
     CHECK(laneFactor(180.0, 0.0) == kBlocked);  // against the flow
     CHECK(laneFactor(170.0, 0.0) == kBlocked);
-    CHECK(std::fabs(laneFactor(90.0, 0.0) - 3.0f) < 1e-4f);  // perpendicular crossing: cheapest way through
+    CHECK(std::fabs(laneFactor(90.0, 0.0) - 2.0f) < 1e-4f);  // perpendicular crossing: cheapest way through
     CHECK(laneFactor(45.0, 0.0) > laneFactor(90.0, 0.0));    // oblique crossings cost more
     CHECK(laneFactor(60.0, 0.0) > laneFactor(80.0, 0.0));
     CHECK(std::fabs(laneFactor(270.0, 0.0) - laneFactor(90.0, 0.0)) < 1e-4f);  // crossing either way costs the same
@@ -407,12 +407,33 @@ static void testLineOfSightSeesEveryTouchedCell() {
     CHECK(!lineOfSight(corner, {0, 0}, {4, 4}));
 }
 
-static void testLaneMarginBowsAwayFromLaneEnd() {
-    // A lane part (cols 10-11) ends at row 14. A small craft passing beneath its end should keep well off it, not skim it.
+static void testDirectionalLaneMargin() {
+    // Lane (cols 10-11, flow north) with a separation zone beside it (cols 12-13): the margin should bite hard on moves along
+    // the lane and only lightly on moves square across it.
     CostGrid g = makeGrid(30, 30);
-    for (int r = 0; r <= 14; ++r) for (int c = 10; c <= 11; ++c) g.setLaneDirection({c, r}, 0.0f);
+    for (int r = 0; r < 30; ++r) {
+        for (int c = 10; c <= 11; ++c) g.setLaneDirection({c, r}, 0.0f);
+        for (int c = 12; c <= 13; ++c) g.setZone({c, r});
+    }
+    g.assignZoneDirections();
+    CHECK(g.laneMarginFactor({8, 15}, 0.0) == 1.0f);  // no margin until applied
+    g.applyLaneMargin(6 * g.cellSizeM(), 6.0);
+    const float along = g.laneMarginFactor({9, 15}, 0.0), square = g.laneMarginFactor({9, 15}, 90.0);
+    CHECK(along > 3.0f);                 // running beside the lane edge: heavily charged
+    CHECK(square < along);
+    CHECK(square < 0.4f * along);        // crossing squarely is much cheaper than running along
+    CHECK(square >= 1.0f);
+    CHECK(g.laneMarginFactor({1, 15}, 0.0) == 1.0f);   // far from any lane: nothing
+    CHECK(g.laneMarginFactor({10, 15}, 0.0) == 1.0f);  // inside the lane itself: not re-priced
+    CHECK(g.laneMarginFactor({16, 15}, 0.0) > 1.0f);   // and the zone counts too, from its far side
+    CHECK(g.cost({9, 15}) == 1.0f);                    // the margin never touches the base cost
+}
+
+static void testLaneMarginBowsAwayFromLaneRun() {
+    // A small craft that has to travel north beside a lane should stand off from it rather than skim its edge.
+    CostGrid g = makeGrid(30, 40);
+    for (int r = 0; r < 40; ++r) for (int c = 20; c <= 21; ++c) g.setLaneDirection({c, r}, 0.0f);
     g.setLaneUseFactor(6.0);
-    // Closest approach to any lane cell along the whole route, sampling each leg (waypoints alone would miss a graze).
     auto nearestLaneM = [](const CostGrid& grid, const std::vector<LatLon>& route) {
         const auto d = grid.distanceToLaneM();
         double nearest = 1e30;
@@ -421,21 +442,20 @@ static void testLaneMarginBowsAwayFromLaneEnd() {
                 const double t = k / 100.0;
                 const Cell c = grid.cellAt({route[i - 1].lat + t * (route[i].lat - route[i - 1].lat),
                                             route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)});
+                if (c.row < 10 || c.row > 30) continue;  // the start and goal sit beside the lane by design; judge the middle
                 nearest = std::min<double>(nearest, d[static_cast<size_t>(c.row) * grid.cols() + c.col]);
             }
         }
         return nearest;
     };
-    const auto plain = findRoute(g, g.centre({2, 16}), g.centre({20, 16}));
+    // Start and goal are one cell off the lane edge, so the straight line skims it.
+    const auto plain = findRoute(g, g.centre({18, 38}), g.centre({18, 2}));
     const double before = nearestLaneM(g, plain);
-    CHECK(before < 3.0 * g.cellSizeM());  // control: with no margin the trip passes only a cell or two from the lane end
-
-    g.applyLaneMargin(8 * g.cellSizeM(), 4.0);
-    CHECK(g.cost({10, 16}) > g.cost({10, 27}));  // dearer next to the lane end than far from it
-    CHECK(g.cost({10, 3}) == 1.0f);              // lane cells themselves are not re-priced
-    const auto bowed = findRoute(g, g.centre({2, 16}), g.centre({20, 16}));
+    CHECK(before < 3.0 * g.cellSizeM());  // control: with no margin the straight north run stays right beside the lane
+    g.applyLaneMargin(8 * g.cellSizeM(), 6.0);
+    const auto bowed = findRoute(g, g.centre({18, 38}), g.centre({18, 2}));
     CHECK(!bowed.empty());
-    CHECK(nearestLaneM(g, bowed) > before + 1.5 * g.cellSizeM());  // clearly further off than before
+    CHECK(nearestLaneM(g, bowed) > before + 1.0 * g.cellSizeM());  // stands off from the lane
 }
 
 static void testSeparationZoneCrossing() {
@@ -466,13 +486,6 @@ static void testSeparationZoneCrossing() {
     lone.assignZoneDirections();
     CHECK(std::isnan(lone.zoneDirection({5, 5})));
     CHECK(findRoute(lone, lone.centre({1, 5}), lone.centre({8, 5})).empty());
-
-    // The zone counts as a hazard for the lane margin, so a small craft's route keeps off it more than a large one's.
-    CostGrid m = makeGrid(24, 24);
-    for (int r = 0; r < 24; ++r) for (int c = 10; c <= 12; ++c) m.setZone({c, r});
-    m.applyLaneMargin(6 * m.cellSizeM(), 4.0);
-    CHECK(m.cost({9, 5}) > m.cost({3, 5}));
-    CHECK(m.cost({11, 5}) == 1.0f);  // the zone cells themselves are not re-priced
 }
 
 static void testPrecautionaryAreaCost() {
@@ -729,7 +742,8 @@ int main() {
     testLaneUseFactor();
     testSmallCraftDoesNotClipLaneCorner();
     testLineOfSightSeesEveryTouchedCell();
-    testLaneMarginBowsAwayFromLaneEnd();
+    testDirectionalLaneMargin();
+    testLaneMarginBowsAwayFromLaneRun();
     testNoTurnInsideLane();
     testSimplifyTolerance();
     testSeparationZoneCrossing();

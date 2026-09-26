@@ -93,10 +93,14 @@ public:
     /// the grid has no lanes).
     std::vector<float> distanceToLaneM() const;
 
-    /// Keep vessels clear of traffic lanes by a margin: open cells within `rangeM` of a lane cell (and not in one) get their
-    /// cost multiplied by `1 + weight * (1 - d / rangeM)^2`. For small craft under Rule 10, which should avoid the scheme "by as
-    /// wide a margin as is practicable" and so should not skim a lane's edge or the end of a lane part. No-op without lanes.
+    /// Keep vessels clear of traffic lanes by a margin, but only when they travel along them. Open cells within `rangeM` of a
+    /// lane or separation-zone cell get a margin weight `weight * (1 - d / rangeM)^2`, and remember the axis of the nearest
+    /// lane. laneMarginFactor() then charges `1 + weight` scaled by how parallel the move is to that axis, so skimming a lane's
+    /// edge or the end of a lane part is dear while approaching it square on to cross costs nothing extra. For small craft under
+    /// Rule 10, which should avoid the scheme "by as wide a margin as is practicable". No-op without lanes.
     void applyLaneMargin(double rangeM, double weight);
+    /// Cost multiplier (>= 1) for a move on `headingDeg` through `c` from the lane margin; 1 where no margin applies.
+    float laneMarginFactor(Cell c, double headingDeg) const;
 
     /// Metres per cell along a row / column at the grid's latitude (cells are meant to be square in metres).
     double cellSizeM() const { return cellSizeDeg_ * 111320.0; }
@@ -112,6 +116,8 @@ private:
     double cellSizeLonDeg_;
     std::vector<float> cost_;
     std::vector<float> lane_;  // empty until a lane is set
+    std::vector<float> marginWeight_;  // empty until applyLaneMargin sets it
+    std::vector<float> marginAxis_;    // degrees, axis of the nearest lane
     std::vector<uint8_t> zone_;   // empty until a zone cell is set
     std::vector<float> zoneDir_;
     float laneUseFactor_ = 1.0f;

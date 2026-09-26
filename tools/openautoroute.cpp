@@ -217,33 +217,9 @@ int main(int argc, char** argv) {
 
     std::vector<LatLon> route;
     std::vector<Cell> rawPath;  // unsmoothed A* cells, drawn by --map
-    if (!evalPath.empty()) {
-        route = given;  // score as-is: no snapping, no rerouting
-    } else {
-        Cell s = grid.cellAt(from), g = grid.cellAt(to);
-        Cell s2, g2;
-        if (!grid.inBounds(s) || !grid.inBounds(g) || !snapToOpen(grid, s, 40, s2) || !snapToOpen(grid, g, 40, g2)) {
-            std::fprintf(stderr, "start or end is not near charted water deep enough for %.1f m draft + %.1f m clearance\n",
-                         draft, clearance);
-            return fail("endpoint_not_in_safe_water");
-        }
-        snapStartM = haversineM(from, grid.centre(s2));
-        snapEndM = haversineM(to, grid.centre(g2));
-        if (!(s == s2)) std::printf("start moved to nearest safe water (%.0f m)\n", snapStartM);
-        if (!(g == g2)) std::printf("end moved to nearest safe water (%.0f m)\n", snapEndM);
-
-        route = findRoute(grid, grid.centre(s2), grid.centre(g2), simplify, &rawPath);
-        if (route.empty()) {
-            std::fprintf(stderr, "no route found: the charts show no continuous water at least %.1f m deep between the points\n",
-                         minDepth);
-            return fail("no_route");
-        }
-    }
-    double nm = 0;
-    for (size_t i = 1; i < route.size(); ++i) nm += haversineM(route[i - 1], route[i]) / 1852.0;
-    // Clearance report: sample each leg about every cell and look up the distance to blocked water. Samples within
-    // 1 km of either end are skipped, since a start in a marina or a berth is at the shore by definition.
-    if (mapRadius > 0) {
+    // Debug picture of the grid around --map, with the raw A* path and the smoothed route drawn over it. Also used when no
+    // route is found, which is exactly when the grid is what needs looking at.
+    const auto drawMap = [&]() {
         // '#' blocked, '.' open, 'n/e/s/w' lane by flow direction (lower case), '*' route (upper case where over a lane)
         std::vector<std::string> canvas;
         const Cell mc = grid.cellAt(mapAt);
@@ -287,7 +263,36 @@ int main(int argc, char** argv) {
         std::printf("map: %d cells (%.0f m each) around %.4f,%.4f, north up. # blocked, . open, n/e/s/w lane flow, "
                     "* smoothed route, o raw A* path, N/E/S/W path in a lane\n", 2 * mapRadius + 1, grid.cellSizeM(), mapAt.lat, mapAt.lon);
         for (const auto& line : canvas) std::printf("%s\n", line.c_str());
+    };
+    if (!evalPath.empty()) {
+        route = given;  // score as-is: no snapping, no rerouting
+    } else {
+        Cell s = grid.cellAt(from), g = grid.cellAt(to);
+        Cell s2, g2;
+        if (!grid.inBounds(s) || !grid.inBounds(g) || !snapToOpen(grid, s, 40, s2) || !snapToOpen(grid, g, 40, g2)) {
+            std::fprintf(stderr, "start or end is not near charted water deep enough for %.1f m draft + %.1f m clearance\n",
+                         draft, clearance);
+            if (mapRadius > 0) drawMap();
+            return fail("endpoint_not_in_safe_water");
+        }
+        snapStartM = haversineM(from, grid.centre(s2));
+        snapEndM = haversineM(to, grid.centre(g2));
+        if (!(s == s2)) std::printf("start moved to nearest safe water (%.0f m)\n", snapStartM);
+        if (!(g == g2)) std::printf("end moved to nearest safe water (%.0f m)\n", snapEndM);
+
+        route = findRoute(grid, grid.centre(s2), grid.centre(g2), simplify, &rawPath);
+        if (route.empty()) {
+            std::fprintf(stderr, "no route found: the charts show no continuous water at least %.1f m deep between the points\n",
+                         minDepth);
+            if (mapRadius > 0) drawMap();
+            return fail("no_route");
+        }
     }
+    double nm = 0;
+    for (size_t i = 1; i < route.size(); ++i) nm += haversineM(route[i - 1], route[i]) / 1852.0;
+    // Clearance report: sample each leg about every cell and look up the distance to blocked water. Samples within
+    // 1 km of either end are skipped, since a start in a marina or a berth is at the shore by definition.
+    if (mapRadius > 0) drawMap();
     std::vector<double> clearances;
     double travelled = 0.0, unsafeM = 0.0;
     struct Spot { LatLon at; double alongM; };

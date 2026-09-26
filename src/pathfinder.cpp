@@ -77,7 +77,9 @@ float cellFactor(const CostGrid& grid, Cell c, double headingDeg) {
 float moveFactor(const CostGrid& grid, Cell a, Cell b, double headingDeg) {
     const float fa = cellFactor(grid, a, headingDeg), fb = cellFactor(grid, b, headingDeg);
     if (fa == kBlocked || fb == kBlocked) return kBlocked;
-    return (fa > 1.0f || fb > 1.0f) ? std::max(fa, fb) : std::min(fa, fb);
+    const float f = (fa > 1.0f || fb > 1.0f) ? std::max(fa, fb) : std::min(fa, fb);
+    // Leeway margin next to lanes: charged by direction, so it discourages skimming a lane but not approaching to cross it.
+    return f * std::max(grid.laneMarginFactor(a, headingDeg), grid.laneMarginFactor(b, headingDeg));
 }
 
 // Heading in degrees true of a move from a to b. Cells are square in metres and rows run south.
@@ -120,7 +122,7 @@ float laneFactor(double headingDeg, double laneDeg) {
     if (theta <= 25.0) return 1.0f;
     if (theta >= 155.0) return kBlocked;
     const double s = std::sin(theta * 3.14159265358979 / 180.0);
-    return static_cast<float>(3.0 + 30.0 * (1.0 - s));
+    return static_cast<float>(2.0 + 30.0 * (1.0 - s));
 }
 
 bool lineOfSight(const CostGrid& grid, Cell a, Cell b) {
