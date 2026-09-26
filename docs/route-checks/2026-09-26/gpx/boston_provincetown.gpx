@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
   <rte>
-    <name>open-autoroute</name>
-    <rtept lat="42.356004" lon="-71.034861"><name>WP001</name></rtept>
+    <name>boston_provincetown</name>
+    <desc>open-autoroute: 51.3 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="42.356004" lon="-71.034861"><name>START</name></rtept>
     <rtept lat="42.348459" lon="-71.019218"><name>WP002</name></rtept>
     <rtept lat="42.344686" lon="-71.014125"><name>WP003</name></rtept>
     <rtept lat="42.342530" lon="-71.008304"><name>WP004</name></rtept>
@@ -41,6 +42,6 @@
     <rtept lat="42.030457" lon="-70.158112"><name>WP037</name></rtept>
     <rtept lat="42.035307" lon="-70.158112"><name>WP038</name></rtept>
     <rtept lat="42.039350" lon="-70.164297"><name>WP039</name></rtept>
-    <rtept lat="42.045279" lon="-70.181031"><name>WP040</name></rtept>
+    <rtept lat="42.045279" lon="-70.181031"><name>END</name></rtept>
   </rte>
 </gpx>

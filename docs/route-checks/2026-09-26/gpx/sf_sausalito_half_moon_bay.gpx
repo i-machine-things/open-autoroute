@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
   <rte>
-    <name>open-autoroute</name>
-    <rtept lat="37.862897" lon="-122.483531"><name>WP001</name></rtept>
+    <name>sf_sausalito_half_moon_bay</name>
+    <desc>open-autoroute: 28.2 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="37.862897" lon="-122.483531"><name>START</name></rtept>
     <rtept lat="37.862627" lon="-122.482169"><name>WP002</name></rtept>
     <rtept lat="37.858585" lon="-122.475359"><name>WP003</name></rtept>
     <rtept lat="37.852926" lon="-122.468208"><name>WP004</name></rtept>
@@ -29,6 +30,6 @@
     <rtept lat="37.493152" lon="-122.480807"><name>WP025</name></rtept>
     <rtept lat="37.495038" lon="-122.485914"><name>WP026</name></rtept>
     <rtept lat="37.495577" lon="-122.486255"><name>WP027</name></rtept>
-    <rtept lat="37.499081" lon="-122.484893"><name>WP028</name></rtept>
+    <rtept lat="37.499081" lon="-122.484893"><name>END</name></rtept>
   </rte>
 </gpx>

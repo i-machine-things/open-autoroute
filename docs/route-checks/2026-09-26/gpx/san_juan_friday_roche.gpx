@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
   <rte>
-    <name>open-autoroute</name>
-    <rtept lat="48.539035" lon="-123.009945"><name>WP001</name></rtept>
+    <name>san_juan_friday_roche</name>
+    <desc>open-autoroute: 11.3 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="48.539035" lon="-123.009945"><name>START</name></rtept>
     <rtept lat="48.539933" lon="-123.011031"><name>WP002</name></rtept>
     <rtept lat="48.543347" lon="-123.008859"><name>WP003</name></rtept>
     <rtept lat="48.544245" lon="-123.002613"><name>WP004</name></rtept>
@@ -14,6 +15,6 @@
     <rtept lat="48.625632" lon="-123.169611"><name>WP010</name></rtept>
     <rtept lat="48.613954" lon="-123.172055"><name>WP011</name></rtept>
     <rtept lat="48.610540" lon="-123.169068"><name>WP012</name></rtept>
-    <rtept lat="48.611079" lon="-123.157935"><name>WP013</name></rtept>
+    <rtept lat="48.611079" lon="-123.157935"><name>END</name></rtept>
   </rte>
 </gpx>

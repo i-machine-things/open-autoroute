@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
   <rte>
-    <name>open-autoroute</name>
-    <rtept lat="40.460779" lon="-73.987362"><name>WP001</name></rtept>
+    <name>ny_sandy_hook_battery</name>
+    <desc>open-autoroute: 16.5 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="40.460779" lon="-73.987362"><name>START</name></rtept>
     <rtept lat="40.471290" lon="-73.974942"><name>WP002</name></rtept>
     <rtept lat="40.506863" lon="-73.972813"><name>WP003</name></rtept>
     <rtept lat="40.510097" lon="-73.978490"><name>WP004</name></rtept>
@@ -16,6 +17,6 @@
     <rtept lat="40.680147" lon="-74.039169"><name>WP012</name></rtept>
     <rtept lat="40.697664" lon="-74.025330"><name>WP013</name></rtept>
     <rtept lat="40.697933" lon="-74.018588"><name>WP014</name></rtept>
-    <rtept lat="40.703862" lon="-74.018588"><name>WP015</name></rtept>
+    <rtept lat="40.703862" lon="-74.018588"><name>END</name></rtept>
   </rte>
 </gpx>

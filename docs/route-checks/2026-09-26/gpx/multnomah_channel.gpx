@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
   <rte>
-    <name>open-autoroute</name>
-    <rtept lat="45.832988" lon="-122.794881"><name>WP001</name></rtept>
+    <name>multnomah_channel</name>
+    <desc>open-autoroute: 13.4 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="45.832988" lon="-122.794881"><name>START</name></rtept>
     <rtept lat="45.831910" lon="-122.792308"><name>WP002</name></rtept>
     <rtept lat="45.828137" lon="-122.793594"><name>WP003</name></rtept>
     <rtept lat="45.823106" lon="-122.795139"><name>WP004</name></rtept>
@@ -57,6 +58,6 @@
     <rtept lat="45.632485" lon="-122.788962"><name>WP053</name></rtept>
     <rtept lat="45.628352" lon="-122.790506"><name>WP054</name></rtept>
     <rtept lat="45.624939" lon="-122.790249"><name>WP055</name></rtept>
-    <rtept lat="45.624939" lon="-122.789991"><name>WP056</name></rtept>
+    <rtept lat="45.624939" lon="-122.789991"><name>END</name></rtept>
   </rte>
 </gpx>

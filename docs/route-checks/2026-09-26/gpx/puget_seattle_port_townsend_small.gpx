@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
   <rte>
-    <name>open-autoroute</name>
-    <rtept lat="47.605398" lon="-122.368607"><name>WP001</name></rtept>
+    <name>puget_seattle_port_townsend_small</name>
+    <desc>open-autoroute: 42.4 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="47.605398" lon="-122.368607"><name>START</name></rtept>
     <rtept lat="47.631538" lon="-122.420414"><name>WP002</name></rtept>
     <rtept lat="47.650672" lon="-122.437282"><name>WP003</name></rtept>
     <rtept lat="47.659296" lon="-122.445314"><name>WP004</name></rtept>
@@ -36,6 +37,6 @@
     <rtept lat="48.105847" lon="-122.687884"><name>WP032</name></rtept>
     <rtept lat="48.108272" lon="-122.688286"><name>WP033</name></rtept>
     <rtept lat="48.108003" lon="-122.702744"><name>WP034</name></rtept>
-    <rtept lat="48.100187" lon="-122.755756"><name>WP035</name></rtept>
+    <rtept lat="48.100187" lon="-122.755756"><name>END</name></rtept>
   </rte>
 </gpx>

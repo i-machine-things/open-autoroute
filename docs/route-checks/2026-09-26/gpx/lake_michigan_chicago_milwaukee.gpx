@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
   <rte>
-    <name>open-autoroute</name>
-    <rtept lat="41.890189" lon="-87.608433"><name>WP001</name></rtept>
+    <name>lake_michigan_chicago_milwaukee</name>
+    <desc>open-autoroute: 72.8 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="41.890189" lon="-87.608433"><name>START</name></rtept>
     <rtept lat="41.890728" lon="-87.601127"><name>WP002</name></rtept>
     <rtept lat="41.890189" lon="-87.594552"><name>WP003</name></rtept>
     <rtept lat="41.888572" lon="-87.592360"><name>WP004</name></rtept>
@@ -20,6 +21,6 @@
     <rtept lat="43.026912" lon="-87.889707"><name>WP016</name></rtept>
     <rtept lat="43.027990" lon="-87.889707"><name>WP017</name></rtept>
     <rtept lat="43.030146" lon="-87.888977"><name>WP018</name></rtept>
-    <rtept lat="43.030146" lon="-87.889707"><name>WP019</name></rtept>
+    <rtept lat="43.030146" lon="-87.889707"><name>END</name></rtept>
   </rte>
 </gpx>

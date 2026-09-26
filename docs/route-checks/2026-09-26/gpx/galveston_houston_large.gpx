@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
   <rte>
-    <name>open-autoroute</name>
-    <rtept lat="29.336905" lon="-94.741735"><name>WP001</name></rtept>
+    <name>galveston_houston_large</name>
+    <desc>open-autoroute: 47.9 nm, 100.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="29.336905" lon="-94.741735"><name>START</name></rtept>
     <rtept lat="29.340678" lon="-94.743593"><name>WP002</name></rtept>
     <rtept lat="29.345798" lon="-94.779213"><name>WP003</name></rtept>
     <rtept lat="29.348224" lon="-94.783549"><name>WP004</name></rtept>
@@ -110,6 +111,6 @@
     <rtept lat="29.725784" lon="-95.272621"><name>WP106</name></rtept>
     <rtept lat="29.728479" lon="-95.275719"><name>WP107</name></rtept>
     <rtept lat="29.734677" lon="-95.277267"><name>WP108</name></rtept>
-    <rtept lat="29.734677" lon="-95.276958"><name>WP109</name></rtept>
+    <rtept lat="29.734677" lon="-95.276958"><name>END</name></rtept>
   </rte>
 </gpx>

@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
   <rte>
-    <name>open-autoroute</name>
-    <rtept lat="46.190808" lon="-123.829473"><name>WP001</name></rtept>
+    <name>columbia_bar_out</name>
+    <desc>open-autoroute: 15.0 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="46.190808" lon="-123.829473"><name>START</name></rtept>
     <rtept lat="46.194580" lon="-123.829863"><name>WP002</name></rtept>
     <rtept lat="46.194850" lon="-123.840769"><name>WP003</name></rtept>
     <rtept lat="46.193502" lon="-123.852064"><name>WP004</name></rtept>
@@ -30,6 +31,6 @@
     <rtept lat="46.238238" lon="-124.120433"><name>WP026</name></rtept>
     <rtept lat="46.238508" lon="-124.121212"><name>WP027</name></rtept>
     <rtept lat="46.247940" lon="-124.133286"><name>WP028</name></rtept>
-    <rtept lat="46.250096" lon="-124.130170"><name>WP029</name></rtept>
+    <rtept lat="46.250096" lon="-124.130170"><name>END</name></rtept>
   </rte>
 </gpx>

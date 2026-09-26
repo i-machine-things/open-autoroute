@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
   <rte>
-    <name>open-autoroute</name>
-    <rtept lat="21.299389" lon="-157.869548"><name>WP001</name></rtept>
+    <name>hawaii_honolulu_maalaea</name>
+    <desc>open-autoroute: 125.2 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="21.299389" lon="-157.869548"><name>START</name></rtept>
     <rtept lat="21.297772" lon="-157.869548"><name>WP002</name></rtept>
     <rtept lat="21.296155" lon="-157.871281"><name>WP003</name></rtept>
     <rtept lat="21.291304" lon="-157.873591"><name>WP004</name></rtept>
@@ -26,6 +27,6 @@
     <rtept lat="20.599245" lon="-156.447100"><name>WP022</name></rtept>
     <rtept lat="20.639669" lon="-156.458651"><name>WP023</name></rtept>
     <rtept lat="20.751779" lon="-156.478287"><name>WP024</name></rtept>
-    <rtept lat="20.789508" lon="-156.509473"><name>WP025</name></rtept>
+    <rtept lat="20.789508" lon="-156.509473"><name>END</name></rtept>
   </rte>
 </gpx>

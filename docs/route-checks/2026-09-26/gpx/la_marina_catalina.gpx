@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
   <rte>
-    <name>open-autoroute</name>
-    <rtept lat="33.972579" lon="-118.454911"><name>WP001</name></rtept>
+    <name>la_marina_catalina</name>
+    <desc>open-autoroute: 41.5 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="33.972579" lon="-118.454911"><name>START</name></rtept>
     <rtept lat="33.972579" lon="-118.449083"><name>WP002</name></rtept>
     <rtept lat="33.968536" lon="-118.448436"><name>WP003</name></rtept>
     <rtept lat="33.962338" lon="-118.459768"><name>WP004</name></rtept>
@@ -23,6 +24,6 @@
     <rtept lat="33.654307" lon="-118.337058"><name>WP019</name></rtept>
     <rtept lat="33.573728" lon="-118.331554"><name>WP020</name></rtept>
     <rtept lat="33.351666" lon="-118.319575"><name>WP021</name></rtept>
-    <rtept lat="33.344929" lon="-118.325079"><name>WP022</name></rtept>
+    <rtept lat="33.344929" lon="-118.325079"><name>END</name></rtept>
   </rte>
 </gpx>

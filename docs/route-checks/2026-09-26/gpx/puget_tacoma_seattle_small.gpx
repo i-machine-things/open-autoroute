@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
   <rte>
-    <name>open-autoroute</name>
-    <rtept lat="47.270448" lon="-122.419607"><name>WP001</name></rtept>
+    <name>puget_tacoma_seattle_small</name>
+    <desc>open-autoroute: 26.5 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="47.270448" lon="-122.419607"><name>START</name></rtept>
     <rtept lat="47.271256" lon="-122.419607"><name>WP002</name></rtept>
     <rtept lat="47.271526" lon="-122.420803"><name>WP003</name></rtept>
     <rtept lat="47.272604" lon="-122.420803"><name>WP004</name></rtept>
@@ -56,6 +57,6 @@
     <rtept lat="47.573628" lon="-122.427576"><name>WP052</name></rtept>
     <rtept lat="47.579017" lon="-122.425185"><name>WP053</name></rtept>
     <rtept lat="47.605428" lon="-122.384546"><name>WP054</name></rtept>
-    <rtept lat="47.605428" lon="-122.368609"><name>WP055</name></rtept>
+    <rtept lat="47.605428" lon="-122.368609"><name>END</name></rtept>
   </rte>
 </gpx>

@@ -1,11 +1,11 @@
 # open-autoroute route check
 
-Check these by eye in OpenCPN. Everything below was planned with commit `631c3cd` (branch `feat/hazard-objects`, PR #12) against the NOAA ENC download of 2026-09-25, using `benchmarks/run.sh` (the routes are listed in `benchmarks/routes.csv`). The route files are in `gpx/` next to this file.
+Check these by eye in OpenCPN. Everything below was planned with the code of PR #14 (route names) on top of commit `631c3cd` (branch `feat/hazard-objects`, PR #12) against the NOAA ENC download of 2026-09-25, using `benchmarks/run.sh` (the routes are listed in `benchmarks/routes.csv`). The route files are in `gpx/` next to this file.
 
 ## Setup
 
 1. In OpenCPN: **Options, Charts, Chart Files**: make sure `~/Documents/Charts/ENC_ROOT` is listed. Set the display to S-57 vector charts, display category **All**, so obstructions, restricted areas and marks are drawn.
-2. **Route & Mark Manager, Import GPX** and pick a file from `gpx/`. Then **Zoom to Route**. Import only a few at a time; each route is named `open-autoroute`, so rename or delete as you go.
+2. **Route & Mark Manager, Import GPX** and pick a file from `gpx/`. Then **Zoom to Route**. Each route is named for its file (for example `puget_edmonds_kingston`), its first and last waypoints are `START` and `END`, and its description gives the distance and vessel, so the Route Manager's Route Name, From and To columns tell them apart. OpenCPN fills From and To from the first and last waypoint names.
 3. Vessel assumed unless the route name says otherwise: **12 m, 1.5 m draft plus 1.0 m clearance (needs 2.5 m of water), 4.8 m mast** (estimated from the length). Files ending `_large` are a 120 m ship (Houston: 100 m).
 4. Depths come from the charts at their datum. Tides, river stage and currents are not modelled. These routes are for checking the logic, not for navigating.
 

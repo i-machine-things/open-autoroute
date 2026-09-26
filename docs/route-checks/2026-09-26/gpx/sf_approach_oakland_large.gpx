@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
   <rte>
-    <name>open-autoroute</name>
-    <rtept lat="37.779895" lon="-122.759909"><name>WP001</name></rtept>
+    <name>sf_approach_oakland_large</name>
+    <desc>open-autoroute: 21.7 nm, 120.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="37.779895" lon="-122.759909"><name>START</name></rtept>
     <rtept lat="37.764803" lon="-122.633391"><name>WP002</name></rtept>
     <rtept lat="37.764264" lon="-122.622138"><name>WP003</name></rtept>
     <rtept lat="37.772619" lon="-122.588036"><name>WP004</name></rtept>
@@ -27,6 +28,6 @@
     <rtept lat="37.799568" lon="-122.339775"><name>WP023</name></rtept>
     <rtept lat="37.799298" lon="-122.338411"><name>WP024</name></rtept>
     <rtept lat="37.799568" lon="-122.330227"><name>WP025</name></rtept>
-    <rtept lat="37.799837" lon="-122.330227"><name>WP026</name></rtept>
+    <rtept lat="37.799837" lon="-122.330227"><name>END</name></rtept>
   </rte>
 </gpx>

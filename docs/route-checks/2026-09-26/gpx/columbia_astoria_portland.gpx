@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
   <rte>
-    <name>open-autoroute</name>
-    <rtept lat="46.191223" lon="-123.829714"><name>WP001</name></rtept>
+    <name>columbia_astoria_portland</name>
+    <desc>open-autoroute: 85.3 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="46.191223" lon="-123.829714"><name>START</name></rtept>
     <rtept lat="46.194996" lon="-123.828940"><name>WP002</name></rtept>
     <rtept lat="46.197151" lon="-123.821975"><name>WP003</name></rtept>
     <rtept lat="46.201463" lon="-123.811141"><name>WP004</name></rtept>
@@ -208,6 +209,6 @@
     <rtept lat="45.550906" lon="-122.699106"><name>WP204</name></rtept>
     <rtept lat="45.543361" lon="-122.689820"><name>WP205</name></rtept>
     <rtept lat="45.536893" lon="-122.681307"><name>WP206</name></rtept>
-    <rtept lat="45.532042" lon="-122.674342"><name>WP207</name></rtept>
+    <rtept lat="45.532042" lon="-122.674342"><name>END</name></rtept>
   </rte>
 </gpx>

@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
   <rte>
-    <name>open-autoroute</name>
-    <rtept lat="46.190709" lon="-123.829426"><name>WP001</name></rtept>
+    <name>columbia_astoria_cathlamet</name>
+    <desc>open-autoroute: 22.1 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="46.190709" lon="-123.829426"><name>START</name></rtept>
     <rtept lat="46.194482" lon="-123.829426"><name>WP002</name></rtept>
     <rtept lat="46.196908" lon="-123.824365"><name>WP003</name></rtept>
     <rtept lat="46.198794" lon="-123.817746"><name>WP004</name></rtept>
@@ -67,6 +68,6 @@
     <rtept lat="46.211191" lon="-123.412056"><name>WP063</name></rtept>
     <rtept lat="46.204184" lon="-123.392589"><name>WP064</name></rtept>
     <rtept lat="46.199872" lon="-123.387528"><name>WP065</name></rtept>
-    <rtept lat="46.199872" lon="-123.385192"><name>WP066</name></rtept>
+    <rtept lat="46.199872" lon="-123.385192"><name>END</name></rtept>
   </rte>
 </gpx>

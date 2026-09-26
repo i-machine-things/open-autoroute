@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
   <rte>
-    <name>open-autoroute</name>
-    <rtept lat="47.980835" lon="-122.226502"><name>WP001</name></rtept>
+    <name>puget_everett_bainbridge</name>
+    <desc>open-autoroute: 30.1 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="47.980835" lon="-122.226502"><name>START</name></rtept>
     <rtept lat="47.979218" lon="-122.226101"><name>WP002</name></rtept>
     <rtept lat="47.978949" lon="-122.226101"><name>WP003</name></rtept>
     <rtept lat="47.978949" lon="-122.226903"><name>WP004</name></rtept>
@@ -43,6 +44,6 @@
     <rtept lat="47.612977" lon="-122.492515"><name>WP039</name></rtept>
     <rtept lat="47.621061" lon="-122.498934"><name>WP040</name></rtept>
     <rtept lat="47.620792" lon="-122.508965"><name>WP041</name></rtept>
-    <rtept lat="47.621331" lon="-122.512576"><name>WP042</name></rtept>
+    <rtept lat="47.621331" lon="-122.512576"><name>END</name></rtept>
   </rte>
 </gpx>

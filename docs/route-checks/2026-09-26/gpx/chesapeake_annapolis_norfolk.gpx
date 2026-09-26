@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
   <rte>
-    <name>open-autoroute</name>
-    <rtept lat="38.976145" lon="-76.480219"><name>WP001</name></rtept>
+    <name>chesapeake_annapolis_norfolk</name>
+    <desc>open-autoroute: 133.1 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="38.976145" lon="-76.480219"><name>START</name></rtept>
     <rtept lat="38.976684" lon="-76.480219"><name>WP002</name></rtept>
     <rtept lat="38.977223" lon="-76.479535"><name>WP003</name></rtept>
     <rtept lat="38.977223" lon="-76.476800"><name>WP004</name></rtept>
@@ -80,6 +81,6 @@
     <rtept lat="36.960874" lon="-76.328442"><name>WP076</name></rtept>
     <rtept lat="36.960335" lon="-76.327758"><name>WP077</name></rtept>
     <rtept lat="36.961413" lon="-76.327074"><name>WP078</name></rtept>
-    <rtept lat="36.961413" lon="-76.326391"><name>WP079</name></rtept>
+    <rtept lat="36.961413" lon="-76.326391"><name>END</name></rtept>
   </rte>
 </gpx>
