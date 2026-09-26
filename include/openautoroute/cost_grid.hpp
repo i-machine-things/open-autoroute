@@ -20,17 +20,20 @@ struct Cell {
 /// pathfinder's distance heuristic stays admissible; hazards raise the cost, hard barriers are kBlocked.
 class CostGrid {
 public:
-    /// `northWest` is the outer corner of cell (0, 0); rows run south, columns run east.
-    CostGrid(int cols, int rows, LatLon northWest, double cellSizeDeg);
+    /// `northWest` is the outer corner of cell (0, 0); rows run south, columns run east. Cells are `cellSizeDeg` tall;
+    /// pass `cellSizeLonDeg` (> 0) to make them wider than tall in degrees so they stay square in metres at latitude.
+    CostGrid(int cols, int rows, LatLon northWest, double cellSizeDeg, double cellSizeLonDeg = 0.0);
 
     int cols() const { return cols_; }
     int rows() const { return rows_; }
     double cellSizeDeg() const { return cellSizeDeg_; }
+    double cellSizeLonDeg() const { return cellSizeLonDeg_; }
     bool inBounds(Cell c) const { return c.col >= 0 && c.col < cols_ && c.row >= 0 && c.row < rows_; }
 
     float cost(Cell c) const { return cost_[index(c)]; }
     bool blocked(Cell c) const { return cost(c) == kBlocked; }
     void setCost(Cell c, float cost) { cost_[index(c)] = cost; }
+    void fill(float cost) { cost_.assign(cost_.size(), cost); }
 
     LatLon centre(Cell c) const;
     /// Cell containing `p`; the result may be out of bounds, check with inBounds().
@@ -52,6 +55,7 @@ private:
     int rows_;
     LatLon northWest_;
     double cellSizeDeg_;
+    double cellSizeLonDeg_;
     std::vector<float> cost_;
 };
 

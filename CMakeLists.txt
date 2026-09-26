@@ -12,6 +12,7 @@ add_library(openautoroute_core STATIC
   src/pathfinder.cpp
   src/gpx.cpp
   src/s57.cpp
+  src/chart_grid.cpp
 )
 target_include_directories(openautoroute_core PUBLIC include)
 target_compile_options(openautoroute_core PRIVATE -Wall -Wextra -Wpedantic)
@@ -25,3 +26,7 @@ add_test(NAME core COMMAND test_core)
 # Bulk validation tool: parses every cell in a directory tree (see tools/s57_scan.cpp).
 add_executable(s57_scan tools/s57_scan.cpp)
 target_link_libraries(s57_scan PRIVATE openautoroute_core)
+
+# Command-line router: ENC cells in, GPX route out (import into OpenCPN to check it).
+add_executable(openautoroute tools/openautoroute.cpp)
+target_link_libraries(openautoroute PRIVATE openautoroute_core)

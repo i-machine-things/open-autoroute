@@ -5,8 +5,12 @@
 
 namespace oar {
 
-CostGrid::CostGrid(int cols, int rows, LatLon northWest, double cellSizeDeg)
-    : cols_(cols), rows_(rows), northWest_(northWest), cellSizeDeg_(cellSizeDeg) {
+CostGrid::CostGrid(int cols, int rows, LatLon northWest, double cellSizeDeg, double cellSizeLonDeg)
+    : cols_(cols),
+      rows_(rows),
+      northWest_(northWest),
+      cellSizeDeg_(cellSizeDeg),
+      cellSizeLonDeg_(cellSizeLonDeg > 0.0 ? cellSizeLonDeg : cellSizeDeg) {
     if (cols <= 0 || rows <= 0 || cellSizeDeg <= 0.0) {
         throw std::invalid_argument("CostGrid needs positive dimensions and cell size");
     }
@@ -14,11 +18,11 @@ CostGrid::CostGrid(int cols, int rows, LatLon northWest, double cellSizeDeg)
 }
 
 LatLon CostGrid::centre(Cell c) const {
-    return {northWest_.lat - (c.row + 0.5) * cellSizeDeg_, northWest_.lon + (c.col + 0.5) * cellSizeDeg_};
+    return {northWest_.lat - (c.row + 0.5) * cellSizeDeg_, northWest_.lon + (c.col + 0.5) * cellSizeLonDeg_};
 }
 
 Cell CostGrid::cellAt(LatLon p) const {
-    return {static_cast<int>(std::floor((p.lon - northWest_.lon) / cellSizeDeg_)),
+    return {static_cast<int>(std::floor((p.lon - northWest_.lon) / cellSizeLonDeg_)),
             static_cast<int>(std::floor((northWest_.lat - p.lat) / cellSizeDeg_))};
 }
 
