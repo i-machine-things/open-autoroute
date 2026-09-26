@@ -132,10 +132,11 @@ float laneFactor(double headingDeg, double laneDeg) {
     if (theta >= 155.0) return kBlocked;
     const double kPiOver180 = 3.14159265358979 / 180.0;
     const auto crossing = [&](double deg) { return 2.0 + 30.0 * (1.0 - std::sin(deg * kPiOver180)); };
-    // Joining or following a lane at a small angle is what Rule 10(b) asks for, so the cost rises smoothly from 1 at 25 degrees off the flow
-    // to the full crossing cost at 50, instead of jumping there. (A cliff at 25 made a heading of 25.4 degrees dearer than a near-square
-    // crossing, and a path following a 65 degree lane built itself from north-east steps and cheap south-east crossings: a sawtooth.)
-    if (theta < 50.0) return static_cast<float>(1.0 + (crossing(50.0) - 1.0) * (theta - 25.0) / 25.0);
+    // Joining or following a lane at a small angle is what Rule 10(b) asks for, so the cost rises smoothly across a short band, from 1 at 25
+    // degrees off the flow to the ordinary crossing cost at 32, instead of jumping there. (A cliff at 25 made a heading of 25.4 degrees dearer
+    // than a near-square crossing, and a path following a 65 degree lane built itself from north-east steps and cheap south-east crossings:
+    // a sawtooth.) The band is kept narrow so oblique crossings beyond it cost exactly what they always did.
+    if (theta < 32.0) return static_cast<float>(1.0 + (crossing(32.0) - 1.0) * (theta - 25.0) / 7.0);
     return static_cast<float>(crossing(theta));
 }
 

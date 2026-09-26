@@ -252,12 +252,14 @@ static void testFinerChartWins() {
 // --- COLREGs Rule 10 -----------------------------------------------------------------------------------------------
 
 static void testLaneFactor() {
-    // No cliff at the tolerance: 26 degrees off the flow is barely dearer than 25, and the cost rises steadily up to 50 degrees where it meets
-    // the crossing cost (a heading of 25.4 degrees used to cost about 19 while a near-square crossing cost about 4).
+    // No cliff at the tolerance: the cost rises steadily from 25 to 32 degrees off the flow, where it meets the crossing cost. (A heading of 25.4
+    // degrees used to cost about 19 while a near-square crossing cost about 4, so a path following a 65 degree lane alternated with-flow steps
+    // and cheap crossings: a sawtooth of waypoints.)
     CHECK(laneFactor(25.0, 0.0) == 1.0f);
-    CHECK(laneFactor(26.0, 0.0) < 1.5f);
-    CHECK(laneFactor(30.0, 0.0) < laneFactor(40.0, 0.0) && laneFactor(40.0, 0.0) < laneFactor(50.0, 0.0));
-    CHECK(std::fabs(laneFactor(50.0, 0.0) - (2.0f + 30.0f * (1.0f - std::sin(50.0f * 3.14159265f / 180.0f)))) < 1e-3f);  // meets the crossing cost
+    CHECK(laneFactor(25.4, 0.0) < laneFactor(70.0, 0.0));   // barely off the flow is cheaper than a near-square crossing
+    CHECK(laneFactor(26.0, 0.0) < laneFactor(28.0, 0.0) && laneFactor(28.0, 0.0) < laneFactor(31.0, 0.0));
+    CHECK(std::fabs(laneFactor(32.0, 0.0) - (2.0f + 30.0f * (1.0f - std::sin(32.0f * 3.14159265f / 180.0f)))) < 1e-3f);  // meets the crossing cost
+    CHECK(std::fabs(laneFactor(45.0, 0.0) - (2.0f + 30.0f * (1.0f - std::sin(45.0f * 3.14159265f / 180.0f)))) < 1e-3f);  // beyond it: unchanged
     CHECK(laneFactor(0.0, 0.0) == 1.0f);        // with the flow
     CHECK(laneFactor(20.0, 0.0) == 1.0f);       // within the 25 degree tolerance
     CHECK(laneFactor(350.0, 0.0) == 1.0f);      // wraps around north
