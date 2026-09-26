@@ -239,7 +239,6 @@ int main(int argc, char** argv) {
         ++used;
     }
     grid.assignZoneDirections();  // separation zones take their direction from the lanes beside them
-    grid.markLaneInterior(60.0);  // a large ship's lane discount applies only well inside a lane, so its path does not hug the edge
     // Buoyed channels: pair opposite red/green marks into gates so the route stays between them (see applyChannelGates).
     const std::vector<Gate> gates = useMarks ? applyChannelGates(grid, marks, 500.0) : std::vector<Gate>{};
     if (useMarks) std::printf("%zu channel gates from %zu lateral marks\n", gates.size(), marks.size());

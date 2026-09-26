@@ -90,18 +90,6 @@ std::vector<float> CostGrid::distanceToLaneM() const {
     return chamferM(std::move(d));
 }
 
-void CostGrid::markLaneInterior(double minDepthM) {
-    laneInterior_.clear();
-    if (lane_.empty()) return;
-    std::vector<float> d(cost_.size(), 0.0f);
-    for (size_t i = 0; i < d.size(); ++i) d[i] = std::isnan(lane_[i]) ? 0.0f : 1e30f;  // distance to the nearest non-lane cell
-    const std::vector<float> depth = chamferM(std::move(d));
-    laneInterior_.assign(cost_.size(), 0);
-    for (size_t i = 0; i < cost_.size(); ++i) {
-        if (!std::isnan(lane_[i]) && depth[i] >= minDepthM) laneInterior_[i] = 1;
-    }
-}
-
 void CostGrid::assignZoneDirections() {
     if (zone_.empty() || lane_.empty()) return;
     // Breadth-first from every lane cell; the direction spreads only through zone cells, so each zone cell takes the direction
