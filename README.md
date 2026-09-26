@@ -11,6 +11,7 @@ The plan is a C++ core with two front ends, an OpenCPN plugin (`openautoroute_pi
 - Keeps some distance off shores, and follows the basic rules of the road it can read from a chart:
   - **Traffic separation schemes (Rule 10):** lanes are followed in the charted direction, zones are only crossed square-on, precautionary areas are avoided by small craft, and a boat under 20 m or under sail stays out of lanes where it can.
   - **Narrow channels (Rule 9):** between the dashed limits of a charted narrow channel, and between chains of red and green buoys, keeping to the starboard side.
+- Tells you which restricted or dangerous areas (military and security zones, reserves and sanctuaries, dumping grounds) a route crosses, with the chart's own wording, on screen and in the GPX description. The router only prices most of these, so it can still cross one when the way round is long; read that list before you go.
 - Scores any GPX route against the same rules (`--eval`), so it can be used to check a route from somewhere else.
 
 ## What it does not do
