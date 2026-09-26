@@ -11,12 +11,12 @@ PAR=${3:-4}
 OUT=${4:-benchmarks/out}
 HERE=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$OUT"
-rm -f "$OUT"/*.txt "$OUT"/*.gpx
+rm -f "$OUT"/*.txt "$OUT"/*.gpx "$OUT"/*.ppm "$OUT"/*.ppm.json
 
 run_one() {
   IFS=, read -r name flat flon tlat tlon len cell fromname toname _notes <<<"$1"
   # shellcheck disable=SC2086
-  "$BIN" ${OAR_ARGS:-} --enc "$ENC" --from "$flat,$flon" --to "$tlat,$tlon" --length-m "$len" --cell-m "$cell" --summary --name "$fromname to $toname (${len} m)" --start-name "$fromname" --end-name "$toname" \
+  "$BIN" ${OAR_ARGS:-} --enc "$ENC" --from "$flat,$flon" --to "$tlat,$tlon" --length-m "$len" --cell-m "$cell" --summary --name "$fromname to $toname (${len} m)" --start-name "$fromname" --end-name "$toname" --picture "$OUT/$name.ppm" \
       -o "$OUT/$name.gpx" >"$OUT/$name.txt" 2>&1 || true
 }
 export -f run_one

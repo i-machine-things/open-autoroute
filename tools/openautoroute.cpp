@@ -1,6 +1,6 @@
 // Command-line router: read ENC cells, route between two points, write a GPX that OpenCPN can import.
 //
-//   openautoroute --enc DIR --from LAT,LON --to LAT,LON [--draft M] [--clearance M] [--cell-m M] [--name NAME] [--start-name A] [--end-name B] [-o route.gpx]
+//   openautoroute --enc DIR --from LAT,LON --to LAT,LON [--draft M] [--clearance M] [--cell-m M] [--name NAME] [--start-name A] [--end-name B] [--picture FILE.ppm] [-o route.gpx]
 //   openautoroute --enc DIR --eval route.gpx [--draft M] ...   (score an existing route, e.g. from another planner)
 //
 // DIR is searched recursively for `.000` base cells (e.g. an ENC_ROOT folder). Only cells that overlap the route's
@@ -97,8 +97,78 @@ void usage(const char* argv0) {
 
 }  // namespace
 
+// A picture of the router's own view: land and blocked water dark, open water pale, lanes and zones tinted, caution and dear areas warm,
+// with the route in red and its waypoints as dots (start green, end blue). Written as a binary PPM (no library needed) and reduced so the longest
+// side is at most maxPx; a .json beside it gives the latitude and longitude of the top-left corner and of each pixel, so a reader can turn a
+// spot in the picture back into a position.
+void writePicture(const std::string& path, const CostGrid& grid, const std::vector<LatLon>& route, int maxPx = 1500) {
+    const int scale = std::max(1, static_cast<int>(std::ceil(std::max(grid.cols(), grid.rows()) / static_cast<double>(maxPx))));
+    const int w = (grid.cols() + scale - 1) / scale, h = (grid.rows() + scale - 1) / scale;
+    std::vector<unsigned char> img(static_cast<size_t>(w) * h * 3);
+    auto put = [&](int x, int y, unsigned char r, unsigned char g, unsigned char b) {
+        if (x < 0 || y < 0 || x >= w || y >= h) return;
+        unsigned char* p = &img[(static_cast<size_t>(y) * w + x) * 3];
+        p[0] = r; p[1] = g; p[2] = b;
+    };
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            int cells = 0, blocked = 0, lane = 0, zone = 0, caution = 0, dear = 0, channel = 0;
+            for (int r = y * scale; r < std::min(grid.rows(), (y + 1) * scale); ++r) {
+                for (int c = x * scale; c < std::min(grid.cols(), (x + 1) * scale); ++c) {
+                    const Cell cell{c, r};
+                    ++cells;
+                    if (grid.blocked(cell)) { ++blocked; continue; }
+                    lane += !std::isnan(grid.laneDirection(cell));
+                    zone += grid.isZone(cell);
+                    caution += grid.isCaution(cell);
+                    channel += grid.isNarrowChannel(cell);
+                    dear += grid.cost(cell) >= 8.0f;
+                }
+            }
+            if (blocked * 2 > cells) put(x, y, 70, 70, 70);                          // land and blocked water
+            else if (zone * 4 > cells) put(x, y, 150, 100, 200);                     // separation zone
+            else if (lane * 3 > cells) put(x, y, 205, 190, 240);                     // traffic lane
+            else if (caution * 3 > cells) put(x, y, 250, 220, 150);                  // precautionary area
+            else if (dear * 3 > cells) put(x, y, 240, 190, 190);                    // expensive (restricted, military...)
+            else if (channel * 3 > cells) put(x, y, 170, 215, 190);                  // narrow charted channel
+            else put(x, y, 215, 232, 246);                                           // open water
+        }
+    }
+    auto px = [&](LatLon p, int& x, int& y) {
+        const Cell c = grid.cellAt(p);
+        x = c.col / scale;
+        y = c.row / scale;
+    };
+    auto dot = [&](int cx, int cy, int rad, unsigned char r, unsigned char g, unsigned char b) {
+        for (int dy = -rad; dy <= rad; ++dy) for (int dx = -rad; dx <= rad; ++dx) put(cx + dx, cy + dy, r, g, b);
+    };
+    for (size_t i = 1; i < route.size(); ++i) {  // route legs, thick red
+        int x0, y0, x1, y1;
+        px(route[i - 1], x0, y0);
+        px(route[i], x1, y1);
+        const int steps = std::max(std::abs(x1 - x0), std::abs(y1 - y0)) + 1;
+        for (int k = 0; k <= steps; ++k) dot(x0 + (x1 - x0) * k / steps, y0 + (y1 - y0) * k / steps, 1, 220, 30, 30);
+    }
+    for (size_t i = 0; i < route.size(); ++i) {  // waypoints: black dots, start green, end blue
+        int x, y;
+        px(route[i], x, y);
+        if (i == 0) dot(x, y, 4, 20, 160, 40);
+        else if (i + 1 == route.size()) dot(x, y, 4, 30, 60, 220);
+        else dot(x, y, 2, 0, 0, 0);
+    }
+    std::ofstream out(path, std::ios::binary);
+    out << "P6\n" << w << " " << h << "\n255\n";
+    out.write(reinterpret_cast<const char*>(img.data()), static_cast<std::streamsize>(img.size()));
+    const LatLon nw = grid.centre({0, 0});
+    std::ofstream meta(path + ".json");
+    meta.precision(9);
+    meta << "{\"width\": " << w << ", \"height\": " << h << ", \"north_lat\": " << nw.lat + 0.5 * grid.cellSizeDeg()
+         << ", \"west_lon\": " << nw.lon - 0.5 * grid.cellSizeLonDeg() << ", \"lat_per_px\": " << grid.cellSizeDeg() * scale
+         << ", \"lon_per_px\": " << grid.cellSizeLonDeg() * scale << ", \"metres_per_px\": " << grid.cellSizeM() * scale << "}\n";
+}
+
 int main(int argc, char** argv) {
-    std::string encDir, evalPath, outPath = "route.gpx", routeName, startName = "START", endName = "END";
+    std::string encDir, evalPath, outPath = "route.gpx", routeName, startName = "START", endName = "END", picturePath;
     LatLon from{}, to{}, mapAt{};
     int mapRadius = 0;
     bool trace = false;
@@ -151,6 +221,7 @@ int main(int argc, char** argv) {
         else if (a == "--lane-use" && hasVal) laneUse = std::atof(argv[++i]);
         else if (a == "--margin-m" && hasVal) marginM = std::atof(argv[++i]);
         else if (a == "--margin-weight" && hasVal) marginWeight = std::atof(argv[++i]);
+        else if (a == "--picture" && hasVal) picturePath = argv[++i];  // draw the route over the router's view of the water (PPM) plus a .json of the corners
         else if (a == "--name" && hasVal) routeName = argv[++i];
         else if (a == "--start-name" && hasVal) startName = argv[++i];
         else if (a == "--end-name" && hasVal) endName = argv[++i];
@@ -530,6 +601,7 @@ int main(int argc, char** argv) {
         std::snprintf(nb, sizeof nb, "open-autoroute %.3f,%.3f to %.3f,%.3f", from.lat, from.lon, to.lat, to.lon);
         routeName = nb;
     }
+    if (!picturePath.empty()) writePicture(picturePath, grid, route);
     std::ofstream(outPath) << routeToGpx(route, routeName, startName, endName, desc);
     std::printf("%zu charts, %zu waypoints, %.1f nm (straight line %.1f nm), wrote %s\n", static_cast<size_t>(used),
                 route.size(), nm, haversineM(from, to) / 1852.0, outPath.c_str());
