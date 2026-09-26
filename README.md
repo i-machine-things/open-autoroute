@@ -38,4 +38,4 @@ Planned releases run from `v0.1.0` (rule-compliant core router) through `v0.6.0+
 
 ## Contributing & License
 
-Contributions, issue reports, and pull requests are welcome. This project is licensed under open-source terms to support the marine community.
+Contributions, issue reports, and pull requests are welcome. This project is licensed under the GNU General Public License v3.0 (see [LICENSE](LICENSE)), matching OpenCPN's GPL ecosystem, to support the marine community.
