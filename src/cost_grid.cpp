@@ -38,8 +38,11 @@ void CostGrid::applyDepthBarrier(const std::vector<float>& depthM, double draftM
 void CostGrid::applyChannelCentering(const std::vector<float>& distToCentreM, double halfWidthM, double penalty) {
     if (distToCentreM.size() != cost_.size()) throw std::invalid_argument("distance array does not match grid size");
     if (halfWidthM <= 0.0) throw std::invalid_argument("halfWidthM must be positive");
+    // A negative penalty would push costs below 1 and break the pathfinder's admissible heuristic.
+    if (!(penalty >= 0.0)) throw std::invalid_argument("penalty must be non-negative");
     for (size_t i = 0; i < cost_.size(); ++i) {
         if (cost_[i] == kBlocked || std::isnan(distToCentreM[i])) continue;
+        if (distToCentreM[i] < 0.0f) throw std::invalid_argument("distances must be non-negative");
         // 0 on the centreline, approaching 1 at the channel edge and beyond.
         const double t = 1.0 - std::exp(-3.0 * distToCentreM[i] / halfWidthM);
         cost_[i] *= static_cast<float>(1.0 + penalty * t);
