@@ -143,8 +143,9 @@ This note was created based on issues encountered with PyInstaller executables r
 
 ### Restricted and regulated areas (national law, not COLREGs)
 
-- **RESARE.** Read RESTRN: entry prohibited means blocked, no anchoring or wake limits do not block a transit. Needs its attributes; not yet read.
-- **MIPARE, DMPGRD.** Military practice and dumping grounds: avoid; block by default, since firing and changing depths are real dangers.
+- **RESARE.** Entry prohibited (RESTRN 7) blocks; area to be avoided (14) blocks ships of 50 m or more and costs x20 for smaller vessels. Entry restricted, offshore safety and security zones (CATREA 1) cost x10. Anchoring, fishing and wake limits do not stop a transit.
+- **Minefields (CATREA 14).** In NOAA data these are FORMER minefields (Delaware Bay, New Jersey): the chart text says surface navigation is unrestricted and the danger is to anchoring, dredging and trawling. A caution (x5), not a block, unless RESTRN also says entry prohibited. Check INFORM before hard-blocking anything.
+- **MIPARE, DMPGRD.** Military practice areas usually apply only while in use and can span a waterway: cost x30, never a wall. Dumping grounds: block chemical, nuclear and explosives (CATDPG 2, 3, 4); spoil and vessel grounds cost x15.
 - **CTNARE.** Caution area: penalty, not a block; read INFORM for the reason.
 - **CBLARE, PIPARE, CBLSUB, PIPSOL.** No anchoring; a transit is fine. Penalise anchoring only; cable and pipe lines themselves are not obstacles under a keel.
 - **FSHGRD, FSHFAC, FSHZNE, MARCUL.** Fishing gear and farms are fixed or floating obstructions: block FSHFAC and MARCUL with a margin, penalise FSHGRD, treat FSHZNE as information. Rule 9(c), 10(i): do not impede fishing vessels.

@@ -876,10 +876,15 @@ static void testHazardRestrictedAreas() {
     // direction. Keep forbidden areas apart from the ones checked for staying open.)
     CostGrid forbidden = stampHazards({resare(45.990, 46.0, -124.000, -123.998, 1u << 7, 0),      // cols 0-1: entry prohibited (RESTRN 7)
                                        resare(45.990, 46.0, -123.994, -123.992, 1u << 7, 1u << 1),  // cols 6-7: offshore safety zone with entry prohibited
-                                       resare(45.990, 46.0, -123.990, -123.988, 0, 1u << 14)});   // cols 10-11: minefield (CATREA 14)
+                                       resare(45.990, 46.0, -123.990, -123.988, 1u << 7, 1u << 14)});  // cols 10-11: minefield AND entry prohibited
     CHECK(forbidden.blocked({0, 5}) && forbidden.blocked({1, 5}));
     CHECK(forbidden.blocked({6, 5}) && forbidden.blocked({7, 5}));
     CHECK(forbidden.blocked({10, 5}) && forbidden.blocked({11, 5}));
+
+    // A charted minefield alone is a caution, not a wall: in NOAA charts these are former minefields (Delaware Bay) whose text says
+    // surface navigation is unrestricted and only anchoring, dredging and trawling are dangerous (RESTRN 2, 6 and 9 here).
+    CostGrid former = stampHazards({resare(45.990, 46.0, -124.000, -123.996, (1u << 2) | (1u << 6) | (1u << 9), 1u << 14)});
+    CHECK(!former.blocked({1, 5}) && former.cost({1, 5}) == 5.0f);
 
     // An area to be avoided (RESTRN 14) binds ships: blocked at 120 m, but only x20 for a 12 m boat. A military area (CATREA 9) is x30.
     auto avoid = [&](double length) {
