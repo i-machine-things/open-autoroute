@@ -1,5 +1,6 @@
 #include "openautoroute/s57.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstring>
@@ -177,7 +178,7 @@ std::vector<Pt> edgePoints(const std::map<uint64_t, VecRec>& vecs, uint64_t key,
     nodePt(e.hasBegin, e.begin);
     out.insert(out.end(), e.pts.begin(), e.pts.end());
     nodePt(e.hasEnd, e.end);
-    if (reversed) out.assign(out.rbegin(), out.rend());
+    if (reversed) std::reverse(out.begin(), out.end());
     return out;
 }
 
