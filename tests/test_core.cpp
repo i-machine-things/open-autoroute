@@ -1016,6 +1016,9 @@ static void testRestrictedAreaTextAndNotes() {
     ChartFeature careMip = areaFeature("MIPARE", 45.990, 46.0, -124.000, -123.996);
     careMip.inform = careText;
     CHECK(stampHazards({careMip}).cost({1, 5}) == 2.0f);
+    ChartFeature torpedo = areaFeature("MIPARE", 45.990, 46.0, -124.000, -123.996);   // Maui submarine practice areas
+    torpedo.inform = "As submarines may be submerged in these areas, vessels should proceed with caution. During torpedo practice firing, all vessels are cautioned to keep well clear of Naval Target Vessels flying a large red flag at the highest masthead.";
+    CHECK(stampHazards({torpedo}).cost({1, 5}) == 2.0f);
     CHECK(stampHazards({resare(0, 1u << 9, "")}).cost({1, 5}) == 30.0f);  // no wording, no relief
 
     // Notes: the costed area is recorded per cell with its wording; open cells and blocked ones carry none.

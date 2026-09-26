@@ -176,7 +176,7 @@ AreaText readAreaText(const std::string& inform) {
     static const char* kKeepOut[] = {"closed to the public", "keep out", "no entry", "entry is prohibited", "entry prohibited",
                                      "only ships or other craft authorized", "not authorized entry"};
     for (const char* p : kKeepOut) if (t.find(p) != std::string::npos) return AreaText::KeepOut;
-    static const char* kCaution[] = {"use caution", "exercise caution", "use extreme caution", "caution while transiting"};
+    static const char* kCaution[] = {"use caution", "exercise caution", "use extreme caution", "caution while transiting", "proceed with caution", "are cautioned"};
     for (const char* p : kCaution) if (t.find(p) != std::string::npos) return AreaText::Caution;
     return AreaText::None;
 }
