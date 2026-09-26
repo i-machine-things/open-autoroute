@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
+  <rte>
+    <name>Astoria to Columbia River bar (offshore) (12 m)</name>
+    <desc>open-autoroute: 15.0 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="46.190808" lon="-123.829473"><name>Astoria</name></rtept>
+    <rtept lat="46.194580" lon="-123.829863"><name>WP002</name></rtept>
+    <rtept lat="46.194850" lon="-123.840769"><name>WP003</name></rtept>
+    <rtept lat="46.193502" lon="-123.852064"><name>WP004</name></rtept>
+    <rtept lat="46.193233" lon="-123.864139"><name>WP005</name></rtept>
+    <rtept lat="46.192425" lon="-123.876603"><name>WP006</name></rtept>
+    <rtept lat="46.191886" lon="-123.884393"><name>WP007</name></rtept>
+    <rtept lat="46.191347" lon="-123.892183"><name>WP008</name></rtept>
+    <rtept lat="46.190808" lon="-123.899973"><name>WP009</name></rtept>
+    <rtept lat="46.190269" lon="-123.907763"><name>WP010</name></rtept>
+    <rtept lat="46.192964" lon="-123.918280"><name>WP011</name></rtept>
+    <rtept lat="46.193502" lon="-123.920617"><name>WP012</name></rtept>
+    <rtept lat="46.196736" lon="-123.925681"><name>WP013</name></rtept>
+    <rtept lat="46.211020" lon="-123.947493"><name>WP014</name></rtept>
+    <rtept lat="46.221260" lon="-123.966189"><name>WP015</name></rtept>
+    <rtept lat="46.225303" lon="-123.972421"><name>WP016</name></rtept>
+    <rtept lat="46.229345" lon="-123.978653"><name>WP017</name></rtept>
+    <rtept lat="46.233388" lon="-123.984885"><name>WP018</name></rtept>
+    <rtept lat="46.237430" lon="-123.991117"><name>WP019</name></rtept>
+    <rtept lat="46.252252" lon="-124.014098"><name>WP020</name></rtept>
+    <rtept lat="46.254408" lon="-124.021888"><name>WP021</name></rtept>
+    <rtept lat="46.255216" lon="-124.025394"><name>WP022</name></rtept>
+    <rtept lat="46.256294" lon="-124.036300"><name>WP023</name></rtept>
+    <rtept lat="46.250635" lon="-124.094336"><name>WP024</name></rtept>
+    <rtept lat="46.240933" lon="-124.115759"><name>WP025</name></rtept>
+    <rtept lat="46.238238" lon="-124.120433"><name>WP026</name></rtept>
+    <rtept lat="46.238508" lon="-124.121212"><name>WP027</name></rtept>
+    <rtept lat="46.247940" lon="-124.133286"><name>WP028</name></rtept>
+    <rtept lat="46.250096" lon="-124.130170"><name>Columbia River bar (offshore)</name></rtept>
+  </rte>
+</gpx>

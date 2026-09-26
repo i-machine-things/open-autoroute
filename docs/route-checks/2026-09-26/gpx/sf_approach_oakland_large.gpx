@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
+  <rte>
+    <name>San Francisco approach (offshore) to Oakland (120 m)</name>
+    <desc>open-autoroute: 21.7 nm, 120.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="37.779895" lon="-122.759909"><name>San Francisco approach (offshore)</name></rtept>
+    <rtept lat="37.764803" lon="-122.633391"><name>WP002</name></rtept>
+    <rtept lat="37.764264" lon="-122.622138"><name>WP003</name></rtept>
+    <rtept lat="37.772619" lon="-122.588036"><name>WP004</name></rtept>
+    <rtept lat="37.786632" lon="-122.541317"><name>WP005</name></rtept>
+    <rtept lat="37.796064" lon="-122.513012"><name>WP006</name></rtept>
+    <rtept lat="37.816815" lon="-122.484708"><name>WP007</name></rtept>
+    <rtept lat="37.817085" lon="-122.484367"><name>WP008</name></rtept>
+    <rtept lat="37.816815" lon="-122.484026"><name>WP009</name></rtept>
+    <rtept lat="37.817624" lon="-122.482320"><name>WP010</name></rtept>
+    <rtept lat="37.817893" lon="-122.481979"><name>WP011</name></rtept>
+    <rtept lat="37.817624" lon="-122.481638"><name>WP012</name></rtept>
+    <rtept lat="37.818163" lon="-122.480956"><name>WP013</name></rtept>
+    <rtept lat="37.818432" lon="-122.480615"><name>WP014</name></rtept>
+    <rtept lat="37.818163" lon="-122.480274"><name>WP015</name></rtept>
+    <rtept lat="37.818432" lon="-122.479933"><name>WP016</name></rtept>
+    <rtept lat="37.818702" lon="-122.479592"><name>WP017</name></rtept>
+    <rtept lat="37.818432" lon="-122.479251"><name>WP018</name></rtept>
+    <rtept lat="37.813312" lon="-122.386153"><name>WP019</name></rtept>
+    <rtept lat="37.801185" lon="-122.369444"><name>WP020</name></rtept>
+    <rtept lat="37.801454" lon="-122.346595"><name>WP021</name></rtept>
+    <rtept lat="37.800107" lon="-122.341821"><name>WP022</name></rtept>
+    <rtept lat="37.799568" lon="-122.339775"><name>WP023</name></rtept>
+    <rtept lat="37.799298" lon="-122.338411"><name>WP024</name></rtept>
+    <rtept lat="37.799568" lon="-122.330227"><name>WP025</name></rtept>
+    <rtept lat="37.799837" lon="-122.330227"><name>Oakland</name></rtept>
+  </rte>
+</gpx>

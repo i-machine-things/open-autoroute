@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
+  <rte>
+    <name>Anacortes to Friday Harbor (12 m)</name>
+    <desc>open-autoroute: 20.1 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="48.515551" lon="-122.598257"><name>Anacortes</name></rtept>
+    <rtept lat="48.513125" lon="-122.594187"><name>WP002</name></rtept>
+    <rtept lat="48.514742" lon="-122.590932"><name>WP003</name></rtept>
+    <rtept lat="48.523636" lon="-122.590932"><name>WP004</name></rtept>
+    <rtept lat="48.526600" lon="-122.599477"><name>WP005</name></rtept>
+    <rtept lat="48.526331" lon="-122.614940"><name>WP006</name></rtept>
+    <rtept lat="48.523636" lon="-122.624707"><name>WP007</name></rtept>
+    <rtept lat="48.521210" lon="-122.636508"><name>WP008</name></rtept>
+    <rtept lat="48.521749" lon="-122.644646"><name>WP009</name></rtept>
+    <rtept lat="48.525522" lon="-122.680455"><name>WP010</name></rtept>
+    <rtept lat="48.528756" lon="-122.800499"><name>WP011</name></rtept>
+    <rtept lat="48.527948" lon="-122.811486"><name>WP012</name></rtept>
+    <rtept lat="48.530103" lon="-122.817182"><name>WP013</name></rtept>
+    <rtept lat="48.552471" lon="-122.847295"><name>WP014</name></rtept>
+    <rtept lat="48.557861" lon="-122.851364"><name>WP015</name></rtept>
+    <rtept lat="48.568641" lon="-122.866014"><name>WP016</name></rtept>
+    <rtept lat="48.576726" lon="-122.882697"><name>WP017</name></rtept>
+    <rtept lat="48.576187" lon="-122.889208"><name>WP018</name></rtept>
+    <rtept lat="48.551393" lon="-122.925018"><name>WP019</name></rtept>
+    <rtept lat="48.540614" lon="-122.945364"><name>WP020</name></rtept>
+    <rtept lat="48.543578" lon="-123.007624"><name>WP021</name></rtept>
+    <rtept lat="48.541692" lon="-123.011286"><name>WP022</name></rtept>
+    <rtept lat="48.539536" lon="-123.010879"><name>WP023</name></rtept>
+    <rtept lat="48.538997" lon="-123.010065"><name>Friday Harbor</name></rtept>
+  </rte>
+</gpx>
