@@ -61,7 +61,7 @@ bool snapToOpen(const CostGrid& g, Cell c, int radius, Cell& out) {
 void usage(const char* argv0) {
     std::fprintf(stderr,
                  "usage: %s --enc DIR --from LAT,LON --to LAT,LON [--draft M=1.5] [--clearance M=1.0]\n"
-                 "          [--cell-m M=30] [--margin-m M=300] [--margin-weight W=6] [-o route.gpx]\n", argv0);
+                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [-o route.gpx]\n", argv0);
 }
 
 }  // namespace
@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
     std::string encDir, outPath = "route.gpx";
     LatLon from{}, to{};
     bool haveFrom = false, haveTo = false;
-    double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 300.0, marginWeight = 6.0;
+    double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         const bool hasVal = i + 1 < argc;

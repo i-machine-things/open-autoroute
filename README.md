@@ -41,7 +41,9 @@ build/openautoroute --enc ~/Documents/Charts/ENC_ROOT \
 Cells are painted coarse-to-fine, and a cell is open only when a chart positively shows it is deep enough. Land,
 shoals, shallow or depth-unknown obstructions and wrecks, and water with no chart coverage are all blocked. COLREGs
 Rules 9 and 10 are not applied yet, so the route does not keep right in channels or cross traffic lanes correctly.
-It is a development tool, not for navigation.
+Routes are also kept off the shore: cost rises within `--margin-m` (default 500 m) of any blocked water, scaled by
+`--margin-weight` (default 10). Set `--margin-weight 0` to turn that off. The tool prints the closest and median
+clearance it achieved. It is a development tool, not for navigation.
 
 ---
 
