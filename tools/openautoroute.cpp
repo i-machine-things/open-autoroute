@@ -363,6 +363,8 @@ int main(int argc, char** argv) {
         if (route.empty()) {
             std::fprintf(stderr, "no route found: the charts show no continuous water at least %.1f m deep between the points\n",
                          minDepth);
+            std::fprintf(stderr, "  search ran inside one body of %zu cells; start cell %d,%d (blocked=%d cost=%g) goal cell %d,%d (blocked=%d cost=%g)\n",
+                         bodies.size[chosen], s2.col, s2.row, grid.blocked(s2) ? 1 : 0, grid.cost(s2), g2.col, g2.row, grid.blocked(g2) ? 1 : 0, grid.cost(g2));
             if (mapRadius > 0) drawMap();
             return fail("no_route");
         }
