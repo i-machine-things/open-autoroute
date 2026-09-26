@@ -104,7 +104,8 @@ int main(int argc, char** argv) {
     bool haveFrom = false, haveTo = false, applyTss = true, underSail = false;
     double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0, lengthM = 12.0, laneUse = -1.0, simplify = 0.05, laneMarginM = 1500.0, laneMarginWeight = 12.0, caution = -1.0, minLegM = 460.0;
     bool summary = false, useMarks = true, useChannels = true, useHazards = true;
-    double airDraftArg = -1.0;  // dev switches (--no-marks, --no-boundaries) exist only to compare runs
+    double airDraftArg = -1.0;
+    std::vector<std::string> skipClasses;  // dev switches (--no-marks, --no-boundaries) exist only to compare runs
     const auto startedAt = std::chrono::steady_clock::now();
     double snapStartM = 0.0, snapEndM = 0.0;
     for (int i = 1; i < argc; ++i) {
@@ -128,6 +129,15 @@ int main(int argc, char** argv) {
         else if (a == "--lane-margin-m" && hasVal) laneMarginM = std::atof(argv[++i]);
         else if (a == "--min-leg-m" && hasVal) minLegM = std::atof(argv[++i]);
         else if (a == "--air-draft-m" && hasVal) airDraftArg = std::atof(argv[++i]);
+        else if (a == "--skip-class" && hasVal) {  // developer switch: ignore some hazard classes, e.g. --skip-class RESARE,BRIDGE
+            std::string list = argv[++i];
+            for (size_t p = 0; p <= list.size();) {
+                const size_t c = list.find(',', p);
+                skipClasses.push_back(list.substr(p, c == std::string::npos ? std::string::npos : c - p));
+                if (c == std::string::npos) break;
+                p = c + 1;
+            }
+        }
         else if (a == "--no-hazards") useHazards = false;  // developer switch: skip the chart-object hazard rules
         else if (a == "--no-boundaries") useChannels = false;  // developer switch: ignore charted channel limits
         else if (a == "--no-marks") useMarks = false;  // ignore red/green lateral marks (for comparison)
@@ -216,6 +226,7 @@ int main(int argc, char** argv) {
         so.cautionFactor = cautionFactor;
         so.airDraftM = airDraft;
         so.hazardObjects = useHazards;
+        so.skipClasses = skipClasses;
         stampChart(d, so, grid);
         if (useMarks) collectLateralMarks(d, marks);
         std::printf("  chart %s\n", name.c_str());

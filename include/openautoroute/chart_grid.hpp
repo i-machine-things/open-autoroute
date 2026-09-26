@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <vector>
 
 #include "openautoroute/cost_grid.hpp"
@@ -32,6 +33,7 @@ struct StampOptions {
     double cautionFactor = 1.0; // cost multiplier for precautionary areas
     double airDraftM = 0.0;     // height above the waterline, for bridge and overhead cable clearance
     bool hazardObjects = true;  // the chart-object hazard rules below (developer switch, for comparing runs)
+    std::vector<std::string> skipClasses;  // developer switch: hazard classes to ignore, to find which rule blocks a route
 };
 
 /// stampChart plus the hazard rules for chart objects beyond depth and land, each following the notes in .claude/CODING_NOTES.md and

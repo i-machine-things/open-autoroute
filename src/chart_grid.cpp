@@ -148,6 +148,7 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
     std::vector<uint8_t> scratch;
     for (const ChartFeature& f : chart.features) {
         const std::string& cls = f.objectClass;
+        if (std::find(opt.skipClasses.begin(), opt.skipClasses.end(), cls) != opt.skipClasses.end()) continue;  // developer switch
         if (contains(kBlockAlways, sizeof kBlockAlways / sizeof *kBlockAlways, cls)) {
             shutGeometry(f, grid, shut, scratch);
         } else if (cls == "OBSTRN" || cls == "WRECKS" || cls == "UWTROC") {
