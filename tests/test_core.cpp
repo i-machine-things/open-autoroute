@@ -895,12 +895,14 @@ static void testHazardRestrictedAreas() {
 }
 
 static void testHazardPenalties() {
+    ChartFeature military = areaFeature("MIPARE", 45.996, 46.0, -124.000, -123.996);   // cols 0-3, rows 0-3: heavily costly, never a wall
     ChartFeature caution = areaFeature("CTNARE", 45.990, 45.994, -124.000, -123.996);   // cols 0-3, rows 6-9
     ChartFeature dumping = areaFeature("DMPGRD", 45.990, 45.994, -123.996, -123.992);   // cols 4-7
     ChartFeature anchorage = areaFeature("ACHARE", 45.990, 45.994, -123.992, -123.990); // cols 8-9
     ChartFeature kelp = areaFeature("WEDKLP", 45.990, 45.994, -123.990, -123.988);      // cols 10-11
     ChartFeature overlap = areaFeature("ACHARE", 45.990, 45.994, -124.000, -123.996);   // over the caution area
-    CostGrid g = stampHazards({caution, dumping, anchorage, kelp, overlap});
+    CostGrid g = stampHazards({military, caution, dumping, anchorage, kelp, overlap});
+    CHECK(!g.blocked({1, 1}) && g.cost({1, 1}) == 30.0f);  // a military practice area is dear, not a wall
     CHECK(g.cost({1, 8}) == 3.0f);    // caution area, and the anchorage on top of it does not compound: the larger factor wins
     CHECK(g.cost({5, 8}) == 15.0f);   // dumping ground
     CHECK(g.cost({8, 8}) == 3.0f);    // anchorage

@@ -41,14 +41,14 @@ struct StampOptions {
 /// warnings raise the cost. Blocking is always the safe direction, so these rules apply even where the chart has no depth area.
 ///   - OBSTRN, WRECKS, UWTROC (points, lines and areas): blocked when awash, dry, partly submerged, uncovering, of unknown depth, or shallower
 ///     than draft plus clearance
-///   - UNSARE, MIPARE, FSHFAC, MARCUL, PRDARE, OSPARE, HULKES: blocked
+///   - UNSARE, FSHFAC, MARCUL, PRDARE, OSPARE, HULKES: blocked
 ///   - fixed structures (SLCONS, PONTON, PILPNT, MORFAC, FNCLNE, DYKCON, CAUSWY, CONVYR, PYLONS, FLODOC, DRYDOC, GATCON, DAMCON, GRIDRN,
 ///     OILBAR, OFSPLF) and RAPIDS / WATFAL: blocked; offshore platform points also get a 250 m berth
 ///   - RESARE: blocked for entry prohibited or area to be avoided, or an offshore safety zone, military area or minefield; costly for
 ///     entry restricted, swimming, dredging, reserve and sanctuary areas; anchoring, fishing and similar restrictions do not stop a transit
 ///   - BOYISD / BCNISD: 100 m blocked; BOYCAR / BCNCAR: the danger side of the mark blocked out to 150 m
 ///   - BRIDGE, CBLOHD, PIPOHD: blocked unless the clearance (closed clearance for an opening bridge) is at least air draft plus 1 m
-///   - CTNARE x3, DMPGRD x15, ACHARE x3, WEDKLP x1.5, WATTUR x3, SPLARE x5: costlier
+///   - MIPARE x30 (danger zones usually apply only while in use and can span a waterway), CTNARE x3, DMPGRD x15, ACHARE x3, WEDKLP x1.5, WATTUR x3, SPLARE x5: costlier
 void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& grid);
 /// Fairways (FAIRWY) and dredged areas (DRGARE) are also recorded as channel cells (the dashed limits drawn on a chart) for
 /// CostGrid::applyChannelPreference; they are never made cheaper or dearer by stampChart itself.

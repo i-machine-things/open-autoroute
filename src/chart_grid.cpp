@@ -142,7 +142,7 @@ void raise(std::vector<float>& penalty, const CostGrid& grid, const ChartFeature
 void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const CostGrid& grid, std::vector<uint8_t>& shut,
                         std::vector<float>& penalty) {
     // Fixed things standing in the water, and areas nobody should enter, that the depth areas call open water.
-    static const char* kBlockAlways[] = {"UNSARE", "MIPARE", "FSHFAC", "MARCUL", "PRDARE", "OSPARE", "HULKES", "SLCONS", "PONTON", "PILPNT",
+    static const char* kBlockAlways[] = {"UNSARE", "FSHFAC", "MARCUL", "PRDARE", "OSPARE", "HULKES", "SLCONS", "PONTON", "PILPNT",
                                          "MORFAC", "FNCLNE", "DYKCON", "CAUSWY", "CONVYR", "PYLONS", "FLODOC", "DRYDOC", "GATCON", "DAMCON",
                                          "GRIDRN", "OILBAR", "RAPIDS", "WATFAL"};
     std::vector<uint8_t> scratch;
@@ -190,6 +190,10 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
                 if (catrea & ((1u << 25) | (1u << 26))) factor = std::max(factor, 3.0f);   // swinging and water-skiing areas
                 if (factor > 1.0f) raise(penalty, grid, f, factor);
             }
+        } else if (cls == "MIPARE") {
+            // Military practice and danger areas usually restrict passage only while in use, and one can span a whole waterway (Puget
+            // Sound), so blocking it would cut the water in two. Very costly instead: avoided whenever there is any way round.
+            raise(penalty, grid, f, 30.0f);
         } else if (cls == "CTNARE") {
             raise(penalty, grid, f, 3.0f);
         } else if (cls == "DMPGRD") {
