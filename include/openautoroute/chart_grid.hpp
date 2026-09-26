@@ -50,7 +50,8 @@ struct StampOptions {
 ///     entry restricted or an offshore safety zone (x10, these are usually security zones needing permission), swimming, dredging, reserve and sanctuary areas; anchoring, fishing and similar restrictions do not stop a transit
 ///   - BOYISD / BCNISD: 100 m blocked; BOYCAR / BCNCAR: the danger side of the mark blocked out to 150 m
 ///   - BRIDGE, CBLOHD, PIPOHD: blocked unless the clearance (closed clearance for an opening bridge) is at least air draft plus 1 m
-///   - MIPARE x30 (danger zones usually apply only while in use and can span a waterway), CTNARE x3, DMPGRD x15, ACHARE x3, WEDKLP x1.5, WATTUR x3, SPLARE x5: costlier
+///   - DMPGRD: chemical, nuclear and explosives dumping grounds are blocked; spoil and vessel grounds x15
+///   - MIPARE x30 (danger zones usually apply only while in use and can span a waterway), CTNARE x3, ACHARE x3, WEDKLP x1.5, WATTUR x3, SPLARE x5: costlier
 void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& grid);
 /// Fairways (FAIRWY) and dredged areas (DRGARE) are also recorded as channel cells (the dashed limits drawn on a chart) for
 /// CostGrid::applyChannelPreference; they are never made cheaper or dearer by stampChart itself.

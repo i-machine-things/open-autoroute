@@ -200,7 +200,10 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
         } else if (cls == "CTNARE") {
             raise(penalty, grid, f, 3.0f);
         } else if (cls == "DMPGRD") {
-            raise(penalty, grid, f, 15.0f);
+            // CATDPG (attribute 23): 2 chemical waste, 3 nuclear waste, 4 explosives, 5 spoil ground, 6 vessel dumping ground. The first
+            // three are dangerous however deep the water is: blocked. Spoil and vessel grounds change depth and hold debris: very costly.
+            if (f.catdpg & ((1u << 2) | (1u << 3) | (1u << 4))) shutGeometry(f, grid, shut, scratch);
+            else raise(penalty, grid, f, 15.0f);
         } else if (cls == "ACHARE") {
             raise(penalty, grid, f, 3.0f);  // vessels lie at anchor here
         } else if (cls == "WEDKLP") {
