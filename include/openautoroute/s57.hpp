@@ -32,6 +32,7 @@ struct ChartFeature {
     double verccl = std::numeric_limits<double>::quiet_NaN();  // BRIDGE: vertical clearance with the bridge closed (m)
     double catcam = std::numeric_limits<double>::quiet_NaN();  // BOYCAR/BCNCAR: 1 north, 2 east, 3 south, 4 west cardinal mark
     uint32_t restrn = 0;  // RESARE: bitmask of RESTRN values (bit n set = value n, e.g. bit 7 entry prohibited, bit 14 area to be avoided)
+    std::string inform;  // INFORM text, kept only for the classes where the wording decides the treatment (RESARE, CTNARE, MIPARE, DMPGRD)
     uint32_t catdpg = 0;  // DMPGRD: bitmask of CATDPG values (2 chemical waste, 3 nuclear waste, 4 explosives, 5 spoil ground, 6 vessel)
     uint32_t catrea = 0;  // RESARE: bitmask of CATREA values (bit 1 offshore safety zone, 9 military area, 14 minefield, ...)
     double catlam = std::numeric_limits<double>::quiet_NaN();  // BOYLAT/BCNLAT: 1 port-hand, 2 starboard-hand, 3/4 preferred channel

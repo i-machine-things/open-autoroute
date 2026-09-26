@@ -166,7 +166,7 @@ const char* classOf(uint16_t objl) {
 }
 
 // Attribute codes, from s57attributes.csv.
-constexpr uint16_t kAttrCatdpg = 23, kAttrCatcam = 13, kAttrCatrea = 56, kAttrRestrn = 131, kAttrVerclr = 181, kAttrVerccl = 182, kAttrWatlev = 187;
+constexpr uint16_t kAttrInform = 102, kAttrCatdpg = 23, kAttrCatcam = 13, kAttrCatrea = 56, kAttrRestrn = 131, kAttrVerclr = 181, kAttrVerccl = 182, kAttrWatlev = 187;
 constexpr uint16_t kAttrCatlam = 36, kAttrDrval1 = 87, kAttrDrval2 = 88, kAttrOrient = 117, kAttrValdco = 174, kAttrValsou = 179;
 
 void parseFeature(const Record& r, FeatRec& f) {
@@ -329,6 +329,11 @@ bool loadS57Buffer(const std::vector<uint8_t>& bytes, ChartData& out, std::strin
         cf.restrn = attrMask(f, kAttrRestrn);
         cf.catrea = attrMask(f, kAttrCatrea);
         cf.catdpg = attrMask(f, kAttrCatdpg);
+        if (cf.objectClass == "RESARE" || cf.objectClass == "CTNARE" || cf.objectClass == "MIPARE" || cf.objectClass == "DMPGRD") {
+            for (const auto& a : f.attrs) {
+                if (a.first == kAttrInform) cf.inform = a.second;
+            }
+        }
 
         if (f.prim == 1) {  // point: isolated node(s); SOUNDG expands to one point per sounding
             cf.geometry = Geometry::Point;

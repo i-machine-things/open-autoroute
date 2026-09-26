@@ -936,6 +936,16 @@ static void testHazardRestrictedAreas() {
     // costly but never a wall: otherwise a harbour or a whole waterway could be cut off.
     CostGrid zone = stampHazards({resare(45.990, 46.0, -124.000, -123.996, 1u << 8, 1u << 1)});
     CHECK(!zone.blocked({1, 5}) && zone.cost({1, 5}) == 10.0f);
+
+    // The same codes with chart text saying it is a Regulated Navigation Area (33 CFR 165) bind particular vessels, not a small craft:
+    // only a light cost, so a crossing is not pushed miles off its line.
+    ChartFeature rna = resare(45.990, 46.0, -124.000, -123.996, (1u << 4) | (1u << 8), 0);
+    rna.inform = "Regulated navigation area, 33 CFR 165.1301 & 165.1303";
+    CostGrid rnaGrid = stampHazards({rna});
+    CHECK(!rnaGrid.blocked({1, 5}) && rnaGrid.cost({1, 5}) == 1.5f);
+    ChartFeature security = resare(45.990, 46.0, -124.000, -123.996, 1u << 8, 0);
+    security.inform = "Security zone, 33 CFR 165.1315";
+    CHECK(stampHazards({security}).cost({1, 5}) == 10.0f);  // any other wording keeps the full cost
 }
 
 static void testHazardPenalties() {

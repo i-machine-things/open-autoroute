@@ -1,6 +1,7 @@
 #include "openautoroute/chart_grid.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <vector>
@@ -178,6 +179,11 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
             // restrictions (1 to 6, 9 to 13, 15, 16) do not stop a transit. CATREA (attribute 56): 1 offshore safety zone, 9 military
             // area and 14 minefield forbid entry; the rest only ask for care.
             const uint32_t restrn = f.restrn, catrea = f.catrea;
+            // The chart text decides one case the codes cannot: a Regulated Navigation Area (33 CFR 165) is charted "entry restricted" like a
+            // security zone, but such areas are aimed at particular vessels (tank vessels, tows), so a small craft only takes care in one.
+            std::string text = f.inform;
+            std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            const bool regulatedNavArea = text.find("regulated navigation area") != std::string::npos;
             const bool ship = opt.vesselLengthM >= 50.0;  // "area to be avoided" designations (ATBA) are aimed at large ships
             const bool forbidden = (restrn & (1u << 7)) || ((restrn & (1u << 14)) && ship);
             if (forbidden) {
@@ -189,7 +195,7 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
                 // A charted minefield (CATREA 14) in NOAA data is a FORMER one: the chart text says surface navigation is unrestricted and the
                 // residual danger is to anchoring, dredging and trawling. So it is a caution here; only an explicit entry prohibition blocks.
                 if (catrea & (1u << 14)) factor = std::max(factor, 5.0f);
-                if ((restrn & (1u << 8)) || (catrea & (1u << 1))) factor = std::max(factor, 10.0f);  // entry restricted; an offshore safety zone (security zones use it)
+                if ((restrn & (1u << 8)) || (catrea & (1u << 1))) factor = std::max(factor, regulatedNavArea ? 1.5f : 10.0f);  // entry restricted; an offshore safety zone (security zones use it)
                 if (catrea & (1u << 18)) factor = std::max(factor, 20.0f);                 // swimming area
                 if (catrea & ((1u << 21) | (1u << 8) | (1u << 12))) factor = std::max(factor, 8.0f);  // dredging, degaussing range, aid safety zone
                 if (catrea & ((1u << 4) | (1u << 5) | (1u << 6) | (1u << 7) | (1u << 10) | (1u << 20) | (1u << 22) | (1u << 23))) factor = std::max(factor, 5.0f);  // reserves, sanctuaries, wreck and research areas

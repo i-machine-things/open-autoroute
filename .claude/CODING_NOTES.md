@@ -143,8 +143,8 @@ This note was created based on issues encountered with PyInstaller executables r
 
 ### Restricted and regulated areas (national law, not COLREGs)
 
-- **RESARE.** Entry prohibited (RESTRN 7) blocks; area to be avoided (14) blocks ships of 50 m or more and costs x20 for smaller vessels. Entry restricted, offshore safety and security zones (CATREA 1) cost x10. Anchoring, fishing and wake limits do not stop a transit.
-- **Minefields (CATREA 14).** In NOAA data these are FORMER minefields (Delaware Bay, New Jersey): the chart text says surface navigation is unrestricted and the danger is to anchoring, dredging and trawling. A caution (x5), not a block, unless RESTRN also says entry prohibited. Check INFORM before hard-blocking anything.
+- **RESARE.** Entry prohibited (RESTRN 7) blocks; area to be avoided (14) blocks ships of 50 m or more and costs x20 for smaller vessels. Entry restricted, offshore safety and security zones (CATREA 1) cost x10, but x1.5 if INFORM says Regulated Navigation Area (33 CFR 165: aimed at tankers and tows, not a small craft). Anchoring, fishing and wake limits do not stop a transit.
+- **Minefields (CATREA 14).** In NOAA data these are FORMER minefields (Delaware Bay, New Jersey): the chart text says surface navigation is unrestricted and the danger is to anchoring, dredging and trawling. A caution (x5), not a block, unless RESTRN also says entry prohibited. Check INFORM before hard-blocking anything: the free text often decides what the codes cannot (kept only for RESARE, CTNARE, MIPARE, DMPGRD).
 - **MIPARE, DMPGRD.** Military practice areas usually apply only while in use and can span a waterway: cost x30, never a wall. Dumping grounds: block chemical, nuclear and explosives (CATDPG 2, 3, 4); spoil and vessel grounds cost x15.
 - **CTNARE.** Caution area: penalty, not a block; read INFORM for the reason.
 - **CBLARE, PIPARE, CBLSUB, PIPSOL.** No anchoring; a transit is fine. Penalise anchoring only; cable and pipe lines themselves are not obstacles under a keel.
