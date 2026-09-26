@@ -187,6 +187,21 @@ std::vector<Gate> applyChannelGates(CostGrid& grid, const std::vector<LateralMar
         const int j = nearestIdx(star, port[i], maxGateM);
         if (j >= 0 && nearestIdx(port, star[j], maxGateM) == static_cast<int>(i)) gates.push_back({port[i], star[j]});  // mutual nearest
     }
+    // A marked channel is a CHAIN of pairs. A lone pair (a harbour entrance, a ferry slip, a single buoy pair in open water) is not
+    // a channel, so keep only gates with at least two other gates within 1.5 km. Outside a chain none of these rules apply.
+    {
+        std::vector<G> chained;
+        for (size_t i = 0; i < gates.size(); ++i) {
+            const double mx = (gates[i].a.x + gates[i].b.x) / 2, my = (gates[i].a.y + gates[i].b.y) / 2;
+            int neighbours = 0;
+            for (size_t k = 0; k < gates.size(); ++k) {
+                if (k == i) continue;
+                if (std::hypot((gates[k].a.x + gates[k].b.x) / 2 - mx, (gates[k].a.y + gates[k].b.y) / 2 - my) <= 1500.0) ++neighbours;
+            }
+            if (neighbours >= 2) chained.push_back(gates[i]);
+        }
+        gates.swap(chained);
+    }
     std::vector<Gate> out;
     for (const G& g : gates) out.push_back({g.a.ll, g.b.ll});
     if (gates.empty()) return out;

@@ -199,18 +199,43 @@ void CostGrid::markNarrowChannels(double maxWidthM) {
     }
 }
 
-void CostGrid::applyChannelPreference(double rangeM, double penalty) {
-    if (narrow_.empty() || rangeM <= 0.0 || penalty <= 1.0) return;
+void CostGrid::applyChannelPreference(double rangeM, double weight) {
+    chanWeight_.clear();
+    chanAxis_.clear();
+    if (narrow_.empty() || rangeM <= 0.0 || weight <= 0.0) return;
     std::vector<float> d(cost_.size(), 1e30f);
     for (size_t i = 0; i < d.size(); ++i) {
         if (narrow_[i]) d[i] = 0.0f;
     }
     const std::vector<float> dist = chamferM(std::move(d));
-    for (size_t i = 0; i < cost_.size(); ++i) {
-        if (cost_[i] == kBlocked || channel_[i] || dist[i] >= rangeM) continue;
-        if ((!lane_.empty() && !std::isnan(lane_[i])) || (!zone_.empty() && zone_[i]) || (!caution_.empty() && caution_[i])) continue;  // traffic separation is not ours to touch
-        cost_[i] *= static_cast<float>(penalty);
+    chanWeight_.assign(cost_.size(), 0.0f);
+    chanAxis_.assign(cost_.size(), 0.0f);
+    auto at = [&](int c, int r) { return dist[static_cast<size_t>(std::clamp(r, 0, rows_ - 1)) * cols_ + std::clamp(c, 0, cols_ - 1)]; };
+    for (int r = 0; r < rows_; ++r) {
+        for (int c = 0; c < cols_; ++c) {
+            const size_t i = static_cast<size_t>(r) * cols_ + c;
+            if (cost_[i] == kBlocked || channel_[i] || dist[i] >= rangeM) continue;
+            if ((!lane_.empty() && !std::isnan(lane_[i])) || (!zone_.empty() && zone_[i]) || (!caution_.empty() && caution_[i])) continue;  // traffic separation is not ours to touch
+            // Gradient of the distance to the channel points straight away from it; the channel edge runs perpendicular to that.
+            const double gx = at(c + 1, r) - at(c - 1, r), gy = at(c, r + 1) - at(c, r - 1);
+            if (std::hypot(gx, gy) < 1e-3) continue;
+            double away = std::atan2(gx, -gy) * 180.0 / 3.14159265358979;  // bearing (east = +col, north = -row) pointing away from the channel
+            double axis = away + 90.0;
+            if (axis < 0) axis += 360.0;
+            if (axis >= 360.0) axis -= 360.0;
+            chanWeight_[i] = static_cast<float>(weight);
+            chanAxis_[i] = static_cast<float>(axis);
+        }
     }
+}
+
+float CostGrid::channelMarginFactor(Cell c, double headingDeg) const {
+    if (chanWeight_.empty()) return 1.0f;
+    const size_t i = index(c);
+    if (chanWeight_[i] == 0.0f) return 1.0f;
+    const double diff = (headingDeg - chanAxis_[i]) * 3.14159265358979 / 180.0;
+    const double along = 0.05 + 0.95 * std::cos(diff) * std::cos(diff);  // running along the edge; across it is nearly free
+    return static_cast<float>(1.0 + chanWeight_[i] * along);
 }
 
 float CostGrid::gateSideFactor(Cell c, double headingDeg) const {

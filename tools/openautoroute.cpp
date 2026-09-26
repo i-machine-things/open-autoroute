@@ -92,7 +92,7 @@ std::map<int, Snap> nearestPerBody(const CostGrid& g, const WaterBodies& bodies,
 void usage(const char* argv0) {
     std::fprintf(stderr,
                  "usage: %s --enc DIR (--from LAT,LON --to LAT,LON | --eval ROUTE.gpx) [--draft M=1.5] [--clearance M=1.0]\n"
-                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [--length-m L=12] [--under-sail] [--lane-use F] [--lane-margin-m M=1500] [--lane-margin-weight W=12] [--caution F] [--no-marks] [--channel-limits] [--channel-penalty F=8] [--simplify T=0.05] [--min-leg-m M=460] [--summary] [--map LAT,LON,CELLS] [-o route.gpx]\n", argv0);
+                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [--length-m L=12] [--under-sail] [--lane-use F] [--lane-margin-m M=1500] [--lane-margin-weight W=12] [--caution F] [--simplify T=0.05] [--min-leg-m M=460] [--summary] [--map LAT,LON,CELLS] [-o route.gpx]\n", argv0);
 }
 
 }  // namespace
@@ -103,8 +103,7 @@ int main(int argc, char** argv) {
     int mapRadius = 0;
     bool haveFrom = false, haveTo = false, applyTss = true, underSail = false;
     double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0, lengthM = 12.0, laneUse = -1.0, simplify = 0.05, laneMarginM = 1500.0, laneMarginWeight = 12.0, caution = -1.0, minLegM = 460.0;
-    bool summary = false, useMarks = true, useChannels = false;
-    double channelPenalty = 8.0;
+    bool summary = false, useMarks = true, useChannels = true;  // dev switches (--no-marks, --no-boundaries) exist only to compare runs
     const auto startedAt = std::chrono::steady_clock::now();
     double snapStartM = 0.0, snapEndM = 0.0;
     for (int i = 1; i < argc; ++i) {
@@ -127,8 +126,7 @@ int main(int argc, char** argv) {
         else if (a == "--caution" && hasVal) caution = std::atof(argv[++i]);
         else if (a == "--lane-margin-m" && hasVal) laneMarginM = std::atof(argv[++i]);
         else if (a == "--min-leg-m" && hasVal) minLegM = std::atof(argv[++i]);
-        else if (a == "--channel-limits") useChannels = true;  // experimental: penalise leaving narrow charted channels (off by default)
-        else if (a == "--channel-penalty" && hasVal) channelPenalty = std::atof(argv[++i]);
+        else if (a == "--no-boundaries") useChannels = false;  // developer switch: ignore charted channel limits
         else if (a == "--no-marks") useMarks = false;  // ignore red/green lateral marks (for comparison)
         else if (a == "--summary") summary = true;  // one machine-readable line at the end, for benchmark scripts
         else if (a == "--simplify" && hasVal) simplify = std::atof(argv[++i]);
@@ -216,11 +214,12 @@ int main(int argc, char** argv) {
     // Buoyed channels: pair opposite red/green marks into gates so the route stays between them (see applyChannelGates).
     const std::vector<Gate> gates = useMarks ? applyChannelGates(grid, marks, 500.0) : std::vector<Gate>{};
     if (useMarks) std::printf("%zu channel gates from %zu lateral marks\n", gates.size(), marks.size());
-    // Experimental (--channel-limits): stay between the dashed limits of narrow charted channels (under 600 m wide). It penalises the
-    // water beside a channel in every direction, so it also discourages crossing one; off by default until it is direction-aware.
+    // Narrow charted channels (fairway or dredged area under 600 m wide, the dashed limits): stay between the limits, like keeping
+    // between the lines on a road. Automatic: it acts only within 1.5 km of a charted narrow channel, only on moves running along or
+    // cutting across its bends (not on a clean crossing of it), and never on traffic separation.
     if (useChannels) {
         grid.markNarrowChannels(600.0);
-        grid.applyChannelPreference(300.0, channelPenalty);
+        grid.applyChannelPreference(1500.0, 6.0);
     }
     grid.setLaneUseFactor(laneUse);
     // Leeway: a vessel that avoids lanes also keeps a wide berth from lanes, zones and the ends of lane parts, so it prefers

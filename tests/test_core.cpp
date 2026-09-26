@@ -534,8 +534,8 @@ static void testChannelGates() {
     };
     CostGrid plain = makeSquare();
     CostGrid gated = makeSquare();
-    const std::vector<Gate> gates = applyChannelGates(gated, marks, 1000.0, 8.0, 1.5, 2500.0);
-    CHECK(gates.size() >= centre.size() - 2);  // essentially every pair became a gate
+    const std::vector<Gate> gates = applyChannelGates(gated, marks, 1000.0, 8.0, 1.5, 2500.0);  // (test channel is wider than a real narrow one)
+    CHECK(gates.size() >= centre.size() - 4);  // nearly every pair became a gate (the chain rule drops a few at the bends)
     const int without = crossedCount(plain, gates), with = crossedCount(gated, gates);
     CHECK(without < static_cast<int>(gates.size()));  // control: the straight corner cut misses gates
     CHECK(with > without);                            // the gates pull the route into the channel
@@ -550,6 +550,22 @@ static void testChannelGates() {
     std::vector<LateralMark> oneSided{{lone.centre({10, 20}), 1}, {lone.centre({20, 20}), 1}};
     CHECK(applyChannelGates(lone, oneSided).empty());
     CHECK(lone.cost({15, 20}) == 1.0f);
+
+    // A single pair of marks (a harbour entrance) is not a channel: no gate, nothing changes. Three in a row are.
+    CostGrid pair = makeSquare();
+    const std::vector<LateralMark> onePair{{pair.centre({20, 18}), 1}, {pair.centre({20, 22}), 2}};
+    CHECK(applyChannelGates(pair, onePair, 1000.0).empty());
+    CHECK(pair.cost({20, 10}) == 1.0f);
+    CostGrid chain = makeSquare();
+    std::vector<LateralMark> threePairs;
+    for (int c : {14, 20, 26}) { threePairs.push_back({chain.centre({c, 18}), 1}); threePairs.push_back({chain.centre({c, 22}), 2}); }
+    CHECK(applyChannelGates(chain, threePairs, 1000.0).size() == 3);
+
+    // Reach beyond the marks is short: open water far from the channel keeps its cost.
+    CostGrid reach = makeSquare();
+    applyChannelGates(reach, threePairs, 1000.0, 8.0, 1.5, 400.0);
+    CHECK(reach.cost({20, 1}) == 1.0f);   // about 2 km past the marks
+    CHECK(reach.cost({20, 45}) == 1.0f);
     // Preferred-channel and unknown categories are ignored when collecting marks.
     ChartData d;
     ChartFeature f;
@@ -597,8 +613,8 @@ static void testKeepToStarboardSide() {
 }
 
 static void testChannelPreference() {
-    // An L-shaped NARROW charted channel (5 cells, about 550 m). Cutting the corner leaves it; with the preference the route stays
-    // inside the dashed limits.
+    // An L-shaped NARROW charted channel (5 cells, about 550 m). Cutting the corner outside the limits costs; crossing the channel is
+    // free; and nothing happens away from a narrow channel.
     CostGrid g = makeGrid(40, 40);
     for (int r = 0; r < 40; ++r) {
         for (int c = 0; c < 40; ++c) {
@@ -606,42 +622,54 @@ static void testChannelPreference() {
         }
     }
     g.markNarrowChannels(1000.0);
+    CHECK(g.isNarrowChannel({10, 32}));
+    CHECK(g.channelMarginFactor({10, 27}, 90.0) == 1.0f);  // no preference until applied
+    g.applyChannelPreference(16 * g.cellSizeM(), 6.0);  // long enough to reach across the bend
+    // Just north of the horizontal arm (outside it): running east along the edge is dear, crossing north-south is nearly free.
+    const float along = g.channelMarginFactor({10, 28}, 90.0), across = g.channelMarginFactor({10, 28}, 0.0);
+    CHECK(along > 5.0f);
+    CHECK(across < 1.0f + 0.2f * 6.0f);
+    CHECK(across < 0.35f * along);
+    CHECK(g.channelMarginFactor({10, 32}, 90.0) == 1.0f);  // inside the channel: untouched
+    CHECK(g.cost({10, 28}) == 1.0f);                        // and the base cost is never changed
+
+    // Cutting the corner is worse than following the channel round the bend.
     const LatLon a = g.centre({2, 32}), b = g.centre({32, 2});
-    auto cellsOutside = [&](const std::vector<LatLon>& route) {
-        int out = 0;
+    auto outside = [&](const std::vector<LatLon>& route) {
+        int n = 0;
         for (size_t i = 1; i < route.size(); ++i) {
             for (int k = 0; k <= 60; ++k) {
                 const double t = k / 60.0;
-                out += !g.isChannel(g.cellAt({route[i - 1].lat + t * (route[i].lat - route[i - 1].lat), route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)}));
+                n += !g.isChannel(g.cellAt({route[i - 1].lat + t * (route[i].lat - route[i - 1].lat), route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)}));
             }
         }
-        return out;
+        return n;
     };
-    CHECK(cellsOutside(findRoute(g, a, b)) > 20);  // control: without the preference the diagonal cuts the corner
-    g.applyChannelPreference(10 * g.cellSizeM(), 8.0);
-    CHECK(g.cost({10, 26}) == 8.0f);               // open water beside the channel now costs more
-    CHECK(g.cost({10, 32}) == 1.0f);               // inside the channel is untouched
-    CHECK(cellsOutside(findRoute(g, a, b)) < 10);  // the route follows the channel round the bend
+    CostGrid plain = makeGrid(40, 40);
+    for (int r = 0; r < 40; ++r) for (int c = 0; c < 40; ++c) if ((r >= 30 && r <= 34) || (c >= 30 && c <= 34)) plain.setChannel({c, r});
+    CHECK(outside(findRoute(plain, a, b)) > 20);   // control: without the preference the diagonal cuts the corner
+    CHECK(outside(findRoute(g, a, b)) < outside(findRoute(plain, a, b)));  // with it the route hugs the channel more
+
     CostGrid none = makeGrid(10, 10);
-    none.applyChannelPreference(5 * none.cellSizeM(), 8.0);  // no channels charted: a no-op
-    CHECK(none.cost({3, 3}) == 1.0f);
+    none.applyChannelPreference(5 * none.cellSizeM(), 6.0);  // no channels charted: a no-op
+    CHECK(none.channelMarginFactor({3, 3}, 90.0) == 1.0f);
 
     // A WIDE channel (a bay-sized fairway) is not narrow: it changes nothing, so open-water routing is untouched.
     CostGrid wide = makeGrid(60, 60);
     for (int r = 10; r < 50; ++r) for (int c = 0; c < 60; ++c) wide.setChannel({c, r});  // 40 cells wide, about 4.4 km
     wide.markNarrowChannels(600.0);
     CHECK(!wide.isNarrowChannel({30, 30}));
-    wide.applyChannelPreference(10 * wide.cellSizeM(), 8.0);
-    CHECK(wide.cost({30, 5}) == 1.0f);  // outside the wide fairway but nothing is penalised
+    wide.applyChannelPreference(10 * wide.cellSizeM(), 6.0);
+    CHECK(wide.channelMarginFactor({30, 5}, 90.0) == 1.0f);
 
     // Traffic separation is never touched: a lane beside a narrow channel keeps its cost even inside the channel's range.
     CostGrid lanes = makeGrid(40, 40);
     for (int r = 0; r < 40; ++r) for (int c = 18; c <= 21; ++c) lanes.setChannel({c, r});
     lanes.markNarrowChannels(1000.0);
     for (int r = 0; r < 40; ++r) lanes.setLaneDirection({24, r}, 0.0f);
-    lanes.applyChannelPreference(10 * lanes.cellSizeM(), 8.0);
-    CHECK(lanes.cost({24, 10}) == 1.0f);   // a lane cell in range: untouched
-    CHECK(lanes.cost({26, 10}) == 8.0f);   // ordinary water in range: penalised
+    lanes.applyChannelPreference(10 * lanes.cellSizeM(), 6.0);
+    CHECK(lanes.channelMarginFactor({24, 10}, 0.0) == 1.0f);   // a lane cell in range: untouched
+    CHECK(lanes.channelMarginFactor({26, 10}, 0.0) > 1.0f);    // ordinary water in range, running along the edge: charged
 }
 
 static void testWaterBodies() {

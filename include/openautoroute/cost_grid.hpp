@@ -87,10 +87,14 @@ public:
     /// alone, so the channel rules only act where a marked channel really confines a vessel.
     void markNarrowChannels(double maxWidthM);
     bool isNarrowChannel(Cell c) const { return !narrow_.empty() && narrow_[index(c)] != 0; }
-    /// Multiply the cost of open cells outside every charted channel but within `rangeM` of a NARROW channel by `penalty`, so a route
-    /// stays between the dashed limits there. Wide channels are ignored, and cells of a traffic lane, separation zone or
+    /// Keep a vessel between the dashed limits of a NARROW channel. Open cells outside every charted channel but within `rangeM` of a
+    /// narrow one remember the direction of the channel edge beside them; channelMarginFactor() then charges `1 + weight` for a move
+    /// running along that edge and almost nothing for a move across it, so cutting a bend outside the limits or running alongside
+    /// them costs, while crossing the channel stays free. Wide channels are ignored, and cells of a traffic lane, separation zone or
     /// precautionary area are never touched, so this cannot interfere with the traffic separation rules.
-    void applyChannelPreference(double rangeM, double penalty);
+    void applyChannelPreference(double rangeM, double weight);
+    /// Cost multiplier (>= 1) for a move on `headingDeg` through `c` from the channel-limit preference; 1 where it does not apply.
+    float channelMarginFactor(Cell c, double headingDeg) const;
 
     /// Position across a buoyed channel for a cell near a red/green gate: t runs 0 at the port-hand mark to 1 at the starboard-hand
     /// mark, and `axisDeg` is the direction of buoyage (the way a vessel "returning from sea" travels). Used by gateSideFactor().
@@ -162,6 +166,8 @@ private:
     std::vector<uint8_t> caution_;  // empty until a precautionary-area cell is set
     std::vector<uint8_t> channel_;  // empty until a channel cell is set
     std::vector<uint8_t> narrow_;   // empty until markNarrowChannels finds one
+    std::vector<float> chanWeight_;  // empty until applyChannelPreference sets it
+    std::vector<float> chanAxis_;    // degrees, direction of the nearest narrow channel edge
     std::vector<float> gateT_;      // NaN outside gate corridors; empty until a gate is applied
     std::vector<float> gateAxis_;
     float gateSideWeight_ = 0.0f;
