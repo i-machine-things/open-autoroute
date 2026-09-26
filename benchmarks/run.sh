@@ -14,9 +14,9 @@ mkdir -p "$OUT"
 rm -f "$OUT"/*.txt "$OUT"/*.gpx
 
 run_one() {
-  IFS=, read -r name flat flon tlat tlon len cell _notes <<<"$1"
+  IFS=, read -r name flat flon tlat tlon len cell fromname toname _notes <<<"$1"
   # shellcheck disable=SC2086
-  "$BIN" ${OAR_ARGS:-} --enc "$ENC" --from "$flat,$flon" --to "$tlat,$tlon" --length-m "$len" --cell-m "$cell" --summary --name "$name" \
+  "$BIN" ${OAR_ARGS:-} --enc "$ENC" --from "$flat,$flon" --to "$tlat,$tlon" --length-m "$len" --cell-m "$cell" --summary --name "$fromname to $toname (${len} m)" --start-name "$fromname" --end-name "$toname" \
       -o "$OUT/$name.gpx" >"$OUT/$name.txt" 2>&1 || true
 }
 export -f run_one
@@ -25,7 +25,7 @@ export ENC BIN OUT OAR_ARGS
 grep -v '^#' "$HERE/routes.csv" | grep -v '^$' | xargs -P "$PAR" -I{} bash -c 'run_one "$1"' _ {}
 
 printf '%-34s %5s %7s %6s %4s %6s %6s %6s %6s %5s %4s %4s %6s %s\n' route len_m nm ratio wp clos_m blk_m wrng_m caut_m cross offd snap secs flags
-grep -v '^#' "$HERE/routes.csv" | grep -v '^$' | while IFS=, read -r name _ _ _ _ len _ _; do
+grep -v '^#' "$HERE/routes.csv" | grep -v '^$' | while IFS=, read -r name _ _ _ _ len _ _ _ _; do
   line=$(grep '^SUMMARY' "$OUT/$name.txt" 2>/dev/null || true)
   if [ -z "$line" ]; then printf '%-34s %5s  (no summary: see %s)\n' "$name" "$len" "$OUT/$name.txt"; continue; fi
   awk -v name="$name" -v len="$len" '

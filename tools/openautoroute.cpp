@@ -1,6 +1,6 @@
 // Command-line router: read ENC cells, route between two points, write a GPX that OpenCPN can import.
 //
-//   openautoroute --enc DIR --from LAT,LON --to LAT,LON [--draft M] [--clearance M] [--cell-m M] [--name NAME] [-o route.gpx]
+//   openautoroute --enc DIR --from LAT,LON --to LAT,LON [--draft M] [--clearance M] [--cell-m M] [--name NAME] [--start-name A] [--end-name B] [-o route.gpx]
 //   openautoroute --enc DIR --eval route.gpx [--draft M] ...   (score an existing route, e.g. from another planner)
 //
 // DIR is searched recursively for `.000` base cells (e.g. an ENC_ROOT folder). Only cells that overlap the route's
@@ -98,7 +98,7 @@ void usage(const char* argv0) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::string encDir, evalPath, outPath = "route.gpx", routeName;
+    std::string encDir, evalPath, outPath = "route.gpx", routeName, startName = "START", endName = "END";
     LatLon from{}, to{}, mapAt{};
     int mapRadius = 0;
     bool haveFrom = false, haveTo = false, applyTss = true, underSail = false;
@@ -150,6 +150,8 @@ int main(int argc, char** argv) {
         else if (a == "--margin-m" && hasVal) marginM = std::atof(argv[++i]);
         else if (a == "--margin-weight" && hasVal) marginWeight = std::atof(argv[++i]);
         else if (a == "--name" && hasVal) routeName = argv[++i];
+        else if (a == "--start-name" && hasVal) startName = argv[++i];
+        else if (a == "--end-name" && hasVal) endName = argv[++i];
         else if ((a == "-o" || a == "--out") && hasVal) outPath = argv[++i];
         else { usage(argv[0]); return 2; }
     }
@@ -513,7 +515,7 @@ int main(int argc, char** argv) {
         std::snprintf(nb, sizeof nb, "open-autoroute %.3f,%.3f to %.3f,%.3f", from.lat, from.lon, to.lat, to.lon);
         routeName = nb;
     }
-    std::ofstream(outPath) << routeToGpx(route, routeName, "START", "END", desc);
+    std::ofstream(outPath) << routeToGpx(route, routeName, startName, endName, desc);
     std::printf("%zu charts, %zu waypoints, %.1f nm (straight line %.1f nm), wrote %s\n", static_cast<size_t>(used),
                 route.size(), nm, haversineM(from, to) / 1852.0, outPath.c_str());
     printSummary();
