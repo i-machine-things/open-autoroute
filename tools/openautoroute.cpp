@@ -1,6 +1,7 @@
 // Command-line router: read ENC cells, route between two points, write a GPX that OpenCPN can import.
 //
 //   openautoroute --enc DIR --from LAT,LON --to LAT,LON [--draft M] [--clearance M] [--cell-m M] [-o route.gpx]
+//   openautoroute --enc DIR --eval route.gpx [--draft M] ...   (score an existing route, e.g. from another planner)
 //
 // DIR is searched recursively for `.000` base cells (e.g. an ENC_ROOT folder). Only cells that overlap the route's
 // bounding box are kept in memory.
@@ -10,6 +11,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
@@ -30,6 +32,24 @@ bool parseLatLon(const char* s, LatLon& out) {
     if (*end != ',') return false;
     out.lon = std::strtod(end + 1, &end);
     return *end == '\0' && std::fabs(out.lat) <= 90.0 && std::fabs(out.lon) <= 180.0;
+}
+
+// Vertices of a GPX route/track (<rtept>, <trkpt> or <wpt>), in file order. A tolerant scan, not a full XML parser:
+// enough for the files chart apps export, and anything without lat/lon attributes is skipped.
+std::vector<LatLon> readGpxPoints(const std::string& path) {
+    std::ifstream in(path);
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    std::vector<LatLon> pts;
+    for (size_t pos = text.find('<'); pos != std::string::npos; pos = text.find('<', pos + 1)) {
+        if (text.compare(pos, 6, "<rtept") != 0 && text.compare(pos, 6, "<trkpt") != 0 && text.compare(pos, 4, "<wpt") != 0) continue;
+        const size_t end = text.find('>', pos);
+        if (end == std::string::npos) break;
+        const std::string tag = text.substr(pos, end - pos);
+        const size_t la = tag.find("lat=\""), lo = tag.find("lon=\"");
+        if (la == std::string::npos || lo == std::string::npos) continue;
+        pts.push_back({std::atof(tag.c_str() + la + 5), std::atof(tag.c_str() + lo + 5)});
+    }
+    return pts;
 }
 
 struct Bounds {
@@ -60,14 +80,14 @@ bool snapToOpen(const CostGrid& g, Cell c, int radius, Cell& out) {
 
 void usage(const char* argv0) {
     std::fprintf(stderr,
-                 "usage: %s --enc DIR --from LAT,LON --to LAT,LON [--draft M=1.5] [--clearance M=1.0]\n"
+                 "usage: %s --enc DIR (--from LAT,LON --to LAT,LON | --eval ROUTE.gpx) [--draft M=1.5] [--clearance M=1.0]\n"
                  "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [-o route.gpx]\n", argv0);
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::string encDir, outPath = "route.gpx";
+    std::string encDir, evalPath, outPath = "route.gpx";
     LatLon from{}, to{};
     bool haveFrom = false, haveTo = false;
     double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0;
@@ -77,6 +97,7 @@ int main(int argc, char** argv) {
         if (a == "--enc" && hasVal) encDir = argv[++i];
         else if (a == "--from" && hasVal) haveFrom = parseLatLon(argv[++i], from);
         else if (a == "--to" && hasVal) haveTo = parseLatLon(argv[++i], to);
+        else if (a == "--eval" && hasVal) evalPath = argv[++i];
         else if (a == "--draft" && hasVal) draft = std::atof(argv[++i]);
         else if (a == "--clearance" && hasVal) clearance = std::atof(argv[++i]);
         else if (a == "--cell-m" && hasVal) cellM = std::atof(argv[++i]);
@@ -85,16 +106,31 @@ int main(int argc, char** argv) {
         else if ((a == "-o" || a == "--out") && hasVal) outPath = argv[++i];
         else { usage(argv[0]); return 2; }
     }
+    std::vector<LatLon> given;  // the route being scored in --eval mode
+    if (!evalPath.empty()) {
+        given = readGpxPoints(evalPath);
+        if (given.size() < 2) {
+            std::fprintf(stderr, "no route points found in %s\n", evalPath.c_str());
+            return 2;
+        }
+        from = given.front();
+        to = given.back();
+        haveFrom = haveTo = true;
+    }
     if (encDir.empty() || !haveFrom || !haveTo || cellM <= 0.0 || draft < 0.0 || clearance < 0.0) {
         usage(argv[0]);
         return 2;
     }
 
     // Grid covers the route's bounding box plus a margin so the router can swing wide around headlands.
-    const double marginDeg = std::max(0.03, 0.25 * std::max(std::fabs(from.lat - to.lat), std::fabs(from.lon - to.lon)));
+    Bounds ends;
+    ends.add(from);
+    ends.add(to);
+    for (LatLon p : given) ends.add(p);
+    const double marginDeg = std::max(0.03, 0.25 * std::max(ends.maxLat - ends.minLat, ends.maxLon - ends.minLon));
     Bounds box;
-    box.add({std::min(from.lat, to.lat) - marginDeg, std::min(from.lon, to.lon) - marginDeg});
-    box.add({std::max(from.lat, to.lat) + marginDeg, std::max(from.lon, to.lon) + marginDeg});
+    box.add({ends.minLat - marginDeg, ends.minLon - marginDeg});
+    box.add({ends.maxLat + marginDeg, ends.maxLon + marginDeg});
     const double latStep = cellM / 111320.0;
     const double lonStep = latStep / std::cos(deg2rad((box.minLat + box.maxLat) / 2));
     const double cols = std::ceil((box.maxLon - box.minLon) / lonStep), rows = std::ceil((box.maxLat - box.minLat) / latStep);
@@ -140,34 +176,51 @@ int main(int argc, char** argv) {
     const std::vector<float> shoreDist = grid.distanceToBlockedM();
     grid.applyShoreMargin(marginM, marginWeight);
 
-    Cell s = grid.cellAt(from), g = grid.cellAt(to);
-    Cell s2, g2;
-    if (!grid.inBounds(s) || !grid.inBounds(g) || !snapToOpen(grid, s, 40, s2) || !snapToOpen(grid, g, 40, g2)) {
-        std::fprintf(stderr, "start or end is not near charted water deep enough for %.1f m draft + %.1f m clearance\n",
-                     draft, clearance);
-        return 1;
-    }
-    if (!(s == s2)) std::printf("start moved to nearest safe water (%.0f m)\n", haversineM(from, grid.centre(s2)));
-    if (!(g == g2)) std::printf("end moved to nearest safe water (%.0f m)\n", haversineM(to, grid.centre(g2)));
+    std::vector<LatLon> route;
+    if (!evalPath.empty()) {
+        route = given;  // score as-is: no snapping, no rerouting
+    } else {
+        Cell s = grid.cellAt(from), g = grid.cellAt(to);
+        Cell s2, g2;
+        if (!grid.inBounds(s) || !grid.inBounds(g) || !snapToOpen(grid, s, 40, s2) || !snapToOpen(grid, g, 40, g2)) {
+            std::fprintf(stderr, "start or end is not near charted water deep enough for %.1f m draft + %.1f m clearance\n",
+                         draft, clearance);
+            return 1;
+        }
+        if (!(s == s2)) std::printf("start moved to nearest safe water (%.0f m)\n", haversineM(from, grid.centre(s2)));
+        if (!(g == g2)) std::printf("end moved to nearest safe water (%.0f m)\n", haversineM(to, grid.centre(g2)));
 
-    std::vector<LatLon> route = findRoute(grid, grid.centre(s2), grid.centre(g2));
-    if (route.empty()) {
-        std::fprintf(stderr, "no route found: the charts show no continuous water at least %.1f m deep between the points\n",
-                     minDepth);
-        return 1;
+        route = findRoute(grid, grid.centre(s2), grid.centre(g2));
+        if (route.empty()) {
+            std::fprintf(stderr, "no route found: the charts show no continuous water at least %.1f m deep between the points\n",
+                         minDepth);
+            return 1;
+        }
     }
     double nm = 0;
     for (size_t i = 1; i < route.size(); ++i) nm += haversineM(route[i - 1], route[i]) / 1852.0;
     // Clearance report: sample each leg about every cell and look up the distance to blocked water. Samples within
     // 1 km of either end are skipped, since a start in a marina or a berth is at the shore by definition.
     std::vector<double> clearances;
-    double travelled = 0.0;
+    double travelled = 0.0, unsafeM = 0.0;
+    struct Spot { LatLon at; double alongM; };
+    std::vector<Spot> unsafeSpots;  // first sample of each separate unsafe stretch
+    bool inUnsafe = false;
     for (size_t i = 1; i < route.size(); ++i) {
         const double leg = haversineM(route[i - 1], route[i]);
         const int steps = std::max(1, static_cast<int>(leg / grid.cellSizeM()));
         for (int k = 0; k <= steps; ++k) {
             const double t = static_cast<double>(k) / steps;
             const double along = travelled + t * leg;
+            const LatLon here{route[i - 1].lat + t * (route[i].lat - route[i - 1].lat),
+                              route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)};
+            const Cell hc = grid.cellAt(here);
+            const bool unsafe = !grid.inBounds(hc) || grid.blocked(hc);
+            if (unsafe) {
+                unsafeM += leg / steps;
+                if (!inUnsafe) unsafeSpots.push_back({here, along});
+            }
+            inUnsafe = unsafe;
             if (along < 1000.0 || along > nm * 1852.0 - 1000.0) continue;
             const Cell c = grid.cellAt({route[i - 1].lat + t * (route[i].lat - route[i - 1].lat),
                                         route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)});
@@ -179,6 +232,17 @@ int main(int argc, char** argv) {
         std::sort(clearances.begin(), clearances.end());
         std::printf("clearance from land, shoal or uncharted water (excluding 1 km at each end): closest %.0f m, "
                     "median %.0f m\n", clearances.front(), clearances[clearances.size() / 2]);
+    }
+    if (!evalPath.empty()) {
+        std::printf("unsafe by the chart rules: %.0f m of %.0f m (%.1f%%) in %zu stretch(es)\n", unsafeM, nm * 1852.0,
+                    100.0 * unsafeM / (nm * 1852.0), unsafeSpots.size());
+        for (size_t i = 0; i < unsafeSpots.size() && i < 10; ++i) {
+            std::printf("  at %.5f,%.5f (%.1f nm along)\n", unsafeSpots[i].at.lat, unsafeSpots[i].at.lon,
+                        unsafeSpots[i].alongM / 1852.0);
+        }
+        std::printf("%zu charts, %zu waypoints, %.1f nm (straight line %.1f nm)\n", static_cast<size_t>(used), route.size(),
+                    nm, haversineM(from, to) / 1852.0);
+        return 0;
     }
     std::ofstream(outPath) << routeToGpx(route, "open-autoroute");
     std::printf("%zu charts, %zu waypoints, %.1f nm (straight line %.1f nm), wrote %s\n", static_cast<size_t>(used),
