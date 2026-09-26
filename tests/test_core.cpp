@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "openautoroute/chart_grid.hpp"
 #include "openautoroute/cost_grid.hpp"
 #include "openautoroute/geo.hpp"
 #include "openautoroute/gpx.hpp"
@@ -85,6 +86,63 @@ static void testGpx() {
     const std::string gpx = routeToGpx({{46.1, -124.0}, {46.2, -124.1}}, "A & B");
     CHECK(gpx.find("<rtept lat=\"46.100000\" lon=\"-124.000000\">") != std::string::npos);
     CHECK(gpx.find("A &amp; B") != std::string::npos);
+}
+
+static ChartFeature areaFeature(const char* cls, double lat0, double lat1, double lon0, double lon1,
+                                double drval1 = std::nan("")) {
+    ChartFeature f;
+    f.objectClass = cls;
+    f.geometry = Geometry::Area;
+    f.drval1 = drval1;
+    Ring r;
+    r.points = {{lat1, lon0}, {lat1, lon1}, {lat0, lon1}, {lat0, lon0}, {lat1, lon0}};
+    f.parts.push_back(r);
+    return f;
+}
+
+static ChartFeature pointFeature(const char* cls, Cell c, const CostGrid& g, double valsou) {
+    ChartFeature f;
+    f.objectClass = cls;
+    f.geometry = Geometry::Point;
+    f.valsou = valsou;
+    f.parts.push_back({{g.centre(c)}, false});
+    return f;
+}
+
+static void testStampChart() {
+    CostGrid g = makeGrid(12, 10);  // cell 0.001 deg, NW corner (46.0, -124.0); columns 0..11
+    g.fill(7.0f);                   // sentinel: cells no chart covers must keep their value
+    ChartData d;
+    d.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.995, 5.0));   // cols 0-4: deep
+    d.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -123.995, -123.990, 1.0));  // cols 5-9: shoal
+    d.features.push_back(areaFeature("LNDARE", 45.997, 45.999, -123.999, -123.997));    // island in the deep area
+    d.features.push_back(areaFeature("DEPARE", 45.995, 45.996, -123.990, -123.988, std::nan("")));  // unknown depth
+    d.features.push_back(pointFeature("WRECKS", {3, 3}, g, 1.0));                       // shallow wreck
+    d.features.push_back(pointFeature("OBSTRN", {2, 4}, g, std::nan("")));              // obstruction, depth unknown
+    d.features.push_back(pointFeature("WRECKS", {4, 3}, g, 9.0));                       // deep wreck: harmless
+    stampChart(d, 2.5, g);
+
+    CHECK(g.cost({0, 0}) == 1.0f);       // deep water
+    CHECK(g.blocked({7, 5}));            // shoal area
+    CHECK(g.blocked({1, 1}));            // land
+    CHECK(g.blocked({3, 3}));            // shallow wreck
+    CHECK(g.blocked({2, 4}));            // obstruction with no depth is treated as unsafe
+    CHECK(g.cost({4, 3}) == 1.0f);       // wreck deeper than draft + clearance is harmless
+    CHECK(g.cost({11, 5}) == 7.0f);      // not covered by the chart: untouched
+    CHECK(g.blocked({10, 4}));           // unknown DRVAL1 area is blocked, not assumed safe
+}
+
+static void testFinerChartWins() {
+    CostGrid g = makeGrid(10, 10);
+    g.fill(kBlocked);
+    ChartData coarse, fine;
+    coarse.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.990, 1.0));  // says shoal everywhere
+    fine.features.push_back(areaFeature("DEPARE", 45.994, 45.996, -124.0, -123.990, 6.0));  // dredged channel
+    stampChart(coarse, 2.5, g);
+    stampChart(fine, 2.5, g);
+    CHECK(g.blocked({3, 1}));    // outside the fine chart's polygon: coarse verdict stands
+    CHECK(!g.blocked({3, 5}));   // inside the fine chart's polygon: it overrides the coarse chart
+    CHECK(!findRoute(g, g.centre({0, 5}), g.centre({9, 5})).empty());
 }
 
 static void testS57MissingFile() {
@@ -257,6 +315,8 @@ int main() {
     testNoRoute();
     testChannelCentering();
     testGpx();
+    testStampChart();
+    testFinerChartWins();
     testS57MissingFile();
     testS57Synthetic();
     testS57Malformed();

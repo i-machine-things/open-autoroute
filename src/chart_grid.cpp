@@ -9,37 +9,43 @@ namespace {
 
 enum : uint8_t { kUnknown = 0, kOpen = 1, kShut = 2 };
 
-// Even-odd point-in-polygon over every ring of a feature at once, so hole rings cut out of the exterior for free.
-bool insideRings(const std::vector<Ring>& rings, LatLon p) {
-    bool inside = false;
-    for (const Ring& r : rings) {
-        const auto& v = r.points;
-        for (size_t i = 0, j = v.size() - 1; i < v.size(); j = i++) {
-            if ((v[i].lat > p.lat) != (v[j].lat > p.lat) &&
-                p.lon < (v[j].lon - v[i].lon) * (p.lat - v[i].lat) / (v[j].lat - v[i].lat) + v[i].lon) {
-                inside = !inside;
-            }
-        }
-    }
-    return inside;
-}
-
+// Scanline even-odd fill over every ring of a feature at once, so hole rings cut out of the exterior for free. Cost is
+// rows x edges instead of cells x edges, which matters for the huge coarse-scale polygons in approach/coastal charts.
 void paintArea(const ChartFeature& f, uint8_t value, const CostGrid& grid, std::vector<uint8_t>& state) {
-    double minLat = 1e9, maxLat = -1e9, minLon = 1e9, maxLon = -1e9;
+    double minLat = 1e9, maxLat = -1e9;
     for (const Ring& r : f.parts) {
         if (r.points.size() < 3) return;  // degenerate outline
         for (const LatLon& p : r.points) {
-            minLat = std::min(minLat, p.lat); maxLat = std::max(maxLat, p.lat);
-            minLon = std::min(minLon, p.lon); maxLon = std::max(maxLon, p.lon);
+            minLat = std::min(minLat, p.lat);
+            maxLat = std::max(maxLat, p.lat);
         }
     }
     // Rows run south, so the north edge gives the first row.
-    const Cell a = grid.cellAt({maxLat, minLon}), b = grid.cellAt({minLat, maxLon});
-    for (int row = std::max(a.row, 0); row <= std::min(b.row, grid.rows() - 1); ++row) {
-        for (int col = std::max(a.col, 0); col <= std::min(b.col, grid.cols() - 1); ++col) {
-            if (!insideRings(f.parts, grid.centre({col, row}))) continue;
-            uint8_t& s = state[static_cast<size_t>(row) * grid.cols() + col];
-            s = (s == kShut || value == kShut) ? static_cast<uint8_t>(kShut) : value;  // shut always wins, whichever polygon came first
+    const int firstRow = std::max(grid.cellAt({maxLat, 0.0}).row, 0);
+    const int lastRow = std::min(grid.cellAt({minLat, 0.0}).row, grid.rows() - 1);
+    std::vector<double> xs;
+    for (int row = firstRow; row <= lastRow; ++row) {
+        const double lat = grid.centre({0, row}).lat;
+        xs.clear();
+        for (const Ring& r : f.parts) {
+            const auto& v = r.points;
+            for (size_t i = 0, j = v.size() - 1; i < v.size(); j = i++) {
+                if ((v[i].lat > lat) != (v[j].lat > lat)) {
+                    xs.push_back(v[i].lon + (lat - v[i].lat) / (v[j].lat - v[i].lat) * (v[j].lon - v[i].lon));
+                }
+            }
+        }
+        std::sort(xs.begin(), xs.end());
+        for (size_t k = 0; k + 1 < xs.size(); k += 2) {
+            // Cells whose centre lies in [xs[k], xs[k+1]].
+            const double c0 = std::ceil((xs[k] - grid.centre({0, 0}).lon) / grid.cellSizeLonDeg());
+            const double c1 = std::floor((xs[k + 1] - grid.centre({0, 0}).lon) / grid.cellSizeLonDeg());
+            const int from = static_cast<int>(std::max(c0, 0.0));
+            const int to = static_cast<int>(std::min(c1, static_cast<double>(grid.cols() - 1)));
+            for (int col = from; col <= to; ++col) {
+                uint8_t& s = state[static_cast<size_t>(row) * grid.cols() + col];
+                s = (s == kShut || value == kShut) ? static_cast<uint8_t>(kShut) : value;  // shut always wins
+            }
         }
     }
 }
