@@ -458,6 +458,34 @@ static void testLaneMarginBowsAwayFromLaneRun() {
     CHECK(nearestLaneM(g, bowed) > before + 1.0 * g.cellSizeM());  // stands off from the lane
 }
 
+static void testMinimumLegLength() {
+    // A round island (radius 8 cells) in the way. The exact route bends round it with several waypoints close together; a
+    // minimum leg length must thin them out without ever cutting through the island.
+    CostGrid g = makeGrid(40, 40);
+    for (int r = 0; r < 40; ++r) {
+        for (int c = 0; c < 40; ++c) {
+            if ((c - 20) * (c - 20) + (r - 20) * (r - 20) <= 64) g.setCost({c, r}, kBlocked);
+        }
+    }
+    g.applyShoreMargin(4 * g.cellSizeM(), 6.0);  // the margin makes the smoothing keep a curve of waypoints round the island
+    const LatLon a = g.centre({2, 20}), b = g.centre({37, 20});
+    const auto tight = findRoute(g, a, b, 0.0, nullptr, 0.0);
+    const double minLeg = 8.0 * g.cellSizeM();
+    const auto thinned = findRoute(g, a, b, 0.0, nullptr, minLeg);
+    CHECK(tight.size() > 3);                  // control: without a minimum there are several waypoints round the island
+    CHECK(thinned.size() >= 2 && thinned.size() < tight.size());
+    auto shortest = [&](const std::vector<LatLon>& r) {
+        double best = 1e30;
+        for (size_t i = 1; i < r.size(); ++i) best = std::min(best, haversineM(r[i - 1], r[i]));
+        return best;
+    };
+    CHECK(shortest(thinned) > shortest(tight));
+    for (size_t i = 1; i < thinned.size(); ++i) {
+        CHECK(lineOfSight(g, g.cellAt(thinned[i - 1]), g.cellAt(thinned[i])));  // never cuts through the island
+    }
+    CHECK(thinned.front().lat == tight.front().lat && thinned.back().lon == tight.back().lon);  // same endpoints
+}
+
 static void testWaterBodies() {
     // A wall splits a 10x6 basin in two; a diagonal pair of blocked cells must not let water leak through the corner.
     CostGrid g = makeGrid(10, 6);
@@ -769,6 +797,7 @@ int main() {
     testLaneMarginBowsAwayFromLaneRun();
     testNoTurnInsideLane();
     testSimplifyTolerance();
+    testMinimumLegLength();
     testWaterBodies();
     testSeparationZoneCrossing();
     testPrecautionaryAreaCost();

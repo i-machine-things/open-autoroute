@@ -167,7 +167,7 @@ WaterBodies findWaterBodies(const CostGrid& grid) {
 }
 
 std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, double simplifyTolerance,
-                              std::vector<Cell>* rawPath) {
+                              std::vector<Cell>* rawPath, double minLegM) {
     const Cell s = grid.cellAt(start), g = grid.cellAt(goal);
     if (!grid.inBounds(s) || !grid.inBounds(g) || grid.blocked(s) || grid.blocked(g)) return {};
 
@@ -225,7 +225,7 @@ std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, d
     // (plus `simplifyTolerance`, a fraction, so near-equal detours collapse into one leg). Checking cost as well as line of
     // sight stops smoothing from cutting through penalised cells (a channel edge, or a traffic lane at an angle).
     const double slack = 1.0 + std::max(0.0, simplifyTolerance);
-    std::vector<LatLon> route{grid.centre(cells.front())};
+    std::vector<size_t> keep{0};  // indices into `cells` of the waypoints kept so far
     size_t anchor = 0;
     for (size_t i = 2; i < cells.size(); ++i) {
         if (i - anchor < 2) continue;
@@ -239,10 +239,41 @@ std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, d
                 if (std::isnan(grid.laneDirection(cells[j]))) { a = j; break; }
             }
             anchor = a;
-            route.push_back(grid.centre(cells[anchor]));
+            keep.push_back(anchor);
             i = anchor + 1;  // resume just past the new anchor (the loop increment moves to anchor + 2)
         }
     }
+    keep.push_back(cells.size() - 1);
+
+    // Minimum leg length: waypoints stacked a few tens of metres apart (a staircase round a headland) are useless on a
+    // chartplotter. Repeatedly try to drop the waypoint that has the shortest neighbouring leg while that leg is under the
+    // minimum, but only if the straight leg replacing it is legal and no more than 25% dearer than the stretch of the
+    // original path it replaces (measured against that path, so repeated drops cannot drift).
+    if (minLegM > 0.0 && keep.size() > 2) {
+        const double minCells = minLegM / grid.cellSizeM();
+        auto gap = [&](size_t a, size_t b) {
+            const double dx = cells[keep[a]].col - cells[keep[b]].col, dy = cells[keep[a]].row - cells[keep[b]].row;
+            return std::sqrt(dx * dx + dy * dy);
+        };
+        std::vector<size_t> pinned;  // waypoints already found necessary
+        while (keep.size() > 2) {
+            size_t pick = 0;
+            double shortest = minCells;
+            for (size_t k = 1; k + 1 < keep.size(); ++k) {
+                if (std::find(pinned.begin(), pinned.end(), keep[k]) != pinned.end()) continue;
+                const double g = std::min(gap(k - 1, k), gap(k, k + 1));
+                if (g < shortest) { shortest = g; pick = k; }
+            }
+            if (pick == 0) break;  // nothing left under the minimum that can still be dropped
+            const size_t ia = keep[pick - 1], ib = keep[pick + 1];
+            const bool legal = lineOfSight(grid, cells[ia], cells[ib]);
+            const float cost = legal ? segmentCost(grid, cells[ia], cells[ib]) : kBlocked;
+            if (legal && cost <= (cum[ib] - cum[ia]) * 1.25f + 1e-3f) keep.erase(keep.begin() + static_cast<long>(pick));
+            else pinned.push_back(keep[pick]);
+        }
+    }
+    std::vector<LatLon> route;
+    for (size_t k = 0; k + 1 < keep.size(); ++k) route.push_back(grid.centre(cells[keep[k]]));
     if (cells.size() > 1) route.push_back(grid.centre(cells.back()));
     return route;
 }

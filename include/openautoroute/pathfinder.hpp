@@ -23,8 +23,12 @@ float laneFactor(double headingDeg, double laneDeg);
 /// cells, wrong-way lane travel) are never traded away. 0 keeps every waypoint the cost comparison requires.
 ///
 /// `rawPath`, if given, receives the unsmoothed grid cells A* chose, for debugging (see the CLI's --map).
+///
+/// `minLegM` (metres) is a preferred minimum distance between waypoints: a waypoint closer than that to its neighbour is
+/// dropped when the straight leg that replaces it is still legal (clear of blocked water, no wrong-way lane or zone travel) and
+/// costs no more than 25% above the stretch it replaces. Legs stay shorter where a channel really needs them. 0 disables it.
 std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, double simplifyTolerance = 0.0,
-                              std::vector<Cell>* rawPath = nullptr);
+                              std::vector<Cell>* rawPath = nullptr, double minLegM = 0.0);
 
 /// True when the straight segment between two cells crosses no blocked cell. Exposed for testing.
 bool lineOfSight(const CostGrid& grid, Cell a, Cell b);
