@@ -310,6 +310,39 @@ static void testVesselClass() {
     CHECK(defaultLaneUseFactor({120.0, false}) < 1.0);  // large vessels are drawn into them
 }
 
+static void testSmallCraftDoesNotClipLaneCorner() {
+    // A lane band (cols 10-13) that ends at row 12. The straight line from (2,14) to (20,10) would clip its last row.
+    CostGrid g = makeGrid(24, 24);
+    for (int r = 0; r <= 12; ++r) for (int c = 10; c <= 13; ++c) g.setLaneDirection({c, r}, 0.0f);
+    auto laneCellsOnRoute = [&](const std::vector<LatLon>& route) {
+        int hits = 0;
+        for (size_t i = 1; i < route.size(); ++i) {
+            for (int k = 0; k <= 200; ++k) {  // sample each leg finely; any lane cell counts
+                const double t = k / 200.0;
+                const LatLon p{route[i - 1].lat + t * (route[i].lat - route[i - 1].lat),
+                               route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)};
+                hits += !std::isnan(g.laneDirection(g.cellAt(p)));
+            }
+        }
+        return hits;
+    };
+    g.setLaneUseFactor(6.0);
+    CHECK(laneCellsOnRoute(findRoute(g, g.centre({2, 14}), g.centre({20, 10}))) == 0);  // small craft go around
+
+    // When there is no way round (lane spans the whole grid) a small craft still crosses, and still square-on.
+    CostGrid full = makeGrid(24, 24);
+    for (int r = 0; r < 24; ++r) for (int c = 10; c <= 13; ++c) full.setLaneDirection({c, r}, 0.0f);
+    full.setLaneUseFactor(6.0);
+    auto route = findRoute(full, full.centre({1, 1}), full.centre({22, 22}));
+    CHECK(route.size() >= 3);
+    for (size_t i = 1; i < route.size(); ++i) {
+        const Cell a = full.cellAt(route[i - 1]), b = full.cellAt(route[i]);
+        if ((a.col >= 10 && a.col <= 13) || (b.col >= 10 && b.col <= 13) || (a.col < 10 && b.col > 13)) {
+            if (a.col != b.col) CHECK(angleDiffDeg(legHeading(full, route[i - 1], route[i]), 90.0) < 15.0);
+        }
+    }
+}
+
 static void testLargeVesselStaysInLane() {
     // Eastbound lane (rows 3-5); both ends are in open water beside it. A large vessel (cheap lane) should run along
     // the lane; the default vessel should not touch it.
@@ -546,6 +579,7 @@ int main() {
     testCrossesLaneAtRightAngles();
     testVesselClass();
     testLaneUseFactor();
+    testSmallCraftDoesNotClipLaneCorner();
     testLargeVesselStaysInLane();
     testStampTss();
     testS57MissingFile();

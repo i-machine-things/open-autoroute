@@ -28,7 +28,13 @@ float moveFactor(const CostGrid& grid, Cell a, Cell b, double headingDeg) {
         const float lane = grid.laneDirection(c);
         if (std::isnan(lane)) continue;
         float lf = laneFactor(headingDeg, lane);
-        if (lf == 1.0f) lf = grid.laneUseFactor();  // with the flow: normal use of the lane, priced by the vessel type
+        if (lf == 1.0f) {
+            lf = grid.laneUseFactor();  // with the flow: normal use of the lane, priced by the vessel type
+        } else if (lf != kBlocked && grid.laneUseFactor() > 1.0f) {
+            // A vessel that should keep out of lanes pays for every lane cell it crosses too, not only for running along
+            // one; otherwise clipping a lane corner is cheaper than a small detour around it.
+            lf *= grid.laneUseFactor();
+        }
         f = f == 1.0f ? lf : std::max(f, lf);       // of two lane cells the worse applies; a cheap one never discounts a crossing
     }
     return f;
