@@ -458,6 +458,28 @@ static void testLaneMarginBowsAwayFromLaneRun() {
     CHECK(nearestLaneM(g, bowed) > before + 1.0 * g.cellSizeM());  // stands off from the lane
 }
 
+static void testWaterBodies() {
+    // A wall splits a 10x6 basin in two; a diagonal pair of blocked cells must not let water leak through the corner.
+    CostGrid g = makeGrid(10, 6);
+    for (int r = 0; r < 6; ++r) g.setCost({5, r}, kBlocked);
+    const WaterBodies split = findWaterBodies(g);
+    CHECK(split.size.size() == 2);
+    CHECK(split.size[0] + split.size[1] == 50);  // every open cell belongs to one body
+    CHECK(split.label[5] == -1);                 // blocked cells have no body
+    CHECK(split.label[0] != split.label[9]);
+
+    CostGrid gap = makeGrid(10, 6);
+    for (int r = 0; r < 6; ++r) gap.setCost({5, r}, kBlocked);
+    gap.setCost({5, 3}, 1.0f);  // a one-cell gap joins them
+    CHECK(findWaterBodies(gap).size.size() == 1);
+
+    CostGrid diag = makeGrid(4, 4);
+    diag.setCost({1, 0}, kBlocked); diag.setCost({0, 1}, kBlocked);  // corner cell (0,0) is shut in by two blocked neighbours
+    const WaterBodies pocket = findWaterBodies(diag);
+    CHECK(pocket.size.size() == 2);                       // (0,0) is a one-cell pocket, not joined through the diagonal
+    CHECK(pocket.label[0] != pocket.label[2 * 4 + 2]);
+}
+
 static void testSeparationZoneCrossing() {
     // Lane (cols 6-9, flow north) | zone (cols 10-12) | lane (cols 13-16, flow south), full height. A crossing vessel must be
     // able to cross the whole scheme square on, and must never run along the zone.
@@ -746,6 +768,7 @@ int main() {
     testLaneMarginBowsAwayFromLaneRun();
     testNoTurnInsideLane();
     testSimplifyTolerance();
+    testWaterBodies();
     testSeparationZoneCrossing();
     testPrecautionaryAreaCost();
     testLargeVesselStaysInLane();

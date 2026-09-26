@@ -133,6 +133,39 @@ bool lineOfSight(const CostGrid& grid, Cell a, Cell b) {
     return clear;
 }
 
+WaterBodies findWaterBodies(const CostGrid& grid) {
+    WaterBodies out;
+    const int cols = grid.cols(), rows = grid.rows();
+    out.label.assign(static_cast<size_t>(cols) * rows, -1);
+    std::vector<int> stack;
+    for (int start = 0; start < cols * rows; ++start) {
+        if (out.label[start] != -1 || grid.blocked({start % cols, start / cols})) continue;
+        const int id = static_cast<int>(out.size.size());
+        out.size.push_back(0);
+        out.label[start] = id;
+        stack.assign(1, start);
+        while (!stack.empty()) {
+            const int cur = stack.back();
+            stack.pop_back();
+            ++out.size[id];
+            const Cell c{cur % cols, cur / cols};
+            for (int dr = -1; dr <= 1; ++dr) {
+                for (int dc = -1; dc <= 1; ++dc) {
+                    if (dr == 0 && dc == 0) continue;
+                    const Cell nb{c.col + dc, c.row + dr};
+                    if (!grid.inBounds(nb) || grid.blocked(nb)) continue;
+                    if (dr != 0 && dc != 0 && (grid.blocked({c.col + dc, c.row}) || grid.blocked({c.col, c.row + dr}))) continue;
+                    const int idx = nb.row * cols + nb.col;
+                    if (out.label[idx] != -1) continue;
+                    out.label[idx] = id;
+                    stack.push_back(idx);
+                }
+            }
+        }
+    }
+    return out;
+}
+
 std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, double simplifyTolerance,
                               std::vector<Cell>* rawPath) {
     const Cell s = grid.cellAt(start), g = grid.cellAt(goal);

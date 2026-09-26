@@ -29,4 +29,13 @@ std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, d
 /// True when the straight segment between two cells crosses no blocked cell. Exposed for testing.
 bool lineOfSight(const CostGrid& grid, Cell a, Cell b);
 
+/// Connected bodies of open water, using the same 8-neighbour moves as the router (no squeezing diagonally between two
+/// blocked cells). `label[i]` is the body of cell i (row-major), or -1 for blocked cells; `size[b]` counts its cells. Lane and
+/// zone rules are ignored, so this says whether water is connected at all, not whether a legal route exists.
+struct WaterBodies {
+    std::vector<int> label;
+    std::vector<size_t> size;
+};
+WaterBodies findWaterBodies(const CostGrid& grid);
+
 }  // namespace oar

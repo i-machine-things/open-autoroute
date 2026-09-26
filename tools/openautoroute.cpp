@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -65,19 +66,27 @@ struct Bounds {
     }
 };
 
-// Nearest open cell to `c` within `radius` cells, so a start point that lands on a blocked pixel (a marina berth, a
-// coarse-raster shoreline) still routes. Returns false when nothing open is nearby.
-bool snapToOpen(const CostGrid& g, Cell c, int radius, Cell& out) {
-    double best = 1e18;
+struct Snap {
+    Cell cell;
+    double distCells;
+};
+
+// For each water body, the open cell nearest to `c` within `radius` cells. A start point that lands on a blocked pixel (a
+// marina berth, a coarse-raster shoreline) still routes, and the caller can choose a body both endpoints share instead of
+// whichever tiny pocket happens to be closest.
+std::map<int, Snap> nearestPerBody(const CostGrid& g, const WaterBodies& bodies, Cell c, int radius) {
+    std::map<int, Snap> best;
     for (int dr = -radius; dr <= radius; ++dr) {
         for (int dc = -radius; dc <= radius; ++dc) {
             const Cell n{c.col + dc, c.row + dr};
             if (!g.inBounds(n) || g.blocked(n)) continue;
-            const double d = dc * dc + dr * dr;
-            if (d < best) { best = d; out = n; }
+            const double d = std::sqrt(static_cast<double>(dc * dc + dr * dr));
+            const int b = bodies.label[static_cast<size_t>(n.row) * g.cols() + n.col];
+            auto it = best.find(b);
+            if (it == best.end() || d < it->second.distCells) best[b] = {n, d};
         }
     }
-    return best < 1e18;
+    return best;
 }
 
 void usage(const char* argv0) {
@@ -268,13 +277,39 @@ int main(int argc, char** argv) {
         route = given;  // score as-is: no snapping, no rerouting
     } else {
         Cell s = grid.cellAt(from), g = grid.cellAt(to);
-        Cell s2, g2;
-        if (!grid.inBounds(s) || !grid.inBounds(g) || !snapToOpen(grid, s, 40, s2) || !snapToOpen(grid, g, 40, g2)) {
-            std::fprintf(stderr, "start or end is not near charted water deep enough for %.1f m draft + %.1f m clearance\n",
-                         draft, clearance);
+        if (!grid.inBounds(s) || !grid.inBounds(g)) {
+            std::fprintf(stderr, "start or end is outside the charted area\n");
+            return fail("endpoint_outside_grid");
+        }
+        const WaterBodies bodies = findWaterBodies(grid);
+        const auto sc = nearestPerBody(grid, bodies, s, 40), gc = nearestPerBody(grid, bodies, g, 40);
+        if (sc.empty() || gc.empty()) {
+            std::fprintf(stderr, "%s is not near charted water deep enough for %.1f m draft + %.1f m clearance\n",
+                         sc.empty() ? "start" : "end", draft, clearance);
             if (mapRadius > 0) drawMap();
             return fail("endpoint_not_in_safe_water");
         }
+        // Prefer a water body both endpoints can reach, closest overall, and never a tiny pocket when a real one is available.
+        int chosen = -1;
+        double bestScore = 1e30;
+        for (const auto& [body, ss] : sc) {
+            const auto it = gc.find(body);
+            if (it == gc.end()) continue;
+            const double score = ss.distCells + it->second.distCells + (bodies.size[body] < 500 ? 1e6 : 0.0);
+            if (score < bestScore) { bestScore = score; chosen = body; }
+        }
+        if (chosen < 0) {
+            auto biggest = [&](const std::map<int, Snap>& m) {
+                size_t n = 0;
+                for (const auto& kv : m) n = std::max(n, bodies.size[kv.first]);
+                return n;
+            };
+            std::fprintf(stderr, "start and end are in different bodies of water: nearest to the start is %zu cells, to the end %zu\n",
+                         biggest(sc), biggest(gc));
+            if (mapRadius > 0) drawMap();
+            return fail("disconnected_water");
+        }
+        const Cell s2 = sc.at(chosen).cell, g2 = gc.at(chosen).cell;
         snapStartM = haversineM(from, grid.centre(s2));
         snapEndM = haversineM(to, grid.centre(g2));
         if (!(s == s2)) std::printf("start moved to nearest safe water (%.0f m)\n", snapStartM);
