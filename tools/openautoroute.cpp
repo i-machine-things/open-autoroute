@@ -349,7 +349,9 @@ int main(int argc, char** argv) {
     // 1 km of either end are skipped, since a start in a marina or a berth is at the shore by definition.
     if (mapRadius > 0) drawMap();
     std::vector<double> clearances;
-    double travelled = 0.0, unsafeM = 0.0, cautionM = 0.0;
+    double travelled = 0.0, unsafeM = 0.0, cautionM = 0.0, narrowInM = 0.0, narrowNearOutM = 0.0;
+    std::vector<float> narrowDist;  // distance to the nearest narrow-channel cell, for "near but outside"
+    if (grid.cols() > 0) narrowDist = grid.distanceToNarrowChannelM();
     int cautionStretches = 0;
     bool inCaution = false;
     struct Spot { LatLon at; double alongM; };
@@ -374,6 +376,10 @@ int main(int argc, char** argv) {
                 if (!inUnsafe) unsafeSpots.push_back({here, along});
             }
             inUnsafe = unsafe;
+            if (grid.inBounds(hc)) {
+                if (grid.isNarrowChannel(hc)) narrowInM += leg / steps;
+                else if (!narrowDist.empty() && narrowDist[static_cast<size_t>(hc.row) * grid.cols() + hc.col] < 1500.0f && !grid.isChannel(hc)) narrowNearOutM += leg / steps;
+            }
             const bool caut = grid.inBounds(hc) && grid.isCaution(hc);
             if (caut) {
                 cautionM += leg / steps;
@@ -418,14 +424,34 @@ int main(int argc, char** argv) {
         else if (mean >= 155.0) { ++wrongWay; wrongWayM += r.lengthM; }
         else { ++crossings; worstOff = std::max(worstOff, std::fabs(mean - 90.0)); }
     }
+    // Buoy gates on this stretch of route: does the route pass between the pair? (Planar approximation around each gate.)
+    int gatesNear = 0, gatesMissed = 0;
+    for (const Gate& g : gates) {
+        double nearest = 1e30;
+        for (const LatLon& p : route) nearest = std::min(nearest, std::min(haversineM(p, g.port), haversineM(p, g.starboard)));
+        if (nearest > 1500.0) continue;
+        ++gatesNear;
+        const double cl = std::cos(deg2rad(g.port.lat)), k = 111320.0;
+        const double rx = (g.starboard.lon - g.port.lon) * cl * k, ry = (g.starboard.lat - g.port.lat) * k;
+        bool hit = false;
+        for (size_t i = 1; i < route.size() && !hit; ++i) {
+            const double ax = (route[i - 1].lon - g.port.lon) * cl * k, ay = (route[i - 1].lat - g.port.lat) * k;
+            const double bx = (route[i].lon - g.port.lon) * cl * k, by = (route[i].lat - g.port.lat) * k;
+            const double den = (bx - ax) * ry - (by - ay) * rx, cr = rx * (by - ay) - ry * (bx - ax);
+            if (std::fabs(den) < 1e-9 || std::fabs(cr) < 1e-9) continue;
+            const double u = (-ax * ry + ay * rx) / den, t = (ax * (by - ay) - ay * (bx - ax)) / cr;
+            hit = u >= 0 && u <= 1 && t >= 0 && t <= 1;
+        }
+        gatesMissed += !hit;
+    }
     const auto printSummary = [&]() {
         if (!summary) return;
         const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count();
         std::printf("SUMMARY found=1 nm=%.2f straight_nm=%.2f waypoints=%zu charts=%d closest_m=%.0f median_m=%.0f blocked_m=%.0f "
-                    "caution_m=%.0f lane_runs=%zu with_flow=%d crossings=%d wrong_way_m=%.0f worst_off_deg=%.0f snap_start_m=%.0f snap_end_m=%.0f "
+                    "vessel_m=%.0f caution_m=%.0f narrow_in_m=%.0f narrow_near_out_m=%.0f gates=%d gates_missed=%d lane_runs=%zu with_flow=%d crossings=%d wrong_way_m=%.0f worst_off_deg=%.0f snap_start_m=%.0f snap_end_m=%.0f "
                     "seconds=%.1f\n", nm, haversineM(from, to) / 1852.0, route.size(), used,
                     clearances.empty() ? -1.0 : clearances.front(), clearances.empty() ? -1.0 : clearances[clearances.size() / 2],
-                    unsafeM, cautionM, laneRuns.size(), withFlow, crossings, wrongWayM, worstOff, snapStartM, snapEndM, secs);
+                    unsafeM, lengthM, cautionM, narrowInM, narrowNearOutM, gatesNear, gatesMissed, laneRuns.size(), withFlow, crossings, wrongWayM, worstOff, snapStartM, snapEndM, secs);
     };
     if (!evalPath.empty()) {
         std::printf("unsafe by the chart rules: %.0f m of %.0f m (%.1f%%) in %zu stretch(es)\n", unsafeM, nm * 1852.0,
@@ -435,6 +461,7 @@ int main(int argc, char** argv) {
                         unsafeSpots[i].alongM / 1852.0);
         }
         std::printf("precautionary areas: %.0f m in %d stretch(es)\n", cautionM, cautionStretches);
+        std::printf("narrow channels: %.0f m inside, %.0f m running just outside; buoy gates: %d near the route, %d missed\n", narrowInM, narrowNearOutM, gatesNear, gatesMissed);
         std::printf("traffic lanes (Rule 10): %zu lane transit(s): %d with the flow, %d crossing, %d wrong-way (%.0f m)\n",
                     laneRuns.size(), withFlow, crossings, wrongWay, wrongWayM);
         for (size_t i = 0; i < laneRuns.size() && i < 12; ++i) {

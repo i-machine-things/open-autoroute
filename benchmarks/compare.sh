@@ -25,7 +25,8 @@ for f in "$OLD"/*.txt; do
       if (ov["found"] == 1 && nv["found"] != 1) r = r " route-lost"
       if (nv["blocked_m"] + 0 > ov["blocked_m"] + 0) r = r " blocked-water"
       if (nv["wrong_way_m"] + 0 > ov["wrong_way_m"] + 0) r = r " wrong-way"
-      if (nv["caution_m"] + 0 > ov["caution_m"] + 0) r = r " more-caution-area"
+      if (nv["vessel_m"] + 0 < 20 && nv["caution_m"] + 0 > ov["caution_m"] + 0) r = r " more-caution-area"   # ships are meant to use precautionary areas
+      if (nv["gates_missed"] + 0 > ov["gates_missed"] + 0) r = r " more-buoy-gates-missed"
       if (nv["worst_off_deg"] + 0 > ov["worst_off_deg"] + 5) r = r " worse-crossing-angle"
       if (nv["crossings"] + 0 > ov["crossings"] + 0) r = r " more-crossings"
       print r }')

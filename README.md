@@ -1,21 +1,25 @@
 # open-autoroute
 
-Welcome to the official repository for the Open-Source OpenCPN Auto-Routing Plugin and Standalone App project. This repository contains a high-performance, rule-compliant pathfinding engine built as a free, open-source alternative to commercial marine navigation tools.
+A boat route planner that reads NOAA electronic charts and tries to draw a route a person would actually be willing to follow. It is free, open source, and early. It is a development tool, **not for navigation**: check every route against the chart yourself.
 
----
+The plan is a C++ core with two front ends, an OpenCPN plugin (`openautoroute_pi`) and a standalone app (`openautoroute-app`). Neither exists yet. What exists today is the core and a command-line tool that writes a GPX file you can import into OpenCPN and look at on the same charts.
 
-## Architecture Overview
+## What it does today
 
-The project relies on a shared C++ core designed for two primary deployment targets:
+- Reads S-57 ENC cells directly (no GDAL) and builds a cost grid from them: depth against your draft plus clearance, land, obstructions, wrecks, unsurveyed and uncharted water.
+- Finds a route across that grid, then straightens it and thins out the waypoints.
+- Keeps some distance off shores, and follows the basic rules of the road it can read from a chart:
+  - **Traffic separation schemes (Rule 10):** lanes are followed in the charted direction, zones are only crossed square-on, precautionary areas are avoided by small craft, and a boat under 20 m or under sail stays out of lanes where it can.
+  - **Narrow channels (Rule 9):** between the dashed limits of a charted narrow channel, and between chains of red and green buoys, keeping to the starboard side.
+- Scores any GPX route against the same rules (`--eval`), so it can be used to check a route from somewhere else.
 
-1. **OpenCPN Plugin (`openautoroute_pi`):** A 100% offline-capable plugin operating directly within OpenCPN using local vector charts.  
-2. **Standalone App (`openautoroute-app`):** A cross-platform Flutter application (Android, iOS, Windows, macOS, Linux) that pulls real-time NOAA hydrographic data online.
+## What it does not do
 
----
+Most of the chart is still ignored. It reads about 15 of the 146 object classes in the NOAA data. Obstruction and wreck areas, unsurveyed areas, restricted areas, piers and other structures, and bridge and cable clearances are not read yet, and there is no air draft setting. There is no weather, tide or current. It does not know whether US Inland Rules or the international rules apply where you are, and it assumes the international ones. [docs/S57_OBJECTS.md](docs/S57_OBJECTS.md) lists every chart object class, what it is for and whether it is used.
 
 ## Building
 
-The `v0.1.0` core is in progress. It needs a C++17 compiler and CMake:
+You need a C++17 compiler. With CMake:
 
 ```bash
 cmake -S . -B build
@@ -23,63 +27,44 @@ cmake --build build -j2
 ctest --test-dir build --output-on-failure
 ```
 
-No CMake? `make` builds the same thing with plain g++ (`make test` runs the tests).
+Without CMake, `make` does the same with plain g++ (`make test` runs the tests).
 
-S-57 charts are read by a built-in ISO 8211 parser, so there is no GDAL dependency.
+## Trying a route
 
-### Trying a route in OpenCPN
-
-`build/openautoroute` reads ENC cells, routes between two points and writes a GPX file. Import it in OpenCPN
-(Route Manager, Import) to see it on the same charts:
+Point it at a folder of ENC cells (an `ENC_ROOT` directory from NOAA) and give it two positions:
 
 ```bash
 build/openautoroute --enc ~/Documents/Charts/ENC_ROOT \
     --from 47.605,-122.360 --to 48.115,-122.760 \
-    --draft 1.5 --clearance 1.0 -o route.gpx
+    --draft 1.5 --clearance 1.0 --length-m 12 -o route.gpx
 ```
 
-Cells are painted coarse-to-fine, and a cell is open only when a chart positively shows it is deep enough. Land,
-shoals, shallow or depth-unknown obstructions and wrecks, and water with no chart coverage are all blocked. COLREGs
-Rule 9 (keeping right in narrow channels) is not applied yet.
-Rule 10 (traffic separation schemes) is applied: separation zones and lines are never entered, travel against a lane's
-flow is refused, and lane crossings are priced so they are made as close to square to the flow as the grid allows. What a
-vessel does with lanes depends on its size, following Rule 10(j): under 20 m or a vessel under sail (`--under-sail`, engine
-off; a sailboat that is motoring is power-driven and judged on length) stays out
-of lanes and only crosses them, while a larger vessel is drawn into them and stays in. `--length-m` sets the length
-(default 12 m), `--no-tss` switches all of this off, and `--lane-use` overrides the lane cost directly.
-`--eval route.gpx` scores any GPX route, such as one from another planner, against the same rules.
+In OpenCPN, open the Route & Mark Manager and use Import GPX. The route sits on the same charts it was planned from.
 
-The core is metric (metres, nautical miles, knots); converting to feet is left to the user interface.
+Options you are likely to want:
 
-Routes are also kept off the shore: cost rises within `--margin-m` (default 500 m) of any blocked water, scaled by
-`--margin-weight` (default 10). Set `--margin-weight 0` to turn that off. The tool prints the closest and median
-clearance it achieved. It is a development tool, not for navigation.
+| Option | Meaning |
+|---|---|
+| `--draft`, `--clearance` | Depth needed is draft plus clearance, in metres (defaults 1.5 and 1.0) |
+| `--length-m` | Vessel length in metres (default 12); under 20 m stays out of traffic lanes |
+| `--under-sail` | The vessel is sailing, not motoring; treated as small at any length |
+| `--cell-m` | Grid size in metres (default 30); smaller is finer and slower |
+| `--min-leg-m` | Preferred minimum distance between waypoints (default 460 m) |
+| `--eval route.gpx` | Score an existing route instead of planning one |
+| `--map LAT,LON,CELLS` | Print an ASCII picture of the grid and route around a point, for debugging |
 
----
+The core works in metres and nautical miles. Converting to feet is left to whatever front end sits on top.
+
+## How it is tested
+
+- `make test` runs unit tests on small hand-built grids and chart records.
+- `benchmarks/run.sh` plans 28 routes across the Columbia River, Puget Sound and the San Juans, San Francisco, Los Angeles, New York, Chesapeake Bay, Boston, Houston, the Keys, Lake Michigan, Maine and Hawaii, and prints one scored table. `benchmarks/compare.sh` compares two runs and flags anything that got less safe. Several of those routes still fail (Deception Pass, Ilwaco to Astoria, one in the Keys) and are listed as such.
+- Routes are also checked by hand against the charts in OpenCPN, which is the check that has found the most problems.
 
 ## Roadmap
 
-Planned releases run from `v0.1.0` (rule-compliant core router) through `v0.6.0+` (current and flow modeling). See [ROADMAP.md](ROADMAP.md) for the full milestones and the validation regions the router will be tested against.
+See [ROADMAP.md](ROADMAP.md) for the planned milestones, from the core router through weather, polars, live instrument data, the standalone app and currents, and for the regions the router is meant to be tested against.
 
----
+## Contributing and license
 
-## Feature Comparison Matrix
-
-| Feature / Capability | Navionics Auto-Routing | Savvy Navvy | OpenCPN Plugin & Standalone App |
-| :---- | :---: | :---: | :---: |
-| **Chart Basis** | Proprietary Vector | Proprietary Hydrographic | **Standard NOAA / S-57 ENCs (Free/Open)** |
-| **Data Connectivity** | Cached / Cloud hybrid | Requires Cloud / Signal | **Direct NOAA Database Integration (Standalone)** |
-| **COLREGs Compliance (Rule 9 / 10\)** | Basic avoidance | General avoidance | **Built-in Rule 9 & Rule 10 Enforcement** |
-| **Channel-Centering Bias** | Moderate | Basic | **Explicit fairway midline weighting** |
-| **Cross-Platform App** | Yes (Proprietary) | Yes (Proprietary) | **Yes (Android, iOS, PC, Mac, Linux)** |
-| **Weather & Point-of-Sail** | No | Yes | **Yes (`v0.2.0`)** |
-| **Polar Support** | Generic Speed Avg | Engine / Sail profile | **Full `.pol` / ORC Database Library (`v0.3.0`)** |
-| **Self-Tuning Polars** | No | No | **Yes — User-Selectable via NMEA / Signal K (`v0.4.0`)** |
-| **Real-Time Fuel Modeling** | Basic estimate | Basic estimate | **Yes — Basic estimate or Live Telemetry Ingestion (`v0.4.0`)** |
-| **Subscription / Fee** | Paid Annual | Paid Annual | **100% Free, Open Source & Donation-Funded** |
-
----
-
-## Contributing & License
-
-Contributions, issue reports, and pull requests are welcome. This project is licensed under the GNU General Public License v3.0 (see [LICENSE](LICENSE)), matching OpenCPN's GPL ecosystem, to support the marine community.
+Issues, bug reports and pull requests are welcome. Reports of a route that goes somewhere it should not, with the positions and the chart cell, are the most useful. Licensed under the GNU General Public License v3.0 (see [LICENSE](LICENSE)), the same family as OpenCPN.

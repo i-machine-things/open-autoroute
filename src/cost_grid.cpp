@@ -199,6 +199,14 @@ void CostGrid::markNarrowChannels(double maxWidthM) {
     }
 }
 
+std::vector<float> CostGrid::distanceToNarrowChannelM() const {
+    std::vector<float> d(cost_.size(), 1e30f);
+    for (size_t i = 0; i < d.size(); ++i) {
+        if (!narrow_.empty() && narrow_[i]) d[i] = 0.0f;
+    }
+    return chamferM(std::move(d));
+}
+
 void CostGrid::applyChannelPreference(double rangeM, double weight) {
     chanWeight_.clear();
     chanAxis_.clear();
@@ -246,7 +254,7 @@ float CostGrid::gateSideFactor(Cell c, double headingDeg) const {
     const double diff = (headingDeg - gateAxis_[i]) * 3.14159265358979 / 180.0;
     const double along = std::cos(diff);                       // 1 going with the buoyage direction, -1 against it
     if (std::fabs(along) < 0.5) return 1.0f;                   // crossing the channel: no side to keep to
-    const double preferred = along > 0 ? 0.7 : 0.3;            // the vessel's own starboard side of the channel
+    const double preferred = along > 0 ? 0.8 : 0.2;            // near the starboard outer limit (Rule 9(a)), a fifth of the width in
     const double off = t - preferred;
     return static_cast<float>(1.0 + gateSideWeight_ * 4.0 * off * off);
 }

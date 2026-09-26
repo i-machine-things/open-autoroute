@@ -48,7 +48,7 @@ public:
     }
 
     /// Cost multiplier for travelling with the flow inside a traffic lane (default 1). Above 1 a vessel avoids running
-    /// along lanes (small craft and sailing vessels, which under Rule 10 should stay out of the scheme where practicable
+    /// along lanes (small craft and sailing vessels, which under Rule 10(d) and 10(j) should stay out of the scheme where practicable
     /// and must not impede ships using it). Below 1 a vessel is drawn into lanes and stays in them (large ships).
     /// Clamped to [0.1, inf); the pathfinder scales its distance estimate by min(1, factor) to stay admissible.
     void setLaneUseFactor(double factor) { laneUseFactor_ = factor < 0.1 ? 0.1f : static_cast<float>(factor); }
@@ -86,6 +86,8 @@ public:
     /// non-channel cell, searched within `maxWidthM`) of at most `maxWidthM`. Wide fairways, bays and traffic schemes are left
     /// alone, so the channel rules only act where a marked channel really confines a vessel.
     void markNarrowChannels(double maxWidthM);
+    /// Distance in metres from each cell centre to the nearest narrow-channel cell (0 inside one; very large without any).
+    std::vector<float> distanceToNarrowChannelM() const;
     bool isNarrowChannel(Cell c) const { return !narrow_.empty() && narrow_[index(c)] != 0; }
     /// Keep a vessel between the dashed limits of a NARROW channel. Open cells outside every charted channel but within `rangeM` of a
     /// narrow one remember the direction of the channel edge beside them; channelMarginFactor() then charges `1 + weight` for a move
@@ -108,8 +110,9 @@ public:
     }
     void setGateSideWeight(double w) { gateSideWeight_ = w < 0.0 ? 0.0f : static_cast<float>(w); }
     /// Rule 9: in a narrow channel keep to the starboard (right-hand) side. Cost multiplier (>= 1) for a move on `headingDeg` through
-    /// `c`: 1 outside gate corridors, otherwise growing with distance from the preferred side (t = 0.7 going with the direction
-    /// of buoyage, t = 0.3 going against it, where the vessel's own starboard side lies). Moves across the channel are not charged.
+    /// `c`: 1 outside gate corridors, otherwise growing with distance from the preferred side. Rule 9(a) says to keep "as near to the outer
+    /// limit of the channel or fairway which lies on her starboard side as is safe and practicable": t = 0.8 going with the direction of
+    /// buoyage, t = 0.2 going against it (where the vessel's own starboard side lies), a fifth of the width in from the limit for leeway. Moves across the channel are not charged.
     float gateSideFactor(Cell c, double headingDeg) const;
 
     LatLon centre(Cell c) const;
@@ -142,7 +145,7 @@ public:
     /// lane or separation-zone cell get a margin weight `weight * (1 - d / rangeM)^2`, and remember the axis of the nearest
     /// lane. laneMarginFactor() then charges `1 + weight` scaled by how parallel the move is to that axis, so skimming a lane's
     /// edge or the end of a lane part is dear while approaching it square on to cross costs nothing extra. For small craft under
-    /// Rule 10, which should avoid the scheme "by as wide a margin as is practicable". No-op without lanes.
+    /// Rule 10(h), which says a vessel not using a scheme shall avoid it "by as wide a margin as is practicable". No-op without lanes.
     void applyLaneMargin(double rangeM, double weight);
     /// Cost multiplier (>= 1) for a move on `headingDeg` through `c` from the lane margin; 1 where no margin applies.
     float laneMarginFactor(Cell c, double headingDeg) const;
