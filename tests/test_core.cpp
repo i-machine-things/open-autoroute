@@ -343,6 +343,55 @@ static void testSmallCraftDoesNotClipLaneCorner() {
     }
 }
 
+static void testNoTurnInsideLane() {
+    // A one-cell-wide lane (the sliver where two lane parts join) at col 14, walled off on both sides except at row 15,
+    // so a small craft must cross it at exactly that gap. The straight shortcut from the start fails on the wall just
+    // past the lane, which used to leave the turning point on the lane cell itself. The turn belongs before the lane.
+    CostGrid g = makeGrid(30, 30);
+    for (int r = 0; r < 30; ++r) {
+        g.setLaneDirection({14, r}, 0.0f);
+        if (r != 15) { g.setCost({13, r}, kBlocked); g.setCost({15, r}, kBlocked); }
+    }
+    g.setLaneUseFactor(6.0);
+    auto route = findRoute(g, g.centre({2, 3}), g.centre({27, 22}));
+    CHECK(route.size() >= 3);
+    bool crossed = false;
+    for (size_t i = 0; i < route.size(); ++i) {
+        const Cell c = g.cellAt(route[i]);
+        if (i > 0 && i + 1 < route.size()) CHECK(std::isnan(g.laneDirection(c)));  // no turning point on the lane
+        crossed |= i > 0 && g.cellAt(route[i - 1]).col < 14 && c.col > 14;
+    }
+    CHECK(crossed);
+    for (size_t i = 1; i < route.size(); ++i) {
+        const Cell a = g.cellAt(route[i - 1]), b = g.cellAt(route[i]);
+        if (a.col < 14 && b.col > 14) CHECK(angleDiffDeg(legHeading(g, route[i - 1], route[i]), 90.0) < 15.0);
+    }
+}
+
+static void testSimplifyTolerance() {
+    // A patch of slightly dearer water in the middle. Exact costing bends the route round it; a 25% tolerance lets one
+    // straight leg replace the bend, and looser tolerances never add waypoints. A wall of blocked cells must never be cut through however loose the tolerance is.
+    CostGrid g = makeGrid(30, 10);
+    for (int r = 3; r <= 6; ++r) for (int c = 10; c <= 20; ++c) g.setCost({c, r}, 1.3f);
+    const auto exact = findRoute(g, g.centre({0, 4}), g.centre({29, 4}));
+    const auto loose = findRoute(g, g.centre({0, 4}), g.centre({29, 4}), 0.25);
+    CHECK(exact.size() > 2);
+    CHECK(loose.size() == 2);
+    size_t previous = exact.size();
+    for (double tol : {0.05, 0.10, 0.20, 0.40}) {
+        const size_t n = findRoute(g, g.centre({0, 4}), g.centre({29, 4}), tol).size();
+        CHECK(n <= previous);
+        previous = n;
+    }
+
+    CostGrid wall = makeGrid(30, 10);
+    for (int r = 0; r < 9; ++r) wall.setCost({15, r}, kBlocked);  // gap only at the bottom row
+    const auto detour = findRoute(wall, wall.centre({0, 4}), wall.centre({29, 4}), 5.0);  // absurdly loose
+    CHECK(detour.size() > 2);
+    for (const LatLon& p : detour) CHECK(!wall.blocked(wall.cellAt(p)));
+    for (size_t i = 1; i < detour.size(); ++i) CHECK(lineOfSight(wall, wall.cellAt(detour[i - 1]), wall.cellAt(detour[i])));
+}
+
 static void testLargeVesselStaysInLane() {
     // Eastbound lane (rows 3-5); both ends are in open water beside it. A large vessel (cheap lane) should run along
     // the lane; the default vessel should not touch it.
@@ -580,6 +629,8 @@ int main() {
     testVesselClass();
     testLaneUseFactor();
     testSmallCraftDoesNotClipLaneCorner();
+    testNoTurnInsideLane();
+    testSimplifyTolerance();
     testLargeVesselStaysInLane();
     testStampTss();
     testS57MissingFile();

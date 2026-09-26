@@ -99,7 +99,7 @@ bool lineOfSight(const CostGrid& grid, Cell a, Cell b) {
     }
 }
 
-std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal) {
+std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, double simplifyTolerance) {
     const Cell s = grid.cellAt(start), g = grid.cellAt(goal);
     if (!grid.inBounds(s) || !grid.inBounds(g) || grid.blocked(s) || grid.blocked(g)) return {};
 
@@ -152,16 +152,26 @@ std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal) {
     std::vector<float> cum(cells.size(), 0.0f);
     for (size_t i = 1; i < cells.size(); ++i) cum[i] = cum[i - 1] + moveCost(grid, cells[i - 1], cells[i], cellHeading(cells[i - 1], cells[i]));
 
-    // Greedy string-pulling: keep a waypoint only where a shortcut becomes unsafe or more expensive. Checking cost as well
-    // as line of sight stops smoothing from cutting through penalised cells (a channel edge, or a traffic lane at an angle).
+    // Greedy string-pulling: keep a waypoint only where a shortcut becomes unsafe or costs more than the stretch it replaces
+    // (plus `simplifyTolerance`, a fraction, so near-equal detours collapse into one leg). Checking cost as well as line of
+    // sight stops smoothing from cutting through penalised cells (a channel edge, or a traffic lane at an angle).
+    const double slack = 1.0 + std::max(0.0, simplifyTolerance);
     std::vector<LatLon> route{grid.centre(cells.front())};
     size_t anchor = 0;
     for (size_t i = 2; i < cells.size(); ++i) {
         if (i - anchor < 2) continue;
         if (!lineOfSight(grid, cells[anchor], cells[i]) ||
-            segmentCost(grid, cells[anchor], cells[i]) > cum[i] - cum[anchor] + 1e-3f) {
-            anchor = i - 1;
+            segmentCost(grid, cells[anchor], cells[i]) > (cum[i] - cum[anchor]) * slack + 1e-3f) {
+            // Put the turning point at the last cell before the failed shortcut, but never inside a traffic lane if there is
+            // an earlier cell outside one: turning in a lane means the vessel is manoeuvring there, and it makes the
+            // crossing angle depend on the turn instead of on a clean leg.
+            size_t a = i - 1;
+            for (size_t j = i - 1; j > anchor; --j) {
+                if (std::isnan(grid.laneDirection(cells[j]))) { a = j; break; }
+            }
+            anchor = a;
             route.push_back(grid.centre(cells[anchor]));
+            i = anchor + 1;  // resume just past the new anchor (the loop increment moves to anchor + 2)
         }
     }
     if (cells.size() > 1) route.push_back(grid.centre(cells.back()));
