@@ -91,7 +91,7 @@ Before pushing any commit that touches core logic:
 
 Do not push if there are unhandled exceptions or broken/empty outputs.
 
-CI runs automatically on every PR (`.github/workflows/ci.yml`): lint, security scan, tests, and build. A passing PR means all four gates are green — do not merge until they are.
+This repo has no CI workflow yet. Once `.github/workflows/ci.yml` exists it runs on every PR (lint, security scan, tests, build); from then on a PR is only mergeable with all of those green. Until then, the local test run above is the gate.
 
 Project-specific: configure and build with `cmake -S . -B build && cmake --build build -j2`, then run `ctest --test-dir build --output-on-failure`. Validate routing changes against the benchmark regions in `ROADMAP.md` once real ENC data is wired in.
 
@@ -102,7 +102,7 @@ Tag releases using `vMAJOR.MINOR.PATCH`:
 - **MINOR** — new features that do not break existing functionality
 - **PATCH** — bug fixes, typo corrections, minor improvements
 
-Pushing a `v*` tag to `master` triggers the release workflow. PRs are gated by `.github/workflows/ci.yml` — do not tag until all CI jobs are green on master.
+Pushing a `v*` tag to `master` triggers the release workflow once one exists. Once CI exists, do not tag until all its jobs are green on master.
 
 Before tagging, complete the management review sign-off (Rule 6). Do not tag on the user's silence — get an explicit go/no-go.
 
@@ -145,7 +145,7 @@ user to ask before reporting it — but do wait for their sign-off before acting
 When a pull request is open or being prepared:
 
 - Always open PRs via `gh pr create` — never merge directly to `master` without a PR.
-- Before merging, verify CI is green: `gh pr checks <number>`. All four jobs (lint, security, tests, build) must pass.
+- Before merging, if CI is configured, verify it is green: `gh pr checks <number>`. Until a CI workflow exists, confirm the local test run passed.
 - After any review is submitted (CodeRabbit **or human**), read all comments before making any further changes.
 - For each finding, regardless of source:
   1. If it matches an existing `.claude/CODING_NOTES.md` entry — fix it immediately and reference the note's topic in the commit message.
