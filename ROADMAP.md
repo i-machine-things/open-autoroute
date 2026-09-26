@@ -46,3 +46,15 @@ The routing engine will be tested against complex real-world hydrographic enviro
 * **Puget Sound Traffic Separation Schemes:** Rule 10 TSS lane direction compliance and perpendicular transit validation.  
 * **Multnomah Channel & Columbia River Sloughs:** Riverine channel midline alignment, bridge clearance checks, and shallow-bank avoidance.
 
+---
+
+## Cross-cutting: progress for long routes
+
+A long route (an 85 nm river passage, a full coast) takes seconds to minutes: reading charts, building the grid, searching and smoothing. Any front end (the OpenCPN plugin, the standalone app) needs to show that instead of freezing, so the core should report progress and be cancellable:
+
+* **Progress by phase:** loading charts (cell _n_ of _N_), building the grid, searching, smoothing, each with a fraction complete.
+* **A countdown where it can be estimated:** chart loading and grid building have known totals; the search does not, but distance covered against the straight-line distance gives a usable estimate.
+* **Cancel:** the search must be interruptible without leaving a half-built grid.
+
+To be built alongside the first front end (`v0.5.0`), but the core's entry points should be shaped for a progress callback now.
+
