@@ -40,7 +40,9 @@ float segmentCost(const CostGrid& grid, Cell a, Cell b) {
 }  // namespace
 
 bool lineOfSight(const CostGrid& grid, Cell a, Cell b) {
-    // Bresenham walk; also rejects diagonal corner cutting between two blocked neighbours.
+    // Bresenham walk; also rejects diagonal corner cutting between two blocked neighbours. Both ends inside the grid keeps
+    // every cell on the segment inside it too, so the walk below never indexes out of range.
+    if (!grid.inBounds(a) || !grid.inBounds(b)) return false;
     int x = a.col, y = a.row;
     const int dx = std::abs(b.col - a.col), dy = std::abs(b.row - a.row);
     const int sx = a.col < b.col ? 1 : -1, sy = a.row < b.row ? 1 : -1;
