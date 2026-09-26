@@ -940,6 +940,24 @@ static void testHazardRestrictedAreas() {
         stampChart(d, o, g);
         return g;
     };
+    // A military area that limits only anchoring, fishing, trawling and dragging (RESTRN 1, 3, 5, 24: 33 CFR 334.360, Hampton Roads) can be
+    // transited, so it costs little; one that restricts ENTRY, or lists nothing, keeps the full cost.
+    auto military = [&](uint32_t restrn) { return stampHazards({resare(45.990, 46.0, -124.000, -123.996, restrn, 1u << 9)}); };
+    CHECK(military((1u << 1) | (1u << 3) | (1u << 5) | (1u << 24)).cost({1, 5}) == 2.0f);
+    CHECK(military(1u << 8).cost({1, 5}) == 30.0f);                       // entry restricted
+    CHECK(military((1u << 1) | (1u << 8)).cost({1, 5}) == 30.0f);         // anchoring AND entry restricted
+    CHECK(military(0).cost({1, 5}) == 30.0f);                             // nothing listed: assume the worst
+    ChartFeature mip = areaFeature("MIPARE", 45.990, 46.0, -124.000, -123.996);
+    mip.restrn = (1u << 1) | (1u << 3);
+    CHECK(stampHazards({mip}).cost({1, 5}) == 2.0f);                      // military practice area listing only anchoring/fishing
+    ChartFeature mip2 = areaFeature("MIPARE", 45.990, 46.0, -124.000, -123.996);
+    CHECK(stampHazards({mip2}).cost({1, 5}) == 30.0f);
+    ChartFeature scale = areaFeature("CTNARE", 45.990, 46.0, -124.000, -123.996);
+    scale.inform = "Most features, including bathymetry, are omitted in this area. Mariners should use a more appropriate navigational purpose chart.";
+    CHECK(stampHazards({scale}).cost({1, 5}) == 1.5f);                    // a chart-scale note, not a hazard
+    ChartFeature real = areaFeature("CTNARE", 45.990, 46.0, -124.000, -123.996);
+    real.inform = "Submerged pipeline: strong currents";
+    CHECK(stampHazards({real}).cost({1, 5}) == 3.0f);
     CostGrid ship = avoid(120.0), boat = avoid(12.0);
     CHECK(ship.blocked({1, 5}));                              // a ship must avoid it
     CHECK(!boat.blocked({1, 5}) && boat.cost({1, 5}) == 20.0f);  // a small craft is only warned off

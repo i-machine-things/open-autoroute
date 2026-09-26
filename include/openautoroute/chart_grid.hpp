@@ -46,13 +46,14 @@ struct StampOptions {
 ///   - fixed structures (SLCONS, PONTON, PILPNT, MORFAC, FNCLNE, DYKCON, CAUSWY, CONVYR, PYLONS, FLODOC, DRYDOC, GATCON, DAMCON, GRIDRN,
 ///     OILBAR, OFSPLF) and RAPIDS / WATFAL: blocked; offshore platform points also get a 250 m berth
 ///   - RESARE: blocked for entry prohibited, and for an area to be avoided when the vessel is 50 m
-///     or longer (those bind ships; a smaller vessel pays x20); a military area is x30 and a charted minefield x5 (in NOAA data these are former minefields open to surface navigation; both block if entry is also prohibited); costly for
+///     or longer (those bind ships; a smaller vessel pays x20); a military area is x30 only if the chart restricts entry or lists no restriction (x2 when it lists only anchoring, fishing, trawling and the like), and a charted minefield x5 (in NOAA data these are former minefields open to surface navigation; both block if entry is also prohibited); costly for
 ///     entry restricted or an offshore safety zone (x10, these are usually security zones needing permission; x1.5 when the chart text says
 ///     it is a Regulated Navigation Area, which binds particular vessels such as tankers and tows), swimming, dredging, reserve and sanctuary areas; anchoring, fishing and similar restrictions do not stop a transit
 ///   - BOYISD / BCNISD: 100 m blocked; BOYCAR / BCNCAR: the danger side of the mark blocked out to 150 m
 ///   - BRIDGE, CBLOHD, PIPOHD: blocked unless the clearance (closed clearance for an opening bridge) is at least air draft plus 1 m
 ///   - DMPGRD: chemical, nuclear and explosives dumping grounds are blocked; spoil and vessel grounds x15
-///   - MIPARE x30 (danger zones usually apply only while in use and can span a waterway), CTNARE x3, ACHARE x3, WEDKLP x1.5, WATTUR x3, SPLARE x5: costlier
+///   - MIPARE x30 (danger zones usually apply only while in use and can span a waterway; x2 if only anchoring/fishing limits are listed),
+///     CTNARE x3 (x1.5 when the text is only the "less detail, use a more detailed chart" note), ACHARE x3, WEDKLP x1.5, WATTUR x3, SPLARE x5: costlier
 void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& grid);
 /// Fairways (FAIRWY) and dredged areas (DRGARE) are also recorded as channel cells (the dashed limits drawn on a chart) for
 /// CostGrid::applyChannelPreference; they are never made cheaper or dearer by stampChart itself.

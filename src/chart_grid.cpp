@@ -191,7 +191,13 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
             } else {
                 float factor = 1.0f;
                 if (restrn & (1u << 14)) factor = 20.0f;                                   // area to be avoided, for a smaller vessel
-                if (catrea & (1u << 9)) factor = std::max(factor, 30.0f);                  // military area: usually only while in use
+                // A military area (CATREA 9) is dear only if the chart restricts ENTRY (RESTRN 8) or says nothing about what is restricted.
+                // When it lists only anchoring, fishing, trawling, dragging and similar (RESTRN 1 to 6, 9 to 13, 15, 16, 24), a vessel may
+                // pass through: 33 CFR 334.360 at the mouth of Hampton Roads is one, and x30 there pushed a route miles off its line.
+                if (catrea & (1u << 9)) {
+                    const uint32_t transitLimits = restrn & ~((1u << 7) | (1u << 8) | (1u << 14));
+                    factor = std::max(factor, (transitLimits != 0 && !(restrn & (1u << 8))) ? 2.0f : 30.0f);
+                }
                 // A charted minefield (CATREA 14) in NOAA data is a FORMER one: the chart text says surface navigation is unrestricted and the
                 // residual danger is to anchoring, dredging and trawling. So it is a caution here; only an explicit entry prohibition blocks.
                 if (catrea & (1u << 14)) factor = std::max(factor, 5.0f);
@@ -204,10 +210,17 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
             }
         } else if (cls == "MIPARE") {
             // Military practice and danger areas usually restrict passage only while in use, and one can span a whole waterway (Puget
-            // Sound), so blocking it would cut the water in two. Very costly instead: avoided whenever there is any way round.
-            raise(penalty, grid, f, 30.0f);
+            // Sound), so blocking it would cut the water in two. Very costly instead: avoided whenever there is any way round. But if the
+            // chart lists only limits that do not stop a transit (anchoring, fishing, trawling...), it costs only a little.
+            const uint32_t transitLimits = f.restrn & ~((1u << 7) | (1u << 8) | (1u << 14));
+            raise(penalty, grid, f, (transitLimits != 0 && !(f.restrn & (1u << 8))) ? 2.0f : 30.0f);
         } else if (cls == "CTNARE") {
-            raise(penalty, grid, f, 3.0f);
+            // Overview charts carry a caution area whose text says most features are omitted and a more detailed chart should be used. That is
+            // a note about chart scale, not a hazard, and the router already prefers the most detailed chart it has, so it costs only a little.
+            std::string t = f.inform;
+            std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            const bool scaleNote = t.find("more appropriate navigational purpose") != std::string::npos || t.find("omitted in this area") != std::string::npos;
+            raise(penalty, grid, f, scaleNote ? 1.5f : 3.0f);
         } else if (cls == "DMPGRD") {
             // CATDPG (attribute 23): 2 chemical waste, 3 nuclear waste, 4 explosives, 5 spoil ground, 6 vessel dumping ground. The first
             // three are dangerous however deep the water is: blocked. Spoil and vessel grounds change depth and hold debris: very costly.
