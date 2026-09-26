@@ -82,7 +82,7 @@ bool snapToOpen(const CostGrid& g, Cell c, int radius, Cell& out) {
 void usage(const char* argv0) {
     std::fprintf(stderr,
                  "usage: %s --enc DIR (--from LAT,LON --to LAT,LON | --eval ROUTE.gpx) [--draft M=1.5] [--clearance M=1.0]\n"
-                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [--length-m L=12] [--under-sail] [--lane-use F] [--simplify T=0.05] [--map LAT,LON,CELLS] [-o route.gpx]\n", argv0);
+                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [--length-m L=12] [--under-sail] [--lane-use F] [--lane-margin-m M=150] [--simplify T=0.05] [--map LAT,LON,CELLS] [-o route.gpx]\n", argv0);
 }
 
 }  // namespace
@@ -92,7 +92,7 @@ int main(int argc, char** argv) {
     LatLon from{}, to{}, mapAt{};
     int mapRadius = 0;
     bool haveFrom = false, haveTo = false, applyTss = true, underSail = false;
-    double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0, lengthM = 12.0, laneUse = -1.0, simplify = 0.05;
+    double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0, lengthM = 12.0, laneUse = -1.0, simplify = 0.05, laneMarginM = 150.0;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         const bool hasVal = i + 1 < argc;
@@ -109,6 +109,7 @@ int main(int argc, char** argv) {
             if (c2 == std::string::npos || !parseLatLon(v.substr(0, c2).c_str(), mapAt)) { usage(argv[0]); return 2; }
             mapRadius = std::atoi(v.c_str() + c2 + 1);
         }
+        else if (a == "--lane-margin-m" && hasVal) laneMarginM = std::atof(argv[++i]);
         else if (a == "--simplify" && hasVal) simplify = std::atof(argv[++i]);
         else if (a == "--no-tss") applyTss = false;
         else if (a == "--under-sail" || a == "--sail") underSail = true;  // engine off, sails doing the work
@@ -190,6 +191,7 @@ int main(int argc, char** argv) {
     const Vessel vessel{lengthM, underSail};
     if (laneUse < 0.0) laneUse = defaultLaneUseFactor(vessel);
     grid.setLaneUseFactor(laneUse);
+    if (laneUse > 1.0) grid.applyLaneMargin(laneMarginM, 4.0);  // small craft keep a margin off lanes and off the ends of lane parts
     if (applyTss) {
         std::printf("vessel %.1f m%s: %s (lane-use factor %.2f)\n", lengthM, underSail ? ", under sail" : "",
                     laneUse > 1.0 ? "stays out of traffic lanes, crosses square-on" : "uses traffic lanes", laneUse);

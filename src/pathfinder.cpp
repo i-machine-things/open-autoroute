@@ -21,6 +21,33 @@ float heuristic(Cell a, Cell b) {
     return (dx + dy) + (1.41421356f - 2.0f) * std::min(dx, dy);
 }
 
+// Visit every cell that the straight segment between the centres of a and b passes through, in order (a "supercover" walk:
+// unlike Bresenham it never skips a cell the real line clips, and on an exact corner it visits both neighbours). Hard checks
+// (blocked water, wrong-way lane travel) use this so they agree with what the continuous route actually touches.
+template <typename Fn>
+void forEachCellOnSegment(Cell a, Cell b, Fn&& visit) {
+    const int dx = b.col - a.col, dy = b.row - a.row;
+    const int sx = dx >= 0 ? 1 : -1, sy = dy >= 0 ? 1 : -1;
+    const double inf = 1e30;
+    const double tDx = dx != 0 ? 1.0 / std::abs(dx) : inf, tDy = dy != 0 ? 1.0 / std::abs(dy) : inf;
+    double tMaxX = dx != 0 ? 0.5 * tDx : inf, tMaxY = dy != 0 ? 0.5 * tDy : inf;
+    int x = a.col, y = a.row;
+    visit(Cell{x, y});
+    while (x != b.col || y != b.row) {
+        const double eps = 1e-9;
+        if (tMaxX < tMaxY - eps) {
+            x += sx; tMaxX += tDx;
+        } else if (tMaxY < tMaxX - eps) {
+            y += sy; tMaxY += tDy;
+        } else {  // passes exactly through a corner: both neighbours count, then step diagonally
+            visit(Cell{x + sx, y});
+            visit(Cell{x, y + sy});
+            x += sx; y += sy; tMaxX += tDx; tMaxY += tDy;
+        }
+        visit(Cell{x, y});
+    }
+}
+
 // Cost multiplier for one move between adjacent cells: the worst lane factor of the two cells (1 outside lanes).
 float moveFactor(const CostGrid& grid, Cell a, Cell b, double headingDeg) {
     float f = 1.0f;
@@ -55,6 +82,12 @@ float moveCost(const CostGrid& grid, Cell a, Cell b, double headingDeg) {
 // kBlocked when the segment runs against a lane's flow. Only meaningful after lineOfSight().
 float segmentCost(const CostGrid& grid, Cell a, Cell b) {
     const double heading = cellHeading(a, b);
+    bool wrongWay = false;
+    forEachCellOnSegment(a, b, [&](Cell c) {
+        const float lane = grid.laneDirection(c);
+        if (!std::isnan(lane) && laneFactor(heading, lane) == kBlocked) wrongWay = true;
+    });
+    if (wrongWay) return kBlocked;  // touches a lane against its flow anywhere along the real line, not just on Bresenham cells
     float total = 0.0f;
     int x = a.col, y = a.row;
     const int dx = std::abs(b.col - a.col), dy = std::abs(b.row - a.row);
@@ -81,22 +114,11 @@ float laneFactor(double headingDeg, double laneDeg) {
 }
 
 bool lineOfSight(const CostGrid& grid, Cell a, Cell b) {
-    // Bresenham walk; also rejects diagonal corner cutting between two blocked neighbours. Both ends inside the grid keeps
-    // every cell on the segment inside it too, so the walk below never indexes out of range.
+    // Both ends inside the grid keeps every cell on the segment inside it too, so the walk never indexes out of range.
     if (!grid.inBounds(a) || !grid.inBounds(b)) return false;
-    int x = a.col, y = a.row;
-    const int dx = std::abs(b.col - a.col), dy = std::abs(b.row - a.row);
-    const int sx = a.col < b.col ? 1 : -1, sy = a.row < b.row ? 1 : -1;
-    int err = dx - dy;
-    while (true) {
-        if (grid.blocked({x, y})) return false;
-        if (x == b.col && y == b.row) return true;
-        const int e2 = 2 * err;
-        const int px = x, py = y;
-        if (e2 > -dy) { err -= dy; x += sx; }
-        if (e2 < dx) { err += dx; y += sy; }
-        if (x != px && y != py && (grid.blocked({x, py}) || grid.blocked({px, y}))) return false;
-    }
+    bool clear = true;
+    forEachCellOnSegment(a, b, [&](Cell c) { clear = clear && !grid.blocked(c); });
+    return clear;
 }
 
 std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, double simplifyTolerance,

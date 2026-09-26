@@ -49,11 +49,9 @@ void CostGrid::applyChannelCentering(const std::vector<float>& distToCentreM, do
     }
 }
 
-std::vector<float> CostGrid::distanceToBlockedM() const {
-    // Two-pass chamfer transform in cell units (weights 1 and sqrt 2), then scale to metres.
+std::vector<float> CostGrid::chamferM(std::vector<float> d) const {
+    // Two-pass chamfer transform in cell units (weights 1 and sqrt 2), then scale to metres. Seeds are the zero cells.
     const float inf = 1e30f, diag = 1.41421356f;
-    std::vector<float> d(cost_.size());
-    for (size_t i = 0; i < d.size(); ++i) d[i] = cost_[i] == kBlocked ? 0.0f : inf;
     auto at = [&](int c, int r) -> float& { return d[static_cast<size_t>(r) * cols_ + c]; };
     for (int r = 0; r < rows_; ++r) {
         for (int c = 0; c < cols_; ++c) {
@@ -76,6 +74,32 @@ std::vector<float> CostGrid::distanceToBlockedM() const {
     const float m = static_cast<float>(cellSizeM());
     for (float& v : d) v = v >= inf ? inf : v * m;
     return d;
+}
+
+std::vector<float> CostGrid::distanceToBlockedM() const {
+    std::vector<float> d(cost_.size());
+    for (size_t i = 0; i < d.size(); ++i) d[i] = cost_[i] == kBlocked ? 0.0f : 1e30f;
+    return chamferM(std::move(d));
+}
+
+std::vector<float> CostGrid::distanceToLaneM() const {
+    std::vector<float> d(cost_.size(), 1e30f);
+    if (!lane_.empty()) {
+        for (size_t i = 0; i < d.size(); ++i) {
+            if (!std::isnan(lane_[i])) d[i] = 0.0f;
+        }
+    }
+    return chamferM(std::move(d));
+}
+
+void CostGrid::applyLaneMargin(double rangeM, double weight) {
+    if (lane_.empty() || rangeM <= 0.0 || weight <= 0.0) return;
+    const std::vector<float> dist = distanceToLaneM();
+    for (size_t i = 0; i < cost_.size(); ++i) {
+        if (cost_[i] == kBlocked || !std::isnan(lane_[i]) || dist[i] >= rangeM) continue;
+        const double t = 1.0 - dist[i] / rangeM;
+        cost_[i] *= static_cast<float>(1.0 + weight * t * t);
+    }
 }
 
 void CostGrid::applyShoreMargin(double rangeM, double weight) {

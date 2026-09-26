@@ -75,10 +75,20 @@ public:
     /// narrow channel, drifts toward the middle. Blocked cells are untouched; rangeM <= 0 or weight <= 0 does nothing.
     void applyShoreMargin(double rangeM, double weight);
 
+    /// Distance in metres from each cell centre to the nearest traffic-lane cell (0 inside a lane; very large everywhere if
+    /// the grid has no lanes).
+    std::vector<float> distanceToLaneM() const;
+
+    /// Keep vessels clear of traffic lanes by a margin: open cells within `rangeM` of a lane cell (and not in one) get their
+    /// cost multiplied by `1 + weight * (1 - d / rangeM)^2`. For small craft under Rule 10, which should avoid the scheme "by as
+    /// wide a margin as is practicable" and so should not skim a lane's edge or the end of a lane part. No-op without lanes.
+    void applyLaneMargin(double rangeM, double weight);
+
     /// Metres per cell along a row / column at the grid's latitude (cells are meant to be square in metres).
     double cellSizeM() const { return cellSizeDeg_ * 111320.0; }
 
 private:
+    std::vector<float> chamferM(std::vector<float> d) const;  // shared distance transform, seeds are the zero cells
     size_t index(Cell c) const { return static_cast<size_t>(c.row) * cols_ + c.col; }
 
     int cols_;

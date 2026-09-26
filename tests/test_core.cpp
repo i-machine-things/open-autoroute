@@ -392,6 +392,52 @@ static void testSimplifyTolerance() {
     for (size_t i = 1; i < detour.size(); ++i) CHECK(lineOfSight(wall, wall.cellAt(detour[i - 1]), wall.cellAt(detour[i])));
 }
 
+static void testLineOfSightSeesEveryTouchedCell() {
+    // From (0,0) to (6,1) the real line crosses a row boundary in the middle of column 3, so it touches both (3,0) and
+    // (3,1). A thin Bresenham line only visits one of them; either being blocked must stop the shortcut.
+    CostGrid a = makeGrid(8, 3), b = makeGrid(8, 3);
+    a.setCost({3, 0}, kBlocked);
+    b.setCost({3, 1}, kBlocked);
+    CHECK(!lineOfSight(a, {0, 0}, {6, 1}));
+    CHECK(!lineOfSight(b, {0, 0}, {6, 1}));
+    CostGrid open = makeGrid(8, 3);
+    CHECK(lineOfSight(open, {0, 0}, {6, 1}));
+    CostGrid corner = makeGrid(5, 5);
+    corner.setCost({2, 1}, kBlocked);  // the pure diagonal (0,0)-(4,4) passes exactly through corners: (2,1) is a neighbour
+    CHECK(!lineOfSight(corner, {0, 0}, {4, 4}));
+}
+
+static void testLaneMarginBowsAwayFromLaneEnd() {
+    // A lane part (cols 10-11) ends at row 14. A small craft passing beneath its end should keep well off it, not skim it.
+    CostGrid g = makeGrid(30, 30);
+    for (int r = 0; r <= 14; ++r) for (int c = 10; c <= 11; ++c) g.setLaneDirection({c, r}, 0.0f);
+    g.setLaneUseFactor(6.0);
+    // Closest approach to any lane cell along the whole route, sampling each leg (waypoints alone would miss a graze).
+    auto nearestLaneM = [](const CostGrid& grid, const std::vector<LatLon>& route) {
+        const auto d = grid.distanceToLaneM();
+        double nearest = 1e30;
+        for (size_t i = 1; i < route.size(); ++i) {
+            for (int k = 0; k <= 100; ++k) {
+                const double t = k / 100.0;
+                const Cell c = grid.cellAt({route[i - 1].lat + t * (route[i].lat - route[i - 1].lat),
+                                            route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)});
+                nearest = std::min<double>(nearest, d[static_cast<size_t>(c.row) * grid.cols() + c.col]);
+            }
+        }
+        return nearest;
+    };
+    const auto plain = findRoute(g, g.centre({2, 16}), g.centre({20, 16}));
+    const double before = nearestLaneM(g, plain);
+    CHECK(before < 3.0 * g.cellSizeM());  // control: with no margin the trip passes only a cell or two from the lane end
+
+    g.applyLaneMargin(8 * g.cellSizeM(), 4.0);
+    CHECK(g.cost({10, 16}) > g.cost({10, 27}));  // dearer next to the lane end than far from it
+    CHECK(g.cost({10, 3}) == 1.0f);              // lane cells themselves are not re-priced
+    const auto bowed = findRoute(g, g.centre({2, 16}), g.centre({20, 16}));
+    CHECK(!bowed.empty());
+    CHECK(nearestLaneM(g, bowed) > before + 1.5 * g.cellSizeM());  // clearly further off than before
+}
+
 static void testLargeVesselStaysInLane() {
     // Eastbound lane (rows 3-5); both ends are in open water beside it. A large vessel (cheap lane) should run along
     // the lane; the default vessel should not touch it.
@@ -629,6 +675,8 @@ int main() {
     testVesselClass();
     testLaneUseFactor();
     testSmallCraftDoesNotClipLaneCorner();
+    testLineOfSightSeesEveryTouchedCell();
+    testLaneMarginBowsAwayFromLaneEnd();
     testNoTurnInsideLane();
     testSimplifyTolerance();
     testLargeVesselStaysInLane();
