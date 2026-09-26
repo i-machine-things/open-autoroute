@@ -343,6 +343,43 @@ static void testVesselClass() {
     CHECK(defaultLaneUseFactor({120.0, false}) < 1.0);  // large vessels are drawn into them
 }
 
+static void testLaneDiscountKeepsOffTheEdge() {
+    // A lane (flow east) of ten rows. A large vessel, for which lane cells are half price, goes from one end to the other along the lane's
+    // top row. With the discount on every lane cell it runs right along that edge, where a diagonal edge on a real chart turns the path into
+    // a staircase (the Golden Gate). With the discount only in the interior it moves inside and runs through the middle.
+    auto build = [](bool interior) {
+        CostGrid g = makeGrid(70, 40);
+        for (int r = 20; r <= 29; ++r) for (int c = 0; c < 70; ++c) g.setLaneDirection({c, r}, 90.0f);
+        g.setLaneUseFactor(0.5);
+        if (interior) g.markLaneInterior(2.5 * g.cellSizeM());
+        return g;
+    };
+    const CostGrid edge = build(false), inner = build(true);
+    auto middleRows = [](const CostGrid& g, const std::vector<LatLon>& route) {  // rows of the route between columns 20 and 50
+        double lo = 1e9;
+        for (size_t i = 1; i < route.size(); ++i) {
+            for (int k = 0; k <= 50; ++k) {
+                const double t = k / 50.0;
+                const Cell c = g.cellAt({route[i - 1].lat + t * (route[i].lat - route[i - 1].lat), route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)});
+                if (c.col >= 20 && c.col <= 50) lo = std::min<double>(lo, c.row);
+            }
+        }
+        return lo;  // the northernmost row (smallest) the route reaches in the middle
+    };
+    const auto hugging = findRoute(edge, edge.centre({2, 20}), edge.centre({66, 20}));
+    const auto centred = findRoute(inner, inner.centre({2, 20}), inner.centre({66, 20}));
+    CHECK(!hugging.empty() && !centred.empty());
+    CHECK(middleRows(edge, hugging) <= 20.5);     // control: without the interior rule it runs along the top edge
+    CHECK(middleRows(inner, centred) >= 21.5);    // with it the route stays inside, off the edge row (interior starts 2.5 cells in)
+    // The mask and the factor themselves.
+    CHECK(!inner.isLaneInterior({30, 20}) && inner.isLaneInterior({30, 25}) && !inner.isLaneInterior({30, 5}));
+    CHECK(inner.hasLaneInteriorMask() && !edge.hasLaneInteriorMask());
+    // Small craft, for which lanes are dear, are not affected by the interior rule: it exists only for the discount.
+    CostGrid small = build(true);
+    small.setLaneUseFactor(6.0);
+    CHECK(small.laneUseFactor() == 6.0f);
+}
+
 static void testSmallCraftDoesNotClipLaneCorner() {
     // A lane band (cols 10-13) that ends at row 12. The straight line from (2,14) to (20,10) would clip its last row.
     CostGrid g = makeGrid(24, 24);
@@ -1261,6 +1298,7 @@ int main() {
     testCrossesLaneAtRightAngles();
     testVesselClass();
     testLaneUseFactor();
+    testLaneDiscountKeepsOffTheEdge();
     testSmallCraftDoesNotClipLaneCorner();
     testLineOfSightSeesEveryTouchedCell();
     testDirectionalLaneMargin();

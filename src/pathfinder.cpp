@@ -71,7 +71,8 @@ float cellFactor(const CostGrid& grid, Cell c, double headingDeg) {
     const float lane = grid.laneDirection(c);
     if (std::isnan(lane)) return 1.0f;
     const float lf = laneFactor(headingDeg, lane);
-    if (lf == 1.0f) return use;  // with the flow
+    // With the flow. A discount (a large ship drawn into lanes) applies only in the lane interior, so the path does not hug the edge.
+    if (lf == 1.0f) return (use < 1.0f && grid.hasLaneInteriorMask() && !grid.isLaneInterior(c)) ? 1.0f : use;
     if (lf == kBlocked) return kBlocked;
     return lf * crossScale;
 }

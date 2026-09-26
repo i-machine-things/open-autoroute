@@ -115,6 +115,14 @@ public:
     /// buoyage, t = 0.2 going against it (where the vessel's own starboard side lies), a fifth of the width in from the limit for leeway. Moves across the channel are not charged.
     float gateSideFactor(Cell c, double headingDeg) const;
 
+    /// Flag the lane cells that are at least `minDepthM` from the nearest non-lane cell. A vessel that is drawn into lanes (lane-use
+    /// factor below 1, large ships) gets its discount only on these interior cells: otherwise the cheapest path hugs a lane's edge, and a
+    /// diagonal edge on a square grid makes it a staircase of waypoints that smoothing cannot remove (seen at the Golden Gate).
+    void markLaneInterior(double minDepthM);
+    bool isLaneInterior(Cell c) const { return !laneInterior_.empty() && laneInterior_[index(c)] != 0; }
+    /// True once markLaneInterior has been called; until then every lane cell counts as interior (the older behaviour).
+    bool hasLaneInteriorMask() const { return !laneInterior_.empty(); }
+
     LatLon centre(Cell c) const;
     /// Cell containing `p`; the result may be out of bounds, check with inBounds().
     Cell cellAt(LatLon p) const;
@@ -164,6 +172,7 @@ private:
     double cellSizeLonDeg_;
     std::vector<float> cost_;
     std::vector<float> lane_;  // empty until a lane is set
+    std::vector<uint8_t> laneInterior_;  // empty until markLaneInterior is called
     std::vector<float> marginWeight_;  // empty until applyLaneMargin sets it
     std::vector<float> marginAxis_;    // degrees, axis of the nearest lane
     std::vector<uint8_t> caution_;  // empty until a precautionary-area cell is set
