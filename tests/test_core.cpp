@@ -797,6 +797,155 @@ static void testStampTss() {
     CHECK(!off.isZone({4, 5}));                    // and the zone is ordinary water
 }
 
+// --- hazard objects -----------------------------------------------------------------------------------------------------------------
+
+static ChartFeature lineFeature(const char* cls, std::vector<LatLon> pts) {
+    ChartFeature f;
+    f.objectClass = cls;
+    f.geometry = Geometry::Line;
+    f.parts.push_back({std::move(pts), false});
+    return f;
+}
+
+// A 12 x 10 grid of deep open water (cell = 0.001 degrees, about 111 m) stamped from one DEPARE plus the given features.
+static CostGrid stampHazards(std::vector<ChartFeature> extra, double airDraft = 0.0, bool hazards = true) {
+    CostGrid g = makeGrid(12, 10);
+    g.fill(kBlocked);
+    ChartData d;
+    d.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.988, 30.0));
+    for (auto& f : extra) d.features.push_back(std::move(f));
+    StampOptions o;
+    o.minDepthM = 2.5;
+    o.airDraftM = airDraft;
+    o.hazardObjects = hazards;
+    stampChart(d, o, g);
+    return g;
+}
+
+static void testHazardObstructions() {
+    // Unknown depth over an obstruction is unsafe; known and deep enough is safe.
+    ChartFeature unknownArea = areaFeature("OBSTRN", 45.994, 45.996, -123.998, -123.996);           // cols 2-3, rows 4-5, no VALSOU
+    ChartFeature deepArea = areaFeature("OBSTRN", 45.994, 45.996, -123.994, -123.992);              // cols 6-7
+    deepArea.valsou = 10.0;
+    ChartFeature shallowPoint = pointFeature("WRECKS", {9, 2}, makeGrid(12, 10), 1.0);               // 1 m over a wreck
+    ChartFeature awash = pointFeature("UWTROC", {9, 7}, makeGrid(12, 10), 10.0);                     // deep VALSOU but awash
+    awash.watlev = 5.0;
+    ChartFeature submerged = pointFeature("UWTROC", {10, 7}, makeGrid(12, 10), 10.0);                // always under water, deep
+    submerged.watlev = 3.0;
+    ChartFeature coversUncovers = pointFeature("OBSTRN", {1, 8}, makeGrid(12, 10), 20.0);
+    coversUncovers.watlev = 4.0;
+    ChartFeature obstructionLine = lineFeature("OBSTRN", {{45.9975, -123.9995}, {45.9975, -123.9955}});  // row 2, cols 0-4, no depth
+    CostGrid g = stampHazards({unknownArea, deepArea, shallowPoint, awash, submerged, coversUncovers, obstructionLine});
+    CHECK(g.blocked({2, 4}) && g.blocked({3, 5}));   // obstruction area of unknown depth
+    CHECK(!g.blocked({6, 4}) && !g.blocked({7, 5})); // obstruction area with 10 m over it
+    CHECK(g.blocked({9, 2}));                        // wreck with 1 m over it
+    CHECK(g.blocked({9, 7}));                        // awash, whatever VALSOU says
+    CHECK(!g.blocked({10, 7}));                      // always submerged with deep water over it
+    CHECK(g.blocked({1, 8}));                        // covers and uncovers
+    CHECK(g.blocked({1, 2}) && g.blocked({3, 2}));   // an obstruction LINE blocks the cells it crosses
+    // The hazard rules are separable for comparison runs, and the older entry point never applies them.
+    CostGrid off = stampHazards({unknownArea}, 0.0, false);
+    CHECK(!off.blocked({2, 4}));
+}
+
+static void testHazardBlocksAlways() {
+    ChartFeature unsurveyed = areaFeature("UNSARE", 45.994, 45.996, -123.998, -123.996);
+    ChartFeature pier = lineFeature("SLCONS", {{45.9915, -123.9915}, {45.9915, -123.9895}});          // row 8, a line of cells
+    ChartFeature pile = pointFeature("PILPNT", {0, 0}, makeGrid(12, 10), 0.0);
+    pile.valsou = std::nan("");
+    ChartFeature farm = areaFeature("MARCUL", 45.990, 45.992, -123.994, -123.992);                    // rows 8-9, cols 6-7
+    ChartFeature platform = pointFeature("OFSPLF", {6, 3}, makeGrid(12, 10), 0.0);                     // 250 m berth round it
+    CostGrid g = stampHazards({unsurveyed, pier, pile, farm, platform});
+    CHECK(g.blocked({2, 4}));                 // unsurveyed: never assumed safe, even inside a deep depth area
+    CHECK(g.blocked({9, 8}) && g.blocked({10, 8}));  // pier
+    CHECK(g.blocked({0, 0}));                 // pile
+    CHECK(g.blocked({6, 8}) && g.blocked({7, 9}));   // marine farm
+    CHECK(g.blocked({6, 3}));                 // the platform itself
+    CHECK(g.blocked({7, 3}) && g.blocked({6, 2}));   // and the 250 m berth round it (111 m cells: the neighbours)
+    CHECK(!g.blocked({6, 0}));                // but not far away
+}
+
+static void testHazardRestrictedAreas() {
+    auto resare = [](double lat0, double lat1, double lon0, double lon1, uint32_t restrn, uint32_t catrea) {
+        ChartFeature f = areaFeature("RESARE", lat0, lat1, lon0, lon1);
+        f.restrn = restrn;
+        f.catrea = catrea;
+        return f;
+    };
+    // Areas that forbid entry. (A blocked polygon's outline is painted too, so a neighbour can be fringed by one cell: the safe
+    // direction. Keep forbidden areas apart from the ones checked for staying open.)
+    CostGrid forbidden = stampHazards({resare(45.990, 46.0, -124.000, -123.998, 1u << 7, 0),      // cols 0-1: entry prohibited (RESTRN 7)
+                                       resare(45.990, 46.0, -123.997, -123.995, 1u << 14, 0),     // cols 3-4: area to be avoided (14)
+                                       resare(45.990, 46.0, -123.994, -123.992, 0, 1u << 9),      // cols 6-7: military area (CATREA 9)
+                                       resare(45.990, 46.0, -123.990, -123.988, 0, 1u << 14)});   // cols 10-11: minefield (CATREA 14)
+    CHECK(forbidden.blocked({0, 5}) && forbidden.blocked({1, 5}));
+    CHECK(forbidden.blocked({3, 5}) && forbidden.blocked({4, 5}));
+    CHECK(forbidden.blocked({6, 5}) && forbidden.blocked({7, 5}));
+    CHECK(forbidden.blocked({10, 5}) && forbidden.blocked({11, 5}));
+
+    // Areas that only ask for care, or restrict something other than passing through.
+    CostGrid soft = stampHazards({resare(45.990, 46.0, -124.000, -123.997, 1u << 1, 0),           // cols 0-2: anchoring prohibited only
+                                  resare(45.990, 46.0, -123.996, -123.994, 1u << 8, 0),           // cols 4-5: entry restricted (8)
+                                  resare(45.990, 46.0, -123.993, -123.991, 0, 1u << 18),          // cols 7-8: swimming area (CATREA 18)
+                                  resare(45.990, 46.0, -123.990, -123.988, (1u << 3) | (1u << 13), 0)});  // cols 10-11: no fishing, no wake
+    CHECK(!soft.blocked({1, 5}) && soft.cost({1, 5}) == 1.0f);  // a transit is fine
+    CHECK(soft.cost({4, 5}) == 10.0f);                          // entry restricted: costly, not blocked
+    CHECK(soft.cost({7, 5}) == 20.0f);                          // swimming area
+    CHECK(!soft.blocked({10, 5}) && soft.cost({10, 5}) == 1.0f);
+}
+
+static void testHazardPenalties() {
+    ChartFeature caution = areaFeature("CTNARE", 45.990, 45.994, -124.000, -123.996);   // cols 0-3, rows 6-9
+    ChartFeature dumping = areaFeature("DMPGRD", 45.990, 45.994, -123.996, -123.992);   // cols 4-7
+    ChartFeature anchorage = areaFeature("ACHARE", 45.990, 45.994, -123.992, -123.990); // cols 8-9
+    ChartFeature kelp = areaFeature("WEDKLP", 45.990, 45.994, -123.990, -123.988);      // cols 10-11
+    ChartFeature overlap = areaFeature("ACHARE", 45.990, 45.994, -124.000, -123.996);   // over the caution area
+    CostGrid g = stampHazards({caution, dumping, anchorage, kelp, overlap});
+    CHECK(g.cost({1, 8}) == 3.0f);    // caution area, and the anchorage on top of it does not compound: the larger factor wins
+    CHECK(g.cost({5, 8}) == 15.0f);   // dumping ground
+    CHECK(g.cost({8, 8}) == 3.0f);    // anchorage
+    CHECK(g.cost({10, 8}) == 1.5f);   // kelp
+    CHECK(g.cost({5, 1}) == 1.0f);    // elsewhere untouched
+}
+
+static void testHazardMarks() {
+    CostGrid ref = makeGrid(12, 10);
+    ChartFeature isolated = pointFeature("BOYISD", {2, 5}, ref, 0.0);
+    ChartFeature north = pointFeature("BOYCAR", {8, 5}, ref, 0.0);
+    north.catcam = 1.0;  // north cardinal: safe water lies north, so the danger side is south
+    ChartFeature west = pointFeature("BCNCAR", {5, 2}, ref, 0.0);
+    west.catcam = 4.0;   // west cardinal: danger lies to the east
+    CostGrid g = stampHazards({isolated, north, west});
+    CHECK(g.blocked({2, 5}));                      // isolated danger
+    CHECK(!g.blocked({2, 3}) && !g.blocked({4, 5}));  // but only its own 100 m
+    CHECK(g.blocked({8, 5}) && g.blocked({8, 6}));                       // north mark: the south side is blocked (150 m: the next cell)
+    CHECK(!g.blocked({8, 4}) && !g.blocked({8, 3}));                     // the north side stays open
+    CHECK(g.blocked({6, 2}));                      // west mark: east side blocked
+    CHECK(!g.blocked({4, 2}));                     // west side open
+}
+
+static void testHazardOverheadClearance() {
+    auto bridgeAt = [](double clearance, double closed) {
+        ChartFeature b = lineFeature("BRIDGE", {{45.9955, -123.9995}, {45.9955, -123.9885}});   // a span across the whole grid, row 4
+        b.verclr = clearance;
+        b.verccl = closed;
+        return b;
+    };
+    const double nan = std::nan("");
+    // Fixed bridge, 10 m clearance: needs air draft plus 1 m, so a 8.9 m mast passes and a 9.5 m mast does not.
+    CHECK(!stampHazards({bridgeAt(10.0, nan)}, 8.9).blocked({5, 4}));
+    CHECK(stampHazards({bridgeAt(10.0, nan)}, 9.5).blocked({5, 4}));
+    // An opening bridge is treated as closed: 30 m open but 5 m closed blocks an 8 m mast.
+    CHECK(stampHazards({bridgeAt(30.0, 5.0)}, 8.0).blocked({5, 4}));
+    // Unknown clearance is unsafe, whatever the mast.
+    CHECK(stampHazards({bridgeAt(nan, nan)}, 0.0).blocked({5, 4}));
+    // Overhead cables and pipelines follow the same rule.
+    ChartFeature cable = lineFeature("CBLOHD", {{45.9955, -123.9995}, {45.9955, -123.9885}});
+    cable.verclr = 12.0;
+    CHECK(!stampHazards({cable}, 5.0).blocked({5, 4}));
+    CHECK(stampHazards({cable}, 12.0).blocked({5, 4}));
+}
+
 static void testS57MissingFile() {
     ChartData d;
     std::string err;
@@ -937,6 +1086,60 @@ static void testS57Synthetic() {
     CHECK(soundings == 2);
 }
 
+static Bytes buildHazardCell() {
+    // Same two nodes and two edges as buildCell, plus features that carry the hazard attributes (S-57 attribute codes: RESTRN 131,
+    // CATREA 56, VERCLR 181, VERCCL 182, VALSOU 179, WATLEV 187, CATCAM 13) and an isolated node for a point object.
+    const int k = 10000000;
+    Bytes cell;
+    auto add = [&](const Bytes& r) { cell.insert(cell.end(), r.begin(), r.end()); };
+    Bytes dspm(24, 0);
+    for (int i = 0; i < 4; ++i) dspm[16 + i] = (k >> (8 * i)) & 0xFF;
+    dspm[20] = 10;
+    add(makeRecord('L', {{"0000", Bytes{'x'}}}));
+    add(makeRecord('D', {{"0001", Bytes{'0'}}, {"DSPM", dspm}}));
+    add(makeRecord('D', {{"0001", Bytes{'0'}}, {"VRID", vrid(120, 1)}, {"SG2D", sg2d({{460000000, -1240000000}})}}));
+    add(makeRecord('D', {{"0001", Bytes{'0'}}, {"VRID", vrid(120, 2)}, {"SG2D", sg2d({{461000000, -1239000000}})}}));
+    add(makeRecord('D', {{"0001", Bytes{'0'}}, {"VRID", vrid(130, 10)}, {"VRPT", vrpt(1, 2)}, {"SG2D", sg2d({{460000000, -1239000000}})}}));
+    add(makeRecord('D', {{"0001", Bytes{'0'}}, {"VRID", vrid(130, 11)}, {"VRPT", vrpt(1, 2)}, {"SG2D", sg2d({{461000000, -1240000000}})}}));
+    add(makeRecord('D', {{"0001", Bytes{'0'}}, {"VRID", vrid(110, 21)}, {"SG2D", sg2d({{460500000, -1239500000}})}}));
+    Bytes both = attf(131, "7,14");           // RESTRN: entry prohibited, area to be avoided
+    const Bytes catrea = attf(56, "9");       // CATREA: military area
+    both.insert(both.end(), catrea.begin(), catrea.end());
+    add(makeRecord('D', {{"0001", Bytes{'0'}}, {"FRID", frid(3, 112)}, {"ATTF", both}, {"FSPT", fspt({{10, 1, 1}, {11, 2, 1}})}}));   // RESARE area
+    Bytes bridge = attf(181, "30");           // VERCLR 30 m open
+    const Bytes closed = attf(182, "4.5");    // VERCCL 4.5 m closed
+    bridge.insert(bridge.end(), closed.begin(), closed.end());
+    add(makeRecord('D', {{"0001", Bytes{'0'}}, {"FRID", frid(2, 11)}, {"ATTF", bridge}, {"FSPT", fspt({{10, 1, 1}})}}));                 // BRIDGE line
+    Bytes point{110};
+    put32(point, 21);
+    point.push_back(1); point.push_back(1); point.push_back(2);
+    Bytes rock = attf(179, "1.2");
+    const Bytes awash = attf(187, "5");
+    rock.insert(rock.end(), awash.begin(), awash.end());
+    add(makeRecord('D', {{"0001", Bytes{'0'}}, {"FRID", frid(1, 153)}, {"ATTF", rock}, {"FSPT", point}}));                               // UWTROC point
+    add(makeRecord('D', {{"0001", Bytes{'0'}}, {"FRID", frid(1, 14)}, {"ATTF", attf(13, "3")}, {"FSPT", point}}));                      // BOYCAR south
+    return cell;
+}
+
+static void testS57ReadsHazardAttributes() {
+    ChartData d;
+    std::string err;
+    CHECK(loadS57Buffer(buildHazardCell(), d, err));
+    const ChartFeature *resare = nullptr, *bridge = nullptr, *rock = nullptr, *cardinal = nullptr;
+    for (const ChartFeature& f : d.features) {
+        if (f.objectClass == "RESARE") resare = &f;
+        if (f.objectClass == "BRIDGE") bridge = &f;
+        if (f.objectClass == "UWTROC") rock = &f;
+        if (f.objectClass == "BOYCAR") cardinal = &f;
+    }
+    CHECK(resare && (resare->restrn & (1u << 7)) && (resare->restrn & (1u << 14)) && !(resare->restrn & (1u << 1)));  // list attribute -> bitmask
+    CHECK(resare && (resare->catrea & (1u << 9)));
+    CHECK(bridge && std::fabs(bridge->verclr - 30.0) < 1e-9 && std::fabs(bridge->verccl - 4.5) < 1e-9);
+    CHECK(rock && std::fabs(rock->valsou - 1.2) < 1e-9 && std::fabs(rock->watlev - 5.0) < 1e-9);
+    CHECK(cardinal && std::fabs(cardinal->catcam - 3.0) < 1e-9);
+    CHECK(d.features.size() == 4);  // and nothing else was kept
+}
+
 static void testS57Malformed() {
     ChartData d;
     std::string err;
@@ -992,8 +1195,15 @@ int main() {
     testPrecautionaryAreaCost();
     testLargeVesselStaysInLane();
     testStampTss();
+    testHazardObstructions();
+    testHazardBlocksAlways();
+    testHazardRestrictedAreas();
+    testHazardPenalties();
+    testHazardMarks();
+    testHazardOverheadClearance();
     testS57MissingFile();
     testS57Synthetic();
+    testS57ReadsHazardAttributes();
     testS57Malformed();
     testS57RealCell();
     if (failures == 0) std::puts("all tests passed");

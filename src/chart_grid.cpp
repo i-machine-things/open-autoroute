@@ -80,7 +80,140 @@ void paintLine(const ChartFeature& f, const CostGrid& grid, std::vector<uint8_t>
 
 }  // namespace
 
-void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid, bool applyTss, double cautionFactor) {
+namespace {
+
+// Every cell whose centre is within `radiusM` of `p`, with the bearing from `p` to the cell, for disks and sectors round point objects.
+template <typename Fn>
+void forEachCellNear(const CostGrid& grid, LatLon p, double radiusM, Fn&& visit) {
+    const Cell c0 = grid.cellAt(p);
+    const int r = static_cast<int>(std::ceil(radiusM / grid.cellSizeM())) + 1;
+    for (int row = c0.row - r; row <= c0.row + r; ++row) {
+        for (int col = c0.col - r; col <= c0.col + r; ++col) {
+            if (!grid.inBounds({col, row})) continue;
+            const double dx = (col - c0.col) * grid.cellSizeM(), dy = (c0.row - row) * grid.cellSizeM();  // east, north
+            if (std::hypot(dx, dy) > radiusM) continue;
+            double bearing = std::atan2(dx, dy) * 180.0 / kPi;
+            if (bearing < 0) bearing += 360.0;
+            visit(row, col, bearing);
+        }
+    }
+}
+
+bool contains(const char* list[], size_t n, const std::string& cls) {
+    for (size_t i = 0; i < n; ++i) {
+        if (cls == list[i]) return true;
+    }
+    return false;
+}
+
+// Obstructions, wrecks and rocks are only harmless with water over them that is known and deep enough. WATLEV (S-57 attribute 187):
+// 1 partly submerged at high water, 2 always dry, 4 covers and uncovers, 5 awash, 6 subject to flooding are hazards whatever VALSOU says.
+bool depthUnsafe(const ChartFeature& f, double minDepthM) {
+    if (!std::isnan(f.watlev)) {
+        const int w = static_cast<int>(f.watlev);
+        if (w == 1 || w == 2 || w == 4 || w == 5 || w == 6) return true;
+    }
+    return std::isnan(f.valsou) || f.valsou < minDepthM;  // unknown depth is unsafe
+}
+
+// Block a feature's geometry: cells inside an area, along a line, or at a point.
+void shutGeometry(const ChartFeature& f, const CostGrid& grid, std::vector<uint8_t>& mask, std::vector<uint8_t>& scratch) {
+    (void)scratch;
+    if (f.geometry == Geometry::Area) {
+        forEachCellInArea(f, grid, [&](int row, int col) { mask[static_cast<size_t>(row) * grid.cols() + col] = 1; });
+        // A polygon thinner than a cell can miss every cell centre; also shut the cells along its outline so it is never invisible.
+        paintLine(f, grid, mask);
+    } else if (f.geometry == Geometry::Line) {
+        paintLine(f, grid, mask);
+    } else if (!f.parts.empty() && !f.parts[0].points.empty()) {
+        const Cell c = grid.cellAt(f.parts[0].points[0]);
+        if (grid.inBounds(c)) mask[static_cast<size_t>(c.row) * grid.cols() + c.col] = 1;
+    }
+}
+
+void raise(std::vector<float>& penalty, const CostGrid& grid, const ChartFeature& f, float factor) {
+    if (f.geometry != Geometry::Area) return;
+    forEachCellInArea(f, grid, [&](int row, int col) {
+        float& p = penalty[static_cast<size_t>(row) * grid.cols() + col];
+        p = std::max(p, factor);
+    });
+}
+
+void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const CostGrid& grid, std::vector<uint8_t>& shut,
+                        std::vector<float>& penalty) {
+    // Fixed things standing in the water, and areas nobody should enter, that the depth areas call open water.
+    static const char* kBlockAlways[] = {"UNSARE", "MIPARE", "FSHFAC", "MARCUL", "PRDARE", "OSPARE", "HULKES", "SLCONS", "PONTON", "PILPNT",
+                                         "MORFAC", "FNCLNE", "DYKCON", "CAUSWY", "CONVYR", "PYLONS", "FLODOC", "DRYDOC", "GATCON", "DAMCON",
+                                         "GRIDRN", "OILBAR", "RAPIDS", "WATFAL"};
+    std::vector<uint8_t> scratch;
+    for (const ChartFeature& f : chart.features) {
+        const std::string& cls = f.objectClass;
+        if (contains(kBlockAlways, sizeof kBlockAlways / sizeof *kBlockAlways, cls)) {
+            shutGeometry(f, grid, shut, scratch);
+        } else if (cls == "OBSTRN" || cls == "WRECKS" || cls == "UWTROC") {
+            if (depthUnsafe(f, opt.minDepthM)) shutGeometry(f, grid, shut, scratch);
+        } else if (cls == "OFSPLF") {
+            shutGeometry(f, grid, shut, scratch);
+            if (f.geometry == Geometry::Point && !f.parts.empty() && !f.parts[0].points.empty()) {  // 250 m berth round a platform
+                forEachCellNear(grid, f.parts[0].points[0], 250.0, [&](int row, int col, double) { shut[static_cast<size_t>(row) * grid.cols() + col] = 1; });
+            }
+        } else if (cls == "BOYISD" || cls == "BCNISD") {  // isolated danger: a hazard directly beneath, 100 m clear
+            if (!f.parts.empty() && !f.parts[0].points.empty()) {
+                forEachCellNear(grid, f.parts[0].points[0], 100.0, [&](int row, int col, double) { shut[static_cast<size_t>(row) * grid.cols() + col] = 1; });
+            }
+        } else if ((cls == "BOYCAR" || cls == "BCNCAR") && !f.parts.empty() && !f.parts[0].points.empty() && !std::isnan(f.catcam)) {
+            // Safe water lies on the mark's named side, so the danger is on the opposite side: a north mark is passed to its north.
+            static const double kDanger[] = {0, 180.0, 270.0, 0.0, 90.0};  // by CATCAM 1 north, 2 east, 3 south, 4 west
+            const int cat = static_cast<int>(f.catcam);
+            if (cat >= 1 && cat <= 4) {
+                const double danger = kDanger[cat];
+                forEachCellNear(grid, f.parts[0].points[0], 150.0, [&](int row, int col, double bearing) {
+                    if (angleDiffDeg(bearing, danger) <= 90.0) shut[static_cast<size_t>(row) * grid.cols() + col] = 1;
+                });
+                shutGeometry(f, grid, shut, scratch);
+            }
+        } else if (cls == "RESARE") {
+            // RESTRN (attribute 131): 7 entry prohibited, 8 entry restricted, 14 area to be avoided. Anchoring, fishing and similar
+            // restrictions (1 to 6, 9 to 13, 15, 16) do not stop a transit. CATREA (attribute 56): 1 offshore safety zone, 9 military
+            // area and 14 minefield forbid entry; the rest only ask for care.
+            const uint32_t restrn = f.restrn, catrea = f.catrea;
+            const bool forbidden = (restrn & ((1u << 7) | (1u << 14))) || (catrea & ((1u << 1) | (1u << 9) | (1u << 14)));
+            if (forbidden) {
+                shutGeometry(f, grid, shut, scratch);
+            } else {
+                float factor = 1.0f;
+                if (restrn & (1u << 8)) factor = 10.0f;                                    // entry restricted
+                if (catrea & (1u << 18)) factor = std::max(factor, 20.0f);                 // swimming area
+                if (catrea & ((1u << 21) | (1u << 8) | (1u << 12))) factor = std::max(factor, 8.0f);  // dredging, degaussing range, aid safety zone
+                if (catrea & ((1u << 4) | (1u << 5) | (1u << 6) | (1u << 7) | (1u << 10) | (1u << 20) | (1u << 22) | (1u << 23))) factor = std::max(factor, 5.0f);  // reserves, sanctuaries, wreck and research areas
+                if (catrea & ((1u << 25) | (1u << 26))) factor = std::max(factor, 3.0f);   // swinging and water-skiing areas
+                if (factor > 1.0f) raise(penalty, grid, f, factor);
+            }
+        } else if (cls == "CTNARE") {
+            raise(penalty, grid, f, 3.0f);
+        } else if (cls == "DMPGRD") {
+            raise(penalty, grid, f, 15.0f);
+        } else if (cls == "ACHARE") {
+            raise(penalty, grid, f, 3.0f);  // vessels lie at anchor here
+        } else if (cls == "WEDKLP") {
+            raise(penalty, grid, f, 1.5f);
+        } else if (cls == "WATTUR") {
+            raise(penalty, grid, f, 3.0f);
+        } else if (cls == "SPLARE") {
+            raise(penalty, grid, f, 5.0f);
+        } else if (cls == "BRIDGE" || cls == "CBLOHD" || cls == "PIPOHD") {
+            // A span is only passable if it is higher than the mast. An opening bridge is treated as closed (VERCCL); unknown is unsafe.
+            const double clearance = !std::isnan(f.verccl) ? f.verccl : f.verclr;
+            if (std::isnan(clearance) || clearance < opt.airDraftM + 1.0) shutGeometry(f, grid, shut, scratch);
+        }
+    }
+}
+
+}  // namespace
+
+void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& grid) {
+    const double minDepthM = options.minDepthM, cautionFactor = options.cautionFactor;
+    const bool applyTss = options.applyTss;
     std::vector<uint8_t> state(static_cast<size_t>(grid.cols()) * grid.rows(), kUnknown);
     std::vector<uint8_t> covered(state.size(), 0);
 
@@ -130,6 +263,12 @@ void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid, bool a
         }
     }
 
+    // ---- Hazard objects (see StampOptions / stampChart docs). `shut` cells are blocked whatever the depth areas say; `penalty` is a cost
+    // multiplier (never compounded across charts: the largest wins).
+    std::vector<uint8_t> shut(state.size(), 0);
+    std::vector<float> penalty(state.size(), 1.0f);
+    if (options.hazardObjects) applyHazardObjects(chart, options, grid, shut, penalty);
+
     for (int row = 0; row < grid.rows(); ++row) {
         for (int col = 0; col < grid.cols(); ++col) {
             const size_t i = static_cast<size_t>(row) * grid.cols() + col;
@@ -141,6 +280,8 @@ void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid, bool a
                 grid.setCost({col, row}, static_cast<float>(cautionFactor));
                 grid.setCaution({col, row});
             }
+            if (shut[i]) grid.setCost({col, row}, kBlocked);
+            else if (penalty[i] > 1.0f && !grid.blocked({col, row})) grid.setCost({col, row}, std::max(grid.cost({col, row}), penalty[i]));
         }
     }
 }
@@ -259,6 +400,19 @@ std::vector<Gate> applyChannelGates(CostGrid& grid, const std::vector<LateralMar
         }
     }
     return out;
+}
+
+}  // namespace oar
+
+namespace oar {
+
+void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid, bool applyTss, double cautionFactor) {
+    StampOptions o;
+    o.minDepthM = minDepthM;
+    o.applyTss = applyTss;
+    o.cautionFactor = cautionFactor;
+    o.hazardObjects = false;  // the old entry point keeps its old behaviour exactly; callers that want the hazard rules pass StampOptions
+    stampChart(chart, o, grid);
 }
 
 }  // namespace oar

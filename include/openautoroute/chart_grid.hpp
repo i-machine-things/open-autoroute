@@ -24,6 +24,30 @@ namespace oar {
 /// CostGrid::setZone; call grid.assignZoneDirections() after stamping all charts). Precautionary areas (PRCARE) cost
 /// `cautionFactor` times normal to move through, since vessels there must navigate with particular caution.
 void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid, bool applyTss = true, double cautionFactor = 1.0);
+
+/// Everything stampChart needs to know about the vessel and the rules to apply.
+struct StampOptions {
+    double minDepthM = 2.5;     // draft plus clearance
+    bool applyTss = true;       // traffic separation schemes (Rule 10)
+    double cautionFactor = 1.0; // cost multiplier for precautionary areas
+    double airDraftM = 0.0;     // height above the waterline, for bridge and overhead cable clearance
+    bool hazardObjects = true;  // the chart-object hazard rules below (developer switch, for comparing runs)
+};
+
+/// stampChart plus the hazard rules for chart objects beyond depth and land, each following the notes in .claude/CODING_NOTES.md and
+/// the attribute tables in OpenCPN's s57expectedinput.csv. Anything that can be struck or that forbids entry blocks its cells; softer
+/// warnings raise the cost. Blocking is always the safe direction, so these rules apply even where the chart has no depth area.
+///   - OBSTRN, WRECKS, UWTROC (points, lines and areas): blocked when awash, dry, partly submerged, uncovering, of unknown depth, or shallower
+///     than draft plus clearance
+///   - UNSARE, MIPARE, FSHFAC, MARCUL, PRDARE, OSPARE, HULKES: blocked
+///   - fixed structures (SLCONS, PONTON, PILPNT, MORFAC, FNCLNE, DYKCON, CAUSWY, CONVYR, PYLONS, FLODOC, DRYDOC, GATCON, DAMCON, GRIDRN,
+///     OILBAR, OFSPLF) and RAPIDS / WATFAL: blocked; offshore platform points also get a 250 m berth
+///   - RESARE: blocked for entry prohibited or area to be avoided, or an offshore safety zone, military area or minefield; costly for
+///     entry restricted, swimming, dredging, reserve and sanctuary areas; anchoring, fishing and similar restrictions do not stop a transit
+///   - BOYISD / BCNISD: 100 m blocked; BOYCAR / BCNCAR: the danger side of the mark blocked out to 150 m
+///   - BRIDGE, CBLOHD, PIPOHD: blocked unless the clearance (closed clearance for an opening bridge) is at least air draft plus 1 m
+///   - CTNARE x3, DMPGRD x15, ACHARE x3, WEDKLP x1.5, WATTUR x3, SPLARE x5: costlier
+void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& grid);
 /// Fairways (FAIRWY) and dredged areas (DRGARE) are also recorded as channel cells (the dashed limits drawn on a chart) for
 /// CostGrid::applyChannelPreference; they are never made cheaper or dearer by stampChart itself.
 

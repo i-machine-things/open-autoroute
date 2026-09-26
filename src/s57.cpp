@@ -99,19 +99,55 @@ struct FeatRec {
 
 uint64_t keyOf(uint8_t rcnm, uint32_t rcid) { return (static_cast<uint64_t>(rcnm) << 32) | rcid; }
 
-// Codes verified against OpenCPN's s57objectclasses.csv (the IHO S-57 object catalogue).
+// Object class codes, verified against OpenCPN's s57objectclasses.csv (the IHO S-57 object catalogue). Only classes the router acts on
+// are kept; docs/S57_OBJECTS.md lists every class present in the NOAA data and how each is meant to be handled.
 const char* classOf(uint16_t objl) {
     switch (objl) {
+        case 4: return "ACHARE";
+        case 5: return "BCNCAR";
+        case 6: return "BCNISD";
         case 7: return "BCNLAT";
+        case 11: return "BRIDGE";
+        case 14: return "BOYCAR";
+        case 16: return "BOYISD";
         case 17: return "BOYLAT";
+        case 21: return "CBLOHD";
+        case 26: return "CAUSWY";
+        case 27: return "CTNARE";
         case 30: return "COALNE";
+        case 34: return "CONVYR";
+        case 38: return "DAMCON";
         case 42: return "DEPARE";
         case 43: return "DEPCNT";
         case 46: return "DRGARE";
+        case 47: return "DRYDOC";
+        case 48: return "DMPGRD";
+        case 49: return "DYKCON";
         case 51: return "FAIRWY";
+        case 52: return "FNCLNE";
+        case 55: return "FSHFAC";
+        case 57: return "FLODOC";
+        case 61: return "GATCON";
+        case 62: return "GRIDRN";
+        case 65: return "HULKES";
         case 71: return "LNDARE";
+        case 82: return "MARCUL";
+        case 83: return "MIPARE";
+        case 84: return "MORFAC";
         case 86: return "OBSTRN";
+        case 87: return "OFSPLF";
+        case 88: return "OSPARE";
+        case 89: return "OILBAR";
+        case 90: return "PILPNT";
+        case 93: return "PIPOHD";
+        case 95: return "PONTON";
         case 96: return "PRCARE";
+        case 97: return "PRDARE";
+        case 98: return "PYLONS";
+        case 107: return "RAPIDS";
+        case 112: return "RESARE";
+        case 120: return "SPLARE";
+        case 122: return "SLCONS";
         case 129: return "SOUNDG";
         case 145: return "TSELNE";
         case 146: return "TSSBND";
@@ -120,11 +156,17 @@ const char* classOf(uint16_t objl) {
         case 149: return "TSSRON";
         case 150: return "TSEZNE";
         case 153: return "UWTROC";
+        case 154: return "UNSARE";
+        case 156: return "WATTUR";
+        case 157: return "WATFAL";
+        case 158: return "WEDKLP";
         case 159: return "WRECKS";
         default: return nullptr;
     }
 }
 
+// Attribute codes, from s57attributes.csv.
+constexpr uint16_t kAttrCatcam = 13, kAttrCatrea = 56, kAttrRestrn = 131, kAttrVerclr = 181, kAttrVerccl = 182, kAttrWatlev = 187;
 constexpr uint16_t kAttrCatlam = 36, kAttrDrval1 = 87, kAttrDrval2 = 88, kAttrOrient = 117, kAttrValdco = 174, kAttrValsou = 179;
 
 void parseFeature(const Record& r, FeatRec& f) {
@@ -211,6 +253,23 @@ std::vector<std::pair<std::vector<Pt>, bool>> chainEdges(const std::map<uint64_t
     return rings;
 }
 
+// List-valued attributes (RESTRN, CATREA) are comma-separated integers; return them as a bitmask with bit n set for value n (n < 32).
+uint32_t attrMask(const FeatRec& f, uint16_t code) {
+    uint32_t mask = 0;
+    for (const auto& a : f.attrs) {
+        if (a.first != code) continue;
+        size_t i = 0;
+        while (i < a.second.size()) {
+            const int v = std::atoi(a.second.c_str() + i);
+            if (v > 0 && v < 32) mask |= 1u << v;
+            const size_t comma = a.second.find(',', i);
+            if (comma == std::string::npos) break;
+            i = comma + 1;
+        }
+    }
+    return mask;
+}
+
 double attrNum(const FeatRec& f, uint16_t code) {
     for (const auto& a : f.attrs) {
         if (a.first == code && !a.second.empty()) return std::atof(a.second.c_str());
@@ -263,6 +322,12 @@ bool loadS57Buffer(const std::vector<uint8_t>& bytes, ChartData& out, std::strin
         cf.valsou = attrNum(f, kAttrValsou);
         cf.orient = attrNum(f, kAttrOrient);
         cf.catlam = attrNum(f, kAttrCatlam);
+        cf.watlev = attrNum(f, kAttrWatlev);
+        cf.verclr = attrNum(f, kAttrVerclr);
+        cf.verccl = attrNum(f, kAttrVerccl);
+        cf.catcam = attrNum(f, kAttrCatcam);
+        cf.restrn = attrMask(f, kAttrRestrn);
+        cf.catrea = attrMask(f, kAttrCatrea);
 
         if (f.prim == 1) {  // point: isolated node(s); SOUNDG expands to one point per sounding
             cf.geometry = Geometry::Point;
