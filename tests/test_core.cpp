@@ -271,6 +271,57 @@ static void testCrossesLaneAtRightAngles() {
     CHECK(findRoute(plain, plain.centre({1, 1}), plain.centre({22, 22})).size() == 2);
 }
 
+static void testLaneUseFactor() {
+    // Eastbound lane (rows 3-5) with open water either side. A vessel that just wants to travel east should use the
+    // lane when it is free to, and stay out of it when lane use is priced high enough.
+    CostGrid g = makeGrid(24, 9);
+    for (int r = 3; r <= 5; ++r) for (int c = 0; c < 24; ++c) g.setLaneDirection({c, r}, 90.0f);
+    auto lanes = [&](const std::vector<LatLon>& route) {
+        int inLane = 0;
+        for (const LatLon& p : route) inLane += !std::isnan(g.laneDirection(g.cellAt(p)));
+        return inLane;
+    };
+    auto free = findRoute(g, g.centre({1, 4}), g.centre({22, 4}));
+    CHECK(free.size() == 2 && lanes(free) == 2);  // both ends are in the lane; the whole leg runs along it
+
+    g.setLaneUseFactor(0.01);  // clamped: a lane is never made (almost) free
+    CHECK(std::fabs(g.laneUseFactor() - 0.1f) < 1e-6f);
+
+    // Both ends sit inside the lane. Priced at 3x, running the whole way in it costs more than stepping out, running
+    // alongside and stepping back in, so the middle of the route must leave the lane.
+    g.setLaneUseFactor(3.0);
+    auto priced = findRoute(g, g.centre({1, 4}), g.centre({22, 4}));
+    CHECK(priced.size() >= 3);
+    bool leftLane = false;
+    for (size_t i = 1; i < priced.size(); ++i) {  // judge legs by their midpoint: the run outside is one long leg
+        const Cell mid = g.cellAt({(priced[i - 1].lat + priced[i].lat) / 2, (priced[i - 1].lon + priced[i].lon) / 2});
+        leftLane |= mid.col >= 4 && mid.col <= 19 && std::isnan(g.laneDirection(mid));
+    }
+    CHECK(leftLane);
+}
+
+static void testLargeVesselStaysInLane() {
+    // Eastbound lane (rows 3-5); both ends are in open water beside it. A large vessel (cheap lane) should run along
+    // the lane; the default vessel should not touch it.
+    CostGrid g = makeGrid(30, 9);
+    for (int r = 3; r <= 5; ++r) for (int c = 0; c < 30; ++c) g.setLaneDirection({c, r}, 90.0f);
+    auto legInLane = [&](const std::vector<LatLon>& route) {
+        bool in = false;
+        for (size_t i = 1; i < route.size(); ++i) {
+            const Cell mid = g.cellAt({(route[i - 1].lat + route[i].lat) / 2, (route[i - 1].lon + route[i].lon) / 2});
+            in |= !std::isnan(g.laneDirection(mid));
+        }
+        return in;
+    };
+    g.setLaneUseFactor(1.0);
+    CHECK(!legInLane(findRoute(g, g.centre({1, 2}), g.centre({28, 2}))));  // straight along row 2, outside the lane
+    g.setLaneUseFactor(0.2);
+    CHECK(legInLane(findRoute(g, g.centre({1, 2}), g.centre({28, 2}))));   // drawn into the lane and follows it east
+    // The wrong way is still refused however cheap lanes are: westbound traffic must stay out of an eastbound lane.
+    auto west = findRoute(g, g.centre({28, 2}), g.centre({1, 2}));
+    CHECK(!west.empty() && !legInLane(west));
+}
+
 static ChartFeature laneFeature(const char* cls, double lat0, double lat1, double lon0, double lon1, double orient) {
     ChartFeature f = areaFeature(cls, lat0, lat1, lon0, lon1);
     f.orient = orient;
@@ -483,6 +534,8 @@ int main() {
     testLaneFactor();
     testNoWrongWayInLane();
     testCrossesLaneAtRightAngles();
+    testLaneUseFactor();
+    testLargeVesselStaysInLane();
     testStampTss();
     testS57MissingFile();
     testS57Synthetic();

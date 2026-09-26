@@ -46,6 +46,13 @@ public:
         return lane_.empty() ? std::numeric_limits<float>::quiet_NaN() : lane_[index(c)];
     }
 
+    /// Cost multiplier for travelling with the flow inside a traffic lane (default 1). Above 1 a vessel avoids running
+    /// along lanes (small craft and sailing vessels, which under Rule 10 should stay out of the scheme where practicable
+    /// and must not impede ships using it). Below 1 a vessel is drawn into lanes and stays in them (large ships).
+    /// Clamped to [0.1, inf); the pathfinder scales its distance estimate by min(1, factor) to stay admissible.
+    void setLaneUseFactor(double factor) { laneUseFactor_ = factor < 0.1 ? 0.1f : static_cast<float>(factor); }
+    float laneUseFactor() const { return laneUseFactor_; }
+
     LatLon centre(Cell c) const;
     /// Cell containing `p`; the result may be out of bounds, check with inBounds().
     Cell cellAt(LatLon p) const;
@@ -81,6 +88,7 @@ private:
     double cellSizeLonDeg_;
     std::vector<float> cost_;
     std::vector<float> lane_;  // empty until a lane is set
+    float laneUseFactor_ = 1.0f;
 };
 
 }  // namespace oar

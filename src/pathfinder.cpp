@@ -26,7 +26,10 @@ float moveFactor(const CostGrid& grid, Cell a, Cell b, double headingDeg) {
     float f = 1.0f;
     for (Cell c : {a, b}) {
         const float lane = grid.laneDirection(c);
-        if (!std::isnan(lane)) f = std::max(f, laneFactor(headingDeg, lane));
+        if (std::isnan(lane)) continue;
+        float lf = laneFactor(headingDeg, lane);
+        if (lf == 1.0f) lf = grid.laneUseFactor();  // with the flow: normal use of the lane, priced by the vessel type
+        f = f == 1.0f ? lf : std::max(f, lf);       // of two lane cells the worse applies; a cheap one never discounts a crossing
     }
     return f;
 }
@@ -101,14 +104,19 @@ std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal) {
     std::vector<int> parent(n, -1);
     std::priority_queue<Node, std::vector<Node>, std::greater<Node>> open;
 
+    // Lanes cheaper than open water (factor < 1, large vessels) would make the plain distance estimate overshoot the true
+    // cost, so scale it down by the cheapest possible multiplier to keep A* exact.
+    const float hScale = std::min(1.0f, grid.laneUseFactor());
+    const auto h = [&](Cell c) { return heuristic(c, g) * hScale; };
+
     best[idxOf(s)] = 0.0f;
-    open.push({heuristic(s, g), idxOf(s)});
+    open.push({h(s), idxOf(s)});
     while (!open.empty()) {
         const Node cur = open.top();
         open.pop();
         const Cell c{cur.idx % cols, cur.idx / cols};
         if (c == g) break;
-        if (cur.f - heuristic(c, g) > best[cur.idx] + 1e-4f) continue;  // stale queue entry
+        if (cur.f - h(c) > best[cur.idx] + 1e-4f) continue;  // stale queue entry
         for (int dr = -1; dr <= 1; ++dr) {
             for (int dc = -1; dc <= 1; ++dc) {
                 if (dr == 0 && dc == 0) continue;
@@ -123,7 +131,7 @@ std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal) {
                 if (cand < best[idxOf(nb)]) {
                     best[idxOf(nb)] = cand;
                     parent[idxOf(nb)] = cur.idx;
-                    open.push({cand + heuristic(nb, g), idxOf(nb)});
+                    open.push({cand + h(nb), idxOf(nb)});
                 }
             }
         }

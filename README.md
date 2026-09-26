@@ -40,7 +40,14 @@ build/openautoroute --enc ~/Documents/Charts/ENC_ROOT \
 
 Cells are painted coarse-to-fine, and a cell is open only when a chart positively shows it is deep enough. Land,
 shoals, shallow or depth-unknown obstructions and wrecks, and water with no chart coverage are all blocked. COLREGs
-Rules 9 and 10 are not applied yet, so the route does not keep right in channels or cross traffic lanes correctly.
+Rule 9 (keeping right in narrow channels) is not applied yet.
+Rule 10 (traffic separation schemes) is applied: separation zones and lines are never entered, travel against a lane's
+flow is refused, and lane crossings are priced so they are made as close to square to the flow as the grid allows. What a
+vessel does with lanes depends on its size, following Rule 10(j): under 20 m (65.6 ft) or a sailing vessel (`--sail`)
+stays out of lanes and only crosses them, while a larger vessel is drawn into them and stays in. `--length-ft` sets the
+length (default 40 ft), `--no-tss` switches all of this off, and `--lane-use` overrides the lane cost directly.
+`--eval route.gpx` scores any GPX route, such as one from another planner, against the same rules.
+
 Routes are also kept off the shore: cost rises within `--margin-m` (default 500 m) of any blocked water, scaled by
 `--margin-weight` (default 10). Set `--margin-weight 0` to turn that off. The tool prints the closest and median
 clearance it achieved. It is a development tool, not for navigation.
