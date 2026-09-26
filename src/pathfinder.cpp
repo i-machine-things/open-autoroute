@@ -48,23 +48,36 @@ void forEachCellOnSegment(Cell a, Cell b, Fn&& visit) {
     }
 }
 
-// Cost multiplier for one move between adjacent cells: the worst lane factor of the two cells (1 outside lanes).
-float moveFactor(const CostGrid& grid, Cell a, Cell b, double headingDeg) {
-    float f = 1.0f;
-    for (Cell c : {a, b}) {
-        const float lane = grid.laneDirection(c);
-        if (std::isnan(lane)) continue;
-        float lf = laneFactor(headingDeg, lane);
-        if (lf == 1.0f) {
-            lf = grid.laneUseFactor();  // with the flow: normal use of the lane, priced by the vessel type
-        } else if (lf != kBlocked && grid.laneUseFactor() > 1.0f) {
-            // A vessel that should keep out of lanes pays for every lane cell it crosses too, not only for running along
-            // one; otherwise clipping a lane corner is cheaper than a small detour around it.
-            lf *= grid.laneUseFactor();
-        }
-        f = f == 1.0f ? lf : std::max(f, lf);       // of two lane cells the worse applies; a cheap one never discounts a crossing
+// What one cell does to a move on `headingDeg`: 1 = nothing, > 1 = dearer, < 1 = cheaper (a lane a large vessel wants to use),
+// kBlocked = not allowed. Lane cells: with the flow uses the vessel's lane-use factor, against it is refused, and a crossing
+// costs the crossing formula (scaled up a little for small craft, which should avoid lanes). Separation zone cells: running
+// along them is refused, crossing them costs double a lane crossing, and a zone with no known direction is impassable.
+constexpr float kZoneCrossingScale = 2.0f;
+
+float cellFactor(const CostGrid& grid, Cell c, double headingDeg) {
+    const float use = grid.laneUseFactor();
+    const float crossScale = use > 1.0f ? 1.0f + 0.2f * (use - 1.0f) : 1.0f;  // small craft: 6 -> 2x on crossings, not 6x
+    if (grid.isZone(c)) {
+        const float zd = grid.zoneDirection(c);
+        if (std::isnan(zd)) return kBlocked;
+        const float lf = laneFactor(headingDeg, zd);
+        if (lf == 1.0f || lf == kBlocked) return kBlocked;  // running along a zone, in either direction
+        return lf * kZoneCrossingScale * crossScale;
     }
-    return f;
+    const float lane = grid.laneDirection(c);
+    if (std::isnan(lane)) return 1.0f;
+    const float lf = laneFactor(headingDeg, lane);
+    if (lf == 1.0f) return use;  // with the flow
+    if (lf == kBlocked) return kBlocked;
+    return lf * crossScale;
+}
+
+// Cost multiplier for one move between adjacent cells: the worse of the two cells, or the cheaper one when both are lane
+// cells travelled with the flow (so a large vessel is drawn along a lane rather than dipping out of it).
+float moveFactor(const CostGrid& grid, Cell a, Cell b, double headingDeg) {
+    const float fa = cellFactor(grid, a, headingDeg), fb = cellFactor(grid, b, headingDeg);
+    if (fa == kBlocked || fb == kBlocked) return kBlocked;
+    return (fa > 1.0f || fb > 1.0f) ? std::max(fa, fb) : std::min(fa, fb);
 }
 
 // Heading in degrees true of a move from a to b. Cells are square in metres and rows run south.
@@ -82,12 +95,9 @@ float moveCost(const CostGrid& grid, Cell a, Cell b, double headingDeg) {
 // kBlocked when the segment runs against a lane's flow. Only meaningful after lineOfSight().
 float segmentCost(const CostGrid& grid, Cell a, Cell b) {
     const double heading = cellHeading(a, b);
-    bool wrongWay = false;
-    forEachCellOnSegment(a, b, [&](Cell c) {
-        const float lane = grid.laneDirection(c);
-        if (!std::isnan(lane) && laneFactor(heading, lane) == kBlocked) wrongWay = true;
-    });
-    if (wrongWay) return kBlocked;  // touches a lane against its flow anywhere along the real line, not just on Bresenham cells
+    bool refused = false;
+    forEachCellOnSegment(a, b, [&](Cell c) { refused = refused || cellFactor(grid, c, heading) == kBlocked; });
+    if (refused) return kBlocked;  // wrong way in a lane, or along a zone, anywhere on the real line (not just Bresenham cells)
     float total = 0.0f;
     int x = a.col, y = a.row;
     const int dx = std::abs(b.col - a.col), dy = std::abs(b.row - a.row);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <limits>
 #include <vector>
 
@@ -53,6 +54,19 @@ public:
     void setLaneUseFactor(double factor) { laneUseFactor_ = factor < 0.1 ? 0.1f : static_cast<float>(factor); }
     float laneUseFactor() const { return laneUseFactor_; }
 
+    /// Separation zone / separation line cells of a traffic separation scheme (COLREGs Rule 10). A vessel may cross one square
+    /// on to cross the scheme but never travel along it. Its direction is not charted, so assignZoneDirections() takes it from
+    /// the nearest lane; a zone cell with no direction is treated as impassable.
+    void setZone(Cell c) {
+        if (zone_.empty()) { zone_.assign(cost_.size(), 0); zoneDir_.assign(cost_.size(), std::numeric_limits<float>::quiet_NaN()); }
+        zone_[index(c)] = 1;
+    }
+    bool isZone(Cell c) const { return !zone_.empty() && zone_[index(c)] != 0; }
+    float zoneDirection(Cell c) const { return zoneDir_.empty() ? std::numeric_limits<float>::quiet_NaN() : zoneDir_[index(c)]; }
+    /// Give each zone cell the flow direction of the lane it borders (spread along the zone). Call once after all charts are
+    /// stamped; zone cells that touch no lane keep no direction.
+    void assignZoneDirections();
+
     LatLon centre(Cell c) const;
     /// Cell containing `p`; the result may be out of bounds, check with inBounds().
     Cell cellAt(LatLon p) const;
@@ -75,7 +89,7 @@ public:
     /// narrow channel, drifts toward the middle. Blocked cells are untouched; rangeM <= 0 or weight <= 0 does nothing.
     void applyShoreMargin(double rangeM, double weight);
 
-    /// Distance in metres from each cell centre to the nearest traffic-lane cell (0 inside a lane; very large everywhere if
+    /// Distance in metres from each cell centre to the nearest traffic-lane or separation-zone cell (0 inside one; very large everywhere if
     /// the grid has no lanes).
     std::vector<float> distanceToLaneM() const;
 
@@ -98,6 +112,8 @@ private:
     double cellSizeLonDeg_;
     std::vector<float> cost_;
     std::vector<float> lane_;  // empty until a lane is set
+    std::vector<uint8_t> zone_;   // empty until a zone cell is set
+    std::vector<float> zoneDir_;
     float laneUseFactor_ = 1.0f;
 };
 

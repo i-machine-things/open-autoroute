@@ -109,6 +109,7 @@ const char* classOf(uint16_t objl) {
         case 51: return "FAIRWY";
         case 71: return "LNDARE";
         case 86: return "OBSTRN";
+        case 96: return "PRCARE";
         case 129: return "SOUNDG";
         case 145: return "TSELNE";
         case 146: return "TSSBND";

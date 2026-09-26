@@ -15,8 +15,12 @@ namespace oar {
 ///     with no depth value is treated as unsafe
 /// Cells no chart covers stay whatever the caller filled the grid with (normally kBlocked: no data is not safe water).
 ///
-/// With `applyTss` (default) the chart's traffic separation scheme is applied too, for COLREGs Rule 10: TSEZNE zones
-/// and TSELNE lines are blocked, and TSSLPT lane parts store their flow direction (ORIENT) on the grid for the router.
-void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid, bool applyTss = true);
+/// With `applyTss` (default) the chart's traffic separation scheme is applied too, for COLREGs Rule 10: TSSLPT lane parts
+/// store their flow direction (ORIENT) on the grid for the router.
+///
+/// Separation zones (TSEZNE) and separation lines (TSELNE) become zone cells: crossable square on, never along (see
+/// CostGrid::setZone; call grid.assignZoneDirections() after stamping all charts). Precautionary areas (PRCARE) cost
+/// `cautionFactor` times normal to move through, since vessels there must navigate with particular caution.
+void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid, bool applyTss = true, double cautionFactor = 1.0);
 
 }  // namespace oar

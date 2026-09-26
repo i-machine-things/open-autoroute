@@ -80,7 +80,7 @@ void paintLine(const ChartFeature& f, const CostGrid& grid, std::vector<uint8_t>
 
 }  // namespace
 
-void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid, bool applyTss) {
+void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid, bool applyTss, double cautionFactor) {
     std::vector<uint8_t> state(static_cast<size_t>(grid.cols()) * grid.rows(), kUnknown);
     std::vector<uint8_t> covered(state.size(), 0);
 
@@ -94,16 +94,22 @@ void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid, bool a
     }
     covered = state;  // point hazards below must not extend the chart's coverage
 
-    // COLREGs Rule 10: separation zones and lines are never entered; lane parts record the flow direction so the router
-    // can enforce it per move. Lane polygons are painted afterwards and only set direction, never open or shut water.
+    // COLREGs Rule 10 lane parts record their flow direction so the router can enforce it per move. Painted only onto the grid,
+    // never open or shut water. Zones and lines are marked after the water verdict below, since a zone cell must stay open.
+    std::vector<uint8_t> zone(state.size(), 0), caution(state.size(), 0);
     if (applyTss) {
-        for (const ChartFeature& f : chart.features) {
-            if (f.objectClass == "TSEZNE" && f.geometry == Geometry::Area) paintArea(f, kShut, grid, state);
-            if (f.objectClass == "TSELNE" && f.geometry == Geometry::Line) paintLine(f, grid, state);
-        }
         for (const ChartFeature& f : chart.features) {
             if (f.objectClass != "TSSLPT" || f.geometry != Geometry::Area || std::isnan(f.orient)) continue;
             forEachCellInArea(f, grid, [&](int row, int col) { grid.setLaneDirection({col, row}, static_cast<float>(f.orient)); });
+        }
+        for (const ChartFeature& f : chart.features) {
+            if (f.objectClass == "TSEZNE" && f.geometry == Geometry::Area) {
+                forEachCellInArea(f, grid, [&](int row, int col) { zone[static_cast<size_t>(row) * grid.cols() + col] = 1; });
+            } else if (f.objectClass == "TSELNE" && f.geometry == Geometry::Line) {
+                paintLine(f, grid, zone);
+            } else if (f.objectClass == "PRCARE" && f.geometry == Geometry::Area && cautionFactor > 1.0) {
+                forEachCellInArea(f, grid, [&](int row, int col) { caution[static_cast<size_t>(row) * grid.cols() + col] = 1; });
+            }
         }
     }
 
@@ -121,8 +127,11 @@ void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid, bool a
 
     for (int row = 0; row < grid.rows(); ++row) {
         for (int col = 0; col < grid.cols(); ++col) {
-            const uint8_t s = state[static_cast<size_t>(row) * grid.cols() + col];
+            const size_t i = static_cast<size_t>(row) * grid.cols() + col;
+            const uint8_t s = state[i];
             if (s != kUnknown) grid.setCost({col, row}, s == kOpen ? 1.0f : kBlocked);
+            if (s == kOpen && zone[i]) grid.setZone({col, row});  // water, but a separation zone: crossable only square on
+            if (s == kOpen && caution[i]) grid.setCost({col, row}, static_cast<float>(cautionFactor));
         }
     }
 }

@@ -34,7 +34,7 @@ struct ChartData {
 };
 
 /// Read routing-relevant objects from an S-57 ENC base cell (`.000`). Kept: COALNE, DEPARE, DEPCNT, DRGARE, FAIRWY,
-/// LNDARE, OBSTRN, SOUNDG (one point per sounding), TSELNE, TSSBND, TSSCRS, TSSLPT, TSSRON, TSEZNE, UWTROC, WRECKS. Update files
+/// LNDARE, OBSTRN, PRCARE (precautionary area), SOUNDG (one point per sounding), TSELNE, TSSBND, TSSCRS, TSSLPT, TSSRON, TSEZNE, UWTROC, WRECKS. Update files
 /// (`.001`, ...) are not applied. Pure C++ (ISO 8211 reader); no GDAL needed. On failure returns false, fills `error`.
 bool loadS57(const std::string& path, ChartData& out, std::string& error);
 

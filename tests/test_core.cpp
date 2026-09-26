@@ -438,6 +438,58 @@ static void testLaneMarginBowsAwayFromLaneEnd() {
     CHECK(nearestLaneM(g, bowed) > before + 1.5 * g.cellSizeM());  // clearly further off than before
 }
 
+static void testSeparationZoneCrossing() {
+    // Lane (cols 6-9, flow north) | zone (cols 10-12) | lane (cols 13-16, flow south), full height. A crossing vessel must be
+    // able to cross the whole scheme square on, and must never run along the zone.
+    CostGrid g = makeGrid(24, 24);
+    for (int r = 0; r < 24; ++r) {
+        for (int c = 6; c <= 9; ++c) g.setLaneDirection({c, r}, 0.0f);
+        for (int c = 13; c <= 16; ++c) g.setLaneDirection({c, r}, 180.0f);
+        for (int c = 10; c <= 12; ++c) g.setZone({c, r});
+    }
+    CHECK(std::isnan(g.zoneDirection({11, 5})));  // no direction until it is derived from the lanes
+    g.assignZoneDirections();
+    CHECK(g.zoneDirection({11, 5}) == 0.0f || g.zoneDirection({11, 5}) == 180.0f);  // parallel to the lanes beside it
+
+    auto across = findRoute(g, g.centre({1, 12}), g.centre({22, 12}));  // due east, straight over the scheme
+    CHECK(across.size() == 2);                                           // one straight, square crossing
+    auto along = findRoute(g, g.centre({11, 1}), g.centre({11, 22}));    // start and end inside the zone, along it
+    CHECK(along.empty() || along.size() > 2);                            // may not run along the zone
+    for (size_t i = 1; i < along.size(); ++i) {
+        const Cell a = g.cellAt(along[i - 1]), b = g.cellAt(along[i]);
+        if (a.col >= 10 && a.col <= 12 && b.col >= 10 && b.col <= 12) CHECK(a.col != b.col || a.row == b.row);
+    }
+
+    // A zone cell no lane touches has no direction, so it stays impassable.
+    CostGrid lone = makeGrid(10, 10);
+    for (int r = 0; r < 10; ++r) lone.setZone({5, r});
+    lone.assignZoneDirections();
+    CHECK(std::isnan(lone.zoneDirection({5, 5})));
+    CHECK(findRoute(lone, lone.centre({1, 5}), lone.centre({8, 5})).empty());
+
+    // The zone counts as a hazard for the lane margin, so a small craft's route keeps off it more than a large one's.
+    CostGrid m = makeGrid(24, 24);
+    for (int r = 0; r < 24; ++r) for (int c = 10; c <= 12; ++c) m.setZone({c, r});
+    m.applyLaneMargin(6 * m.cellSizeM(), 4.0);
+    CHECK(m.cost({9, 5}) > m.cost({3, 5}));
+    CHECK(m.cost({11, 5}) == 1.0f);  // the zone cells themselves are not re-priced
+}
+
+static void testPrecautionaryAreaCost() {
+    CostGrid g = makeGrid(12, 10);
+    g.fill(kBlocked);
+    ChartData d;
+    d.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.988, 30.0));
+    d.features.push_back(areaFeature("PRCARE", 45.990, 46.0, -123.996, -123.992));  // cols 4-7
+    stampChart(d, 2.5, g, true, 3.0);
+    CHECK(g.cost({5, 5}) == 3.0f);
+    CHECK(g.cost({1, 5}) == 1.0f);
+    CostGrid off = makeGrid(12, 10);
+    off.fill(kBlocked);
+    stampChart(d, 2.5, off, true, 1.0);  // no caution factor: ordinary water
+    CHECK(off.cost({5, 5}) == 1.0f);
+}
+
 static void testLargeVesselStaysInLane() {
     // Eastbound lane (rows 3-5); both ends are in open water beside it. A large vessel (cheap lane) should run along
     // the lane; the default vessel should not touch it.
@@ -483,15 +535,16 @@ static void testStampTss() {
     CHECK(g.laneDirection({1, 5}) == 346.0f && g.laneDirection({2, 5}) == 346.0f);
     CHECK(std::isnan(g.laneDirection({0, 5})) && std::isnan(g.laneDirection({3, 5})));
     CHECK(!g.blocked({1, 5}));  // a lane is open water: it only restricts direction
-    CHECK(g.blocked({4, 5}) && g.blocked({5, 5}));  // separation zone is never entered
-    CHECK(g.blocked({7, 5}));                        // separation line
-    CHECK(!g.blocked({6, 5}) && !g.blocked({8, 5}));
+    CHECK(g.isZone({4, 5}) && g.isZone({5, 5}));    // separation zone: water, but only crossable square on
+    CHECK(!g.blocked({4, 5}) && !g.blocked({5, 5}));
+    CHECK(g.isZone({7, 5}));                        // separation line is a zone too
+    CHECK(!g.isZone({6, 5}) && !g.isZone({8, 5}));
 
     CostGrid off = makeGrid(12, 10);
     off.fill(kBlocked);
     stampChart(d, 2.5, off, false);
     CHECK(std::isnan(off.laneDirection({1, 5})));  // Rule 10 off: no lanes recorded
-    CHECK(!off.blocked({4, 5}));                   // and the zone is ordinary water
+    CHECK(!off.isZone({4, 5}));                    // and the zone is ordinary water
 }
 
 static void testS57MissingFile() {
@@ -679,6 +732,8 @@ int main() {
     testLaneMarginBowsAwayFromLaneEnd();
     testNoTurnInsideLane();
     testSimplifyTolerance();
+    testSeparationZoneCrossing();
+    testPrecautionaryAreaCost();
     testLargeVesselStaysInLane();
     testStampTss();
     testS57MissingFile();

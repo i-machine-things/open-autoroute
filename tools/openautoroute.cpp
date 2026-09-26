@@ -83,7 +83,7 @@ bool snapToOpen(const CostGrid& g, Cell c, int radius, Cell& out) {
 void usage(const char* argv0) {
     std::fprintf(stderr,
                  "usage: %s --enc DIR (--from LAT,LON --to LAT,LON | --eval ROUTE.gpx) [--draft M=1.5] [--clearance M=1.0]\n"
-                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [--length-m L=12] [--under-sail] [--lane-use F] [--lane-margin-m M=150] [--simplify T=0.05] [--summary] [--map LAT,LON,CELLS] [-o route.gpx]\n", argv0);
+                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [--length-m L=12] [--under-sail] [--lane-use F] [--lane-margin-m M=1000] [--simplify T=0.05] [--summary] [--map LAT,LON,CELLS] [-o route.gpx]\n", argv0);
 }
 
 }  // namespace
@@ -93,7 +93,7 @@ int main(int argc, char** argv) {
     LatLon from{}, to{}, mapAt{};
     int mapRadius = 0;
     bool haveFrom = false, haveTo = false, applyTss = true, underSail = false;
-    double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0, lengthM = 12.0, laneUse = -1.0, simplify = 0.05, laneMarginM = 150.0;
+    double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0, lengthM = 12.0, laneUse = -1.0, simplify = 0.05, laneMarginM = 1000.0;
     bool summary = false;
     const auto startedAt = std::chrono::steady_clock::now();
     double snapStartM = 0.0, snapEndM = 0.0;
@@ -170,6 +170,12 @@ int main(int argc, char** argv) {
         return ba != bb ? ba < bb : a.first < b.first;
     });
     const double minDepth = draft + clearance;
+    // Vessel type decides how lanes are used (COLREGs Rule 10(j), see vessel.hpp). --lane-use overrides the factor.
+    const Vessel vessel{lengthM, underSail};
+    if (laneUse < 0.0) laneUse = defaultLaneUseFactor(vessel);
+    const bool avoidsLanes = laneUse > 1.0;
+    const double cautionFactor = avoidsLanes ? 3.0 : 1.5;  // precautionary areas: small craft avoid them, ships just take care
+
     int used = 0;
     for (const auto& [name, path] : cells) {
         ChartData d;
@@ -181,9 +187,18 @@ int main(int argc, char** argv) {
         Bounds b;
         for (const auto& f : d.features) for (const auto& r : f.parts) for (const auto& p : r.points) b.add(p);
         if (!b.overlaps(box)) continue;
-        stampChart(d, minDepth, grid, applyTss);
+        stampChart(d, minDepth, grid, applyTss, cautionFactor);
         std::printf("  chart %s\n", name.c_str());
         ++used;
+    }
+    grid.assignZoneDirections();  // separation zones take their direction from the lanes beside them
+    grid.setLaneUseFactor(laneUse);
+    // Leeway: a vessel that avoids lanes also keeps a wide berth from lanes, zones and the ends of lane parts, so it prefers
+    // open water to a narrow strip between a shore and a lane.
+    if (avoidsLanes) grid.applyLaneMargin(laneMarginM, 6.0);
+    if (applyTss) {
+        std::printf("vessel %.1f m%s: %s (lane-use factor %.2f)\n", lengthM, underSail ? ", under sail" : "",
+                    avoidsLanes ? "stays out of traffic lanes, crosses square-on" : "uses traffic lanes", laneUse);
     }
     // On any failure, still emit a summary line (found=0 and why) so a benchmark run records it and carries on.
     const auto fail = [&](const char* reason) {
@@ -195,15 +210,6 @@ int main(int argc, char** argv) {
         return fail("no_charts");
     }
 
-    // Vessel type decides how lanes are used (COLREGs Rule 10(j), see vessel.hpp). --lane-use overrides the factor.
-    const Vessel vessel{lengthM, underSail};
-    if (laneUse < 0.0) laneUse = defaultLaneUseFactor(vessel);
-    grid.setLaneUseFactor(laneUse);
-    if (laneUse > 1.0) grid.applyLaneMargin(laneMarginM, 4.0);  // small craft keep a margin off lanes and off the ends of lane parts
-    if (applyTss) {
-        std::printf("vessel %.1f m%s: %s (lane-use factor %.2f)\n", lengthM, underSail ? ", under sail" : "",
-                    laneUse > 1.0 ? "stays out of traffic lanes, crosses square-on" : "uses traffic lanes", laneUse);
-    }
     // Keep off the shore: penalise cells near blocked water (see CostGrid::applyShoreMargin). The clearance report uses the
     // distances from before the penalty changes any costs.
     const std::vector<float> shoreDist = grid.distanceToBlockedM();

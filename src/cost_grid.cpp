@@ -84,19 +84,45 @@ std::vector<float> CostGrid::distanceToBlockedM() const {
 
 std::vector<float> CostGrid::distanceToLaneM() const {
     std::vector<float> d(cost_.size(), 1e30f);
-    if (!lane_.empty()) {
-        for (size_t i = 0; i < d.size(); ++i) {
-            if (!std::isnan(lane_[i])) d[i] = 0.0f;
-        }
+    for (size_t i = 0; i < d.size(); ++i) {
+        if ((!lane_.empty() && !std::isnan(lane_[i])) || (!zone_.empty() && zone_[i])) d[i] = 0.0f;
     }
     return chamferM(std::move(d));
 }
 
+void CostGrid::assignZoneDirections() {
+    if (zone_.empty() || lane_.empty()) return;
+    // Breadth-first from every lane cell; the direction spreads only through zone cells, so each zone cell takes the direction
+    // of the lane it borders (zones run parallel to the lanes on either side of them).
+    std::vector<size_t> frontier;
+    for (size_t i = 0; i < lane_.size(); ++i) {
+        if (!std::isnan(lane_[i])) frontier.push_back(i);
+    }
+    std::vector<float> dir = lane_;  // direction carried by each frontier cell
+    while (!frontier.empty()) {
+        std::vector<size_t> next;
+        for (size_t i : frontier) {
+            const int c = static_cast<int>(i % cols_), r = static_cast<int>(i / cols_);
+            const int nc[4] = {c + 1, c - 1, c, c};
+            const int nr[4] = {r, r, r + 1, r - 1};
+            for (int k = 0; k < 4; ++k) {
+                if (nc[k] < 0 || nc[k] >= cols_ || nr[k] < 0 || nr[k] >= rows_) continue;
+                const size_t j = static_cast<size_t>(nr[k]) * cols_ + nc[k];
+                if (!zone_[j] || !std::isnan(zoneDir_[j])) continue;
+                zoneDir_[j] = dir[i];
+                dir[j] = dir[i];
+                next.push_back(j);
+            }
+        }
+        frontier.swap(next);
+    }
+}
+
 void CostGrid::applyLaneMargin(double rangeM, double weight) {
-    if (lane_.empty() || rangeM <= 0.0 || weight <= 0.0) return;
+    if ((lane_.empty() && zone_.empty()) || rangeM <= 0.0 || weight <= 0.0) return;
     const std::vector<float> dist = distanceToLaneM();
     for (size_t i = 0; i < cost_.size(); ++i) {
-        if (cost_[i] == kBlocked || !std::isnan(lane_[i]) || dist[i] >= rangeM) continue;
+        if (cost_[i] == kBlocked || dist[i] == 0.0f || dist[i] >= rangeM) continue;  // lane and zone cells themselves are not re-priced
         const double t = 1.0 - dist[i] / rangeM;
         cost_[i] *= static_cast<float>(1.0 + weight * t * t);
     }
