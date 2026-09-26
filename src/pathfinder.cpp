@@ -130,8 +130,13 @@ float laneFactor(double headingDeg, double laneDeg) {
     const double theta = angleDiffDeg(headingDeg, laneDeg);  // 0 = with the flow, 180 = against it
     if (theta <= 25.0) return 1.0f;
     if (theta >= 155.0) return kBlocked;
-    const double s = std::sin(theta * 3.14159265358979 / 180.0);
-    return static_cast<float>(2.0 + 30.0 * (1.0 - s));
+    const double kPiOver180 = 3.14159265358979 / 180.0;
+    const auto crossing = [&](double deg) { return 2.0 + 30.0 * (1.0 - std::sin(deg * kPiOver180)); };
+    // Joining or following a lane at a small angle is what Rule 10(b) asks for, so the cost rises smoothly from 1 at 25 degrees off the flow
+    // to the full crossing cost at 50, instead of jumping there. (A cliff at 25 made a heading of 25.4 degrees dearer than a near-square
+    // crossing, and a path following a 65 degree lane built itself from north-east steps and cheap south-east crossings: a sawtooth.)
+    if (theta < 50.0) return static_cast<float>(1.0 + (crossing(50.0) - 1.0) * (theta - 25.0) / 25.0);
+    return static_cast<float>(crossing(theta));
 }
 
 bool lineOfSight(const CostGrid& grid, Cell a, Cell b) {

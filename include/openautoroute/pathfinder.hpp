@@ -7,7 +7,8 @@
 namespace oar {
 
 /// Cost multiplier for travelling on `headingDeg` through a traffic-lane cell whose flow is `laneDeg` (COLREGs Rule 10):
-///   within 25 degrees of the flow: 1 (using the lane normally)
+///   within 25 degrees of the flow: 1 (using the lane normally); from 25 to 50 degrees the cost rises smoothly to the crossing cost, so
+///   joining or following a lane at a small angle is allowed but dear (no cliff at the tolerance)
 ///   within 25 degrees of against the flow: kBlocked (wrong-way travel is not allowed)
 ///   otherwise it is a crossing: 2 at exactly 90 degrees, rising steeply as the crossing gets more oblique (about 6 at
 ///   60 degrees to the flow, 17 at 30, 19 at 25), so the router spends as little time as possible in the lane and only
