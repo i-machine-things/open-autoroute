@@ -486,6 +486,145 @@ static void testMinimumLegLength() {
     CHECK(thinned.front().lat == tight.front().lat && thinned.back().lon == tight.back().lon);  // same endpoints
 }
 
+// Does the route cross the straight segment between the two marks of a gate? (Planar, fine over a few kilometres.)
+static bool routePassesGate(const std::vector<LatLon>& route, const Gate& g) {
+    const double cl = std::cos(deg2rad(g.port.lat)), k = 111320.0;
+    const double rx = (g.starboard.lon - g.port.lon) * cl * k, ry = (g.starboard.lat - g.port.lat) * k;
+    for (size_t i = 1; i < route.size(); ++i) {
+        const double ax = (route[i - 1].lon - g.port.lon) * cl * k, ay = (route[i - 1].lat - g.port.lat) * k;
+        const double bx = (route[i].lon - g.port.lon) * cl * k, by = (route[i].lat - g.port.lat) * k;
+        const double den = (bx - ax) * ry - (by - ay) * rx;
+        if (std::fabs(den) < 1e-9) continue;
+        const double u = (-ax * ry + ay * rx) / den;                                 // along the route leg
+        const double t = (ax * (by - ay) - ay * (bx - ax)) / (rx * (by - ay) - ry * (bx - ax));  // along the gate
+        if (u >= 0 && u <= 1 && t >= 0 && t <= 1) return true;
+    }
+    return false;
+}
+
+static void testChannelGates() {
+    // A dog-leg channel (east, a bend, then north) marked by red/green pairs every 4 cells. Cutting the corner leaves the
+    // channel; the gates must make the route follow it.
+    const double latStep = 0.001, lonStep = latStep / std::cos(deg2rad(46.0));  // square in metres
+    auto makeSquare = [&]() { return CostGrid(60, 50, {46.0, -124.0}, latStep, lonStep); };
+    CostGrid g = makeSquare();
+    std::vector<std::pair<double, double>> centre;  // channel centreline in (col, row) cells
+    for (int c = 4; c <= 24; c += 4) centre.push_back({static_cast<double>(c), 40.0});
+    for (int k = 1; k <= 4; ++k) centre.push_back({24.0 + 3.0 * k, 40.0 - 3.0 * k});
+    for (int r = 28; r >= 4; r -= 4) centre.push_back({36.0, static_cast<double>(r)});
+    std::vector<LateralMark> marks;
+    for (size_t i = 0; i < centre.size(); ++i) {
+        const auto a = centre[i == 0 ? 0 : i - 1], b = centre[i == 0 ? 1 : i];
+        double dx = b.first - a.first, dy = b.second - a.second;
+        const double len = std::hypot(dx, dy);
+        dx /= len; dy /= len;
+        // Travelling from west/south toward north/east: right-hand side is (dy, -dx) in (col, row) with rows running south.
+        const double rc = centre[i].first - dy * 3.0, rr = centre[i].second + dx * 3.0;  // right of the direction of travel
+        const double lc = centre[i].first + dy * 3.0, lr = centre[i].second - dx * 3.0;  // left
+        marks.push_back({g.centre({static_cast<int>(std::lround(lc)), static_cast<int>(std::lround(lr))}), 1});   // port-hand
+        marks.push_back({g.centre({static_cast<int>(std::lround(rc)), static_cast<int>(std::lround(rr))}), 2});   // starboard-hand
+    }
+    const LatLon start = g.centre({4, 40}), goal = g.centre({36, 4});
+
+    auto crossedCount = [&](const CostGrid& grid, const std::vector<Gate>& gates) {
+        const auto route = findRoute(grid, start, goal);
+        int n = 0;
+        for (const Gate& gate : gates) n += routePassesGate(route, gate);
+        return n;
+    };
+    CostGrid plain = makeSquare();
+    CostGrid gated = makeSquare();
+    const std::vector<Gate> gates = applyChannelGates(gated, marks, 1000.0, 8.0, 1.5, 2500.0);
+    CHECK(gates.size() >= centre.size() - 2);  // essentially every pair became a gate
+    const int without = crossedCount(plain, gates), with = crossedCount(gated, gates);
+    CHECK(without < static_cast<int>(gates.size()));  // control: the straight corner cut misses gates
+    CHECK(with > without);                            // the gates pull the route into the channel
+    CHECK(with >= static_cast<int>(gates.size()) - 1);  // and it passes between (nearly) every pair
+
+    // Beyond a mark is heavily penalised; between the marks the base cost is untouched (the side preference is separate).
+    CHECK(gated.cost({12, 30}) >= 8.0f - 1e-3f || gated.cost({12, 50}) >= 8.0f - 1e-3f);
+    CHECK(gated.cost({12, 40}) == 1.0f);
+
+    // Marks with no partner across the channel (only one side marked) make no gate and change nothing.
+    CostGrid lone = makeSquare();
+    std::vector<LateralMark> oneSided{{lone.centre({10, 20}), 1}, {lone.centre({20, 20}), 1}};
+    CHECK(applyChannelGates(lone, oneSided).empty());
+    CHECK(lone.cost({15, 20}) == 1.0f);
+    // Preferred-channel and unknown categories are ignored when collecting marks.
+    ChartData d;
+    ChartFeature f;
+    f.objectClass = "BOYLAT"; f.geometry = Geometry::Point; f.catlam = 3.0; f.parts.push_back({{{46.0, -124.0}}, false});
+    d.features.push_back(f);
+    f.catlam = 2.0;
+    d.features.push_back(f);
+    std::vector<LateralMark> got;
+    collectLateralMarks(d, got);
+    CHECK(got.size() == 1 && got[0].category == 2);
+}
+
+static void testKeepToStarboardSide() {
+    // A straight east-west buoyed channel (rows 17-23), port-hand marks on the north side and starboard-hand marks on the south, so
+    // the direction of buoyage is east. Going east the vessel's starboard side is the south half; going west it is the north half.
+    const double latStep = 0.001, lonStep = latStep / std::cos(deg2rad(46.0));
+    auto make = [&]() { return CostGrid(70, 40, {46.0, -124.0}, latStep, lonStep); };
+    CostGrid g = make();
+    std::vector<LateralMark> marks;
+    for (int c = 4; c < 66; c += 6) {
+        marks.push_back({g.centre({c, 17}), 1});  // port-hand, north side
+        marks.push_back({g.centre({c, 23}), 2});  // starboard-hand, south side
+    }
+    const auto gates = applyChannelGates(g, marks, 1000.0, 8.0, 3.0, 2500.0);
+    CHECK(gates.size() >= 8);
+    auto meanRow = [&](const std::vector<LatLon>& route) {
+        double sum = 0; int n = 0;
+        for (size_t i = 1; i < route.size(); ++i) {
+            for (int k = 0; k <= 40; ++k) {
+                const double t = k / 40.0;
+                sum += g.cellAt({route[i - 1].lat + t * (route[i].lat - route[i - 1].lat), route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)}).row;
+                ++n;
+            }
+        }
+        return sum / n;
+    };
+    const auto east = findRoute(g, g.centre({6, 20}), g.centre({62, 20}));
+    const auto west = findRoute(g, g.centre({62, 20}), g.centre({6, 20}));
+    CHECK(!east.empty() && !west.empty());
+    CHECK(meanRow(east) > 20.5);  // eastbound keeps to the south (right) side
+    CHECK(meanRow(west) < 19.5);  // westbound keeps to the north (right) side
+    CHECK(g.gateSideFactor({30, 21}, 90.0) != g.gateSideFactor({30, 21}, 270.0));  // off-centre, so it depends on the direction of travel
+    CHECK(g.gateSideFactor({30, 20}, 0.0) == 1.0f);   // crossing the channel: no side to keep to
+    CHECK(g.gateSideFactor({30, 3}, 90.0) == 1.0f);   // outside any gate corridor
+}
+
+static void testChannelPreference() {
+    // An L-shaped charted channel. Cutting the corner leaves it; with the preference the route stays inside the dashed limits.
+    CostGrid g = makeGrid(40, 40);
+    for (int r = 0; r < 40; ++r) {
+        for (int c = 0; c < 40; ++c) {
+            if ((r >= 30 && r <= 34) || (c >= 30 && c <= 34)) g.setChannel({c, r});
+        }
+    }
+    const LatLon a = g.centre({2, 32}), b = g.centre({32, 2});
+    auto cellsOutside = [&](const std::vector<LatLon>& route) {
+        int out = 0;
+        for (size_t i = 1; i < route.size(); ++i) {
+            for (int k = 0; k <= 60; ++k) {
+                const double t = k / 60.0;
+                out += !g.isChannel(g.cellAt({route[i - 1].lat + t * (route[i].lat - route[i - 1].lat), route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)}));
+            }
+        }
+        return out;
+    };
+    CHECK(cellsOutside(findRoute(g, a, b)) > 20);  // control: without the preference the diagonal cuts the corner
+    g.applyChannelPreference(10 * g.cellSizeM(), 8.0);
+    CHECK(g.cost({10, 26}) == 8.0f);               // open water beside the channel now costs more
+    CHECK(g.cost({10, 32}) == 1.0f);               // inside the channel is untouched
+    CHECK(cellsOutside(findRoute(g, a, b)) < 10);  // the route follows the channel round the bend
+    CostGrid none = makeGrid(10, 10);
+    none.applyChannelPreference(5 * none.cellSizeM(), 8.0);  // no channels charted: a no-op
+    CHECK(none.cost({3, 3}) == 1.0f);
+}
+
 static void testWaterBodies() {
     // A wall splits a 10x6 basin in two; a diagonal pair of blocked cells must not let water leak through the corner.
     CostGrid g = makeGrid(10, 6);
@@ -798,6 +937,9 @@ int main() {
     testNoTurnInsideLane();
     testSimplifyTolerance();
     testMinimumLegLength();
+    testChannelGates();
+    testKeepToStarboardSide();
+    testChannelPreference();
     testWaterBodies();
     testSeparationZoneCrossing();
     testPrecautionaryAreaCost();

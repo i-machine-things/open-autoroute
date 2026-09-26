@@ -27,6 +27,7 @@ struct ChartFeature {
     double valdco = std::numeric_limits<double>::quiet_NaN();  // DEPCNT: contour depth (m)
     double valsou = std::numeric_limits<double>::quiet_NaN();  // OBSTRN/WRECKS/UWTROC/SOUNDG: sounding (m)
     double orient = std::numeric_limits<double>::quiet_NaN();  // TSSLPT/FAIRWY: orientation, degrees true
+    double catlam = std::numeric_limits<double>::quiet_NaN();  // BOYLAT/BCNLAT: 1 port-hand, 2 starboard-hand, 3/4 preferred channel
 };
 
 struct ChartData {
@@ -34,7 +35,7 @@ struct ChartData {
 };
 
 /// Read routing-relevant objects from an S-57 ENC base cell (`.000`). Kept: COALNE, DEPARE, DEPCNT, DRGARE, FAIRWY,
-/// LNDARE, OBSTRN, PRCARE (precautionary area), SOUNDG (one point per sounding), TSELNE, TSSBND, TSSCRS, TSSLPT, TSSRON, TSEZNE, UWTROC, WRECKS. Update files
+/// LNDARE, OBSTRN, PRCARE (precautionary area), BOYLAT/BCNLAT (lateral marks), SOUNDG (one point per sounding), TSELNE, TSSBND, TSSCRS, TSSLPT, TSSRON, TSEZNE, UWTROC, WRECKS. Update files
 /// (`.001`, ...) are not applied. Pure C++ (ISO 8211 reader); no GDAL needed. On failure returns false, fills `error`.
 bool loadS57(const std::string& path, ChartData& out, std::string& error);
 

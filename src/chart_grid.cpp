@@ -96,7 +96,12 @@ void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid, bool a
 
     // COLREGs Rule 10 lane parts record their flow direction so the router can enforce it per move. Painted only onto the grid,
     // never open or shut water. Zones and lines are marked after the water verdict below, since a zone cell must stay open.
-    std::vector<uint8_t> zone(state.size(), 0), caution(state.size(), 0);
+    std::vector<uint8_t> zone(state.size(), 0), caution(state.size(), 0), channel(state.size(), 0);
+    for (const ChartFeature& f : chart.features) {
+        if ((f.objectClass == "FAIRWY" || f.objectClass == "DRGARE") && f.geometry == Geometry::Area) {
+            forEachCellInArea(f, grid, [&](int row, int col) { channel[static_cast<size_t>(row) * grid.cols() + col] = 1; });
+        }
+    }
     if (applyTss) {
         for (const ChartFeature& f : chart.features) {
             if (f.objectClass != "TSSLPT" || f.geometry != Geometry::Area || std::isnan(f.orient)) continue;
@@ -130,6 +135,7 @@ void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid, bool a
             const size_t i = static_cast<size_t>(row) * grid.cols() + col;
             const uint8_t s = state[i];
             if (s != kUnknown) grid.setCost({col, row}, s == kOpen ? 1.0f : kBlocked);
+            if (s == kOpen && channel[i]) grid.setChannel({col, row});
             if (s == kOpen && zone[i]) grid.setZone({col, row});  // water, but a separation zone: crossable only square on
             if (s == kOpen && caution[i]) {
                 grid.setCost({col, row}, static_cast<float>(cautionFactor));
@@ -137,6 +143,105 @@ void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid, bool a
             }
         }
     }
+}
+
+void collectLateralMarks(const ChartData& chart, std::vector<LateralMark>& out) {
+    for (const ChartFeature& f : chart.features) {
+        if ((f.objectClass != "BOYLAT" && f.objectClass != "BCNLAT") || f.geometry != Geometry::Point) continue;
+        if (f.parts.empty() || f.parts[0].points.empty() || std::isnan(f.catlam)) continue;
+        const int cat = static_cast<int>(f.catlam);
+        if (cat == 1 || cat == 2) out.push_back({f.parts[0].points[0], cat});
+    }
+}
+
+std::vector<Gate> applyChannelGates(CostGrid& grid, const std::vector<LateralMark>& marks, double maxGateM,
+                                    double outsidePenalty, double sideWeight, double lateralRangeM) {
+    // Work in metres on a local plane anchored at the grid's north-west corner (cells are square in metres there).
+    const LatLon origin = grid.centre({0, 0});
+    const double kx = std::cos(deg2rad(origin.lat)) * 111320.0, ky = 111320.0;
+    struct P { double x, y; LatLon ll; };
+    auto toP = [&](LatLon ll) { return P{(ll.lon - origin.lon) * kx, (ll.lat - origin.lat) * ky, ll}; };
+    const double w = grid.cols() * grid.cellSizeM(), h = grid.rows() * grid.cellSizeM();
+
+    // The same mark appears on charts of several scales; keep one per position and category.
+    std::vector<P> port, star;
+    for (const LateralMark& m : marks) {
+        const P p = toP(m.at);
+        if (p.x < -maxGateM || p.x > w + maxGateM || p.y > maxGateM || p.y < -h - maxGateM) continue;  // rows run south
+        auto& list = m.category == 1 ? port : star;
+        if (std::none_of(list.begin(), list.end(), [&](const P& q) { return std::hypot(q.x - p.x, q.y - p.y) < 15.0; })) list.push_back(p);
+    }
+    auto nearestIdx = [](const std::vector<P>& list, const P& p, double limit) {
+        int best = -1;
+        double bd = limit;
+        for (size_t i = 0; i < list.size(); ++i) {
+            const double d = std::hypot(list[i].x - p.x, list[i].y - p.y);
+            if (d < bd) { bd = d; best = static_cast<int>(i); }
+        }
+        return best;
+    };
+
+    struct G { P a, b; };  // a = port-hand mark, b = starboard-hand mark
+    std::vector<G> gates;
+    for (size_t i = 0; i < port.size(); ++i) {
+        const int j = nearestIdx(star, port[i], maxGateM);
+        if (j >= 0 && nearestIdx(port, star[j], maxGateM) == static_cast<int>(i)) gates.push_back({port[i], star[j]});  // mutual nearest
+    }
+    std::vector<Gate> out;
+    for (const G& g : gates) out.push_back({g.a.ll, g.b.ll});
+    if (gates.empty()) return out;
+    grid.setGateSideWeight(sideWeight);
+
+    // Each cell belongs to the gate whose along-channel position is nearest, out to that gate's reach (half the distance to the
+    // next gate, so neighbours tile). t is the cell's position across that gate; beyond a mark it is outside the channel.
+    const size_t n = static_cast<size_t>(grid.cols()) * grid.rows();
+    std::vector<float> bestAlong(n, 1e30f), tOf(n, std::numeric_limits<float>::quiet_NaN()), axisOf(n, 0.0f);
+    for (size_t gi = 0; gi < gates.size(); ++gi) {
+        const G& g = gates[gi];
+        const double mx = (g.a.x + g.b.x) / 2, my = (g.a.y + g.b.y) / 2;
+        double dnear = 1e30;
+        for (size_t k = 0; k < gates.size(); ++k) {
+            if (k == gi) continue;
+            dnear = std::min(dnear, std::hypot((gates[k].a.x + gates[k].b.x) / 2 - mx, (gates[k].a.y + gates[k].b.y) / 2 - my));
+        }
+        const double reach = std::clamp(0.5 * dnear, 100.0, 700.0);
+        const double ax = g.b.x - g.a.x, ay = g.b.y - g.a.y, width = std::hypot(ax, ay);
+        if (width < 1.0) continue;
+        const double ux = ax / width, uy = ay / width;   // from the port mark to the starboard mark
+        const double cx = -uy, cy = ux;                  // along the channel
+        // Direction of buoyage: a vessel with the starboard mark on its right travels 90 degrees anticlockwise from port->starboard.
+        double axis = std::atan2(ux, uy) * 180.0 / 3.14159265358979 - 90.0;
+        if (axis < 0) axis += 360.0;
+        const double radius = std::max(reach, lateralRangeM) + width;
+        const Cell lo = grid.cellAt(LatLon{mx / kx * 0 + origin.lat + (my + radius) / ky, origin.lon + (mx - radius) / kx});
+        const Cell hi = grid.cellAt(LatLon{origin.lat + (my - radius) / ky, origin.lon + (mx + radius) / kx});
+        for (int row = std::max(0, std::min(lo.row, hi.row)); row <= std::min(grid.rows() - 1, std::max(lo.row, hi.row)); ++row) {
+            for (int col = std::max(0, std::min(lo.col, hi.col)); col <= std::min(grid.cols() - 1, std::max(lo.col, hi.col)); ++col) {
+                if (grid.blocked({col, row})) continue;
+                const P c = toP(grid.centre({col, row}));
+                const double along = (c.x - mx) * cx + (c.y - my) * cy;
+                if (std::fabs(along) > reach) continue;
+                const double t = ((c.x - g.a.x) * ux + (c.y - g.a.y) * uy) / width;  // 0 at the port mark, 1 at the starboard mark
+                if (t < -lateralRangeM / width || t > 1.0 + lateralRangeM / width) continue;
+                const size_t i = static_cast<size_t>(row) * grid.cols() + col;
+                if (std::fabs(along) < bestAlong[i]) {
+                    bestAlong[i] = static_cast<float>(std::fabs(along));
+                    tOf[i] = static_cast<float>(t);
+                    axisOf[i] = static_cast<float>(axis);
+                }
+            }
+        }
+    }
+    for (int row = 0; row < grid.rows(); ++row) {
+        for (int col = 0; col < grid.cols(); ++col) {
+            const size_t i = static_cast<size_t>(row) * grid.cols() + col;
+            const float t = tOf[i];
+            if (std::isnan(t) || grid.blocked({col, row})) continue;
+            if (t < -0.05f || t > 1.05f) grid.setCost({col, row}, grid.cost({col, row}) * static_cast<float>(outsidePenalty));  // outside the marks
+            else grid.setGateCell({col, row}, t, axisOf[i]);                                                                 // between them
+        }
+    }
+    return out;
 }
 
 }  // namespace oar

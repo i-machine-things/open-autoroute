@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run every route in benchmarks/routes.csv through the router and print one scored table.
-#   usage: benchmarks/run.sh ENC_DIR [BIN=build/openautoroute] [PARALLEL=4] [OUT=benchmarks/out]
+#   usage: [OAR_ARGS="--no-marks ..."] benchmarks/run.sh ENC_DIR [BIN=build/openautoroute] [PARALLEL=4] [OUT=benchmarks/out]
+# OAR_ARGS adds extra flags to every route, e.g. to switch a feature off and compare with compare.sh.
 # Flags in the last column: N no route found, S start/end snapped >1 km to reach safe water, B blocked-water stretches,
 # W wrong-way lane travel, P a small craft (under 20 m) passes through a precautionary area, X a lane crossing >30 degrees from square, D route more than 1.6x the straight line.
 set -euo pipefail
@@ -14,11 +15,12 @@ rm -f "$OUT"/*.txt "$OUT"/*.gpx
 
 run_one() {
   IFS=, read -r name flat flon tlat tlon len cell _notes <<<"$1"
-  "$BIN" --enc "$ENC" --from "$flat,$flon" --to "$tlat,$tlon" --length-m "$len" --cell-m "$cell" --summary \
+  # shellcheck disable=SC2086
+  "$BIN" ${OAR_ARGS:-} --enc "$ENC" --from "$flat,$flon" --to "$tlat,$tlon" --length-m "$len" --cell-m "$cell" --summary \
       -o "$OUT/$name.gpx" >"$OUT/$name.txt" 2>&1 || true
 }
 export -f run_one
-export ENC BIN OUT
+export ENC BIN OUT OAR_ARGS
 
 grep -v '^#' "$HERE/routes.csv" | grep -v '^$' | xargs -P "$PAR" -I{} bash -c 'run_one "$1"' _ {}
 

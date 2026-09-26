@@ -75,6 +75,35 @@ public:
     }
     bool isCaution(Cell c) const { return !caution_.empty() && caution_[index(c)] != 0; }
 
+    /// Cells inside a charted channel (fairway or dredged area, the dashed limits on a chart). applyChannelPreference() makes
+    /// leaving them costly so a route stays inside the marked channel.
+    void setChannel(Cell c) {
+        if (channel_.empty()) channel_.assign(cost_.size(), 0);
+        channel_[index(c)] = 1;
+    }
+    bool isChannel(Cell c) const { return !channel_.empty() && channel_[index(c)] != 0; }
+    /// Distance in metres from each cell centre to the nearest channel cell (0 inside one; very large without channels).
+    std::vector<float> distanceToChannelM() const;
+    /// Multiply the cost of open cells that are outside every charted channel but within `rangeM` of one by `penalty`, so a
+    /// route follows the channel instead of running alongside it. Channel cells and cells far from any channel are untouched.
+    void applyChannelPreference(double rangeM, double penalty);
+
+    /// Position across a buoyed channel for a cell near a red/green gate: t runs 0 at the port-hand mark to 1 at the starboard-hand
+    /// mark, and `axisDeg` is the direction of buoyage (the way a vessel "returning from sea" travels). Used by gateSideFactor().
+    void setGateCell(Cell c, float t, float axisDeg) {
+        if (gateT_.empty()) {
+            gateT_.assign(cost_.size(), std::numeric_limits<float>::quiet_NaN());
+            gateAxis_.assign(cost_.size(), 0.0f);
+        }
+        gateT_[index(c)] = t;
+        gateAxis_[index(c)] = axisDeg;
+    }
+    void setGateSideWeight(double w) { gateSideWeight_ = w < 0.0 ? 0.0f : static_cast<float>(w); }
+    /// Rule 9: in a narrow channel keep to the starboard (right-hand) side. Cost multiplier (>= 1) for a move on `headingDeg` through
+    /// `c`: 1 outside gate corridors, otherwise growing with distance from the preferred side (t = 0.7 going with the direction
+    /// of buoyage, t = 0.3 going against it, where the vessel's own starboard side lies). Moves across the channel are not charged.
+    float gateSideFactor(Cell c, double headingDeg) const;
+
     LatLon centre(Cell c) const;
     /// Cell containing `p`; the result may be out of bounds, check with inBounds().
     Cell cellAt(LatLon p) const;
@@ -127,6 +156,10 @@ private:
     std::vector<float> marginWeight_;  // empty until applyLaneMargin sets it
     std::vector<float> marginAxis_;    // degrees, axis of the nearest lane
     std::vector<uint8_t> caution_;  // empty until a precautionary-area cell is set
+    std::vector<uint8_t> channel_;  // empty until a channel cell is set
+    std::vector<float> gateT_;      // NaN outside gate corridors; empty until a gate is applied
+    std::vector<float> gateAxis_;
+    float gateSideWeight_ = 0.0f;
     std::vector<uint8_t> zone_;   // empty until a zone cell is set
     std::vector<float> zoneDir_;
     float laneUseFactor_ = 1.0f;

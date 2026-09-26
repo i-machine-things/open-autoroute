@@ -79,7 +79,9 @@ float moveFactor(const CostGrid& grid, Cell a, Cell b, double headingDeg) {
     if (fa == kBlocked || fb == kBlocked) return kBlocked;
     const float f = (fa > 1.0f || fb > 1.0f) ? std::max(fa, fb) : std::min(fa, fb);
     // Leeway margin next to lanes: charged by direction, so it discourages skimming a lane but not approaching to cross it.
-    return f * std::max(grid.laneMarginFactor(a, headingDeg), grid.laneMarginFactor(b, headingDeg));
+    // Rule 9: keep to the starboard side of a buoyed channel (moves across it are not charged).
+    const float side = std::max(grid.gateSideFactor(a, headingDeg), grid.gateSideFactor(b, headingDeg));
+    return f * std::max(grid.laneMarginFactor(a, headingDeg), grid.laneMarginFactor(b, headingDeg)) * side;
 }
 
 // Heading in degrees true of a move from a to b. Cells are square in metres and rows run south.

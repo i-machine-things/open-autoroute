@@ -102,6 +102,8 @@ uint64_t keyOf(uint8_t rcnm, uint32_t rcid) { return (static_cast<uint64_t>(rcnm
 // Codes verified against OpenCPN's s57objectclasses.csv (the IHO S-57 object catalogue).
 const char* classOf(uint16_t objl) {
     switch (objl) {
+        case 7: return "BCNLAT";
+        case 17: return "BOYLAT";
         case 30: return "COALNE";
         case 42: return "DEPARE";
         case 43: return "DEPCNT";
@@ -123,7 +125,7 @@ const char* classOf(uint16_t objl) {
     }
 }
 
-constexpr uint16_t kAttrDrval1 = 87, kAttrDrval2 = 88, kAttrOrient = 117, kAttrValdco = 174, kAttrValsou = 179;
+constexpr uint16_t kAttrCatlam = 36, kAttrDrval1 = 87, kAttrDrval2 = 88, kAttrOrient = 117, kAttrValdco = 174, kAttrValsou = 179;
 
 void parseFeature(const Record& r, FeatRec& f) {
     if (const Field* frid = r.find("FRID"); frid && frid->size >= 9) {
@@ -260,6 +262,7 @@ bool loadS57Buffer(const std::vector<uint8_t>& bytes, ChartData& out, std::strin
         cf.valdco = attrNum(f, kAttrValdco);
         cf.valsou = attrNum(f, kAttrValsou);
         cf.orient = attrNum(f, kAttrOrient);
+        cf.catlam = attrNum(f, kAttrCatlam);
 
         if (f.prim == 1) {  // point: isolated node(s); SOUNDG expands to one point per sounding
             cf.geometry = Geometry::Point;

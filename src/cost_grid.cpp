@@ -166,6 +166,36 @@ float CostGrid::laneMarginFactor(Cell c, double headingDeg) const {
     return static_cast<float>(1.0 + marginWeight_[i] * along);
 }
 
+std::vector<float> CostGrid::distanceToChannelM() const {
+    std::vector<float> d(cost_.size(), 1e30f);
+    for (size_t i = 0; i < d.size(); ++i) {
+        if (!channel_.empty() && channel_[i]) d[i] = 0.0f;
+    }
+    return chamferM(std::move(d));
+}
+
+void CostGrid::applyChannelPreference(double rangeM, double penalty) {
+    if (channel_.empty() || rangeM <= 0.0 || penalty <= 1.0) return;
+    const std::vector<float> dist = distanceToChannelM();
+    for (size_t i = 0; i < cost_.size(); ++i) {
+        if (cost_[i] == kBlocked || channel_[i] || dist[i] >= rangeM) continue;
+        cost_[i] *= static_cast<float>(penalty);
+    }
+}
+
+float CostGrid::gateSideFactor(Cell c, double headingDeg) const {
+    if (gateT_.empty() || gateSideWeight_ <= 0.0f) return 1.0f;
+    const size_t i = index(c);
+    const float t = gateT_[i];
+    if (std::isnan(t)) return 1.0f;
+    const double diff = (headingDeg - gateAxis_[i]) * 3.14159265358979 / 180.0;
+    const double along = std::cos(diff);                       // 1 going with the buoyage direction, -1 against it
+    if (std::fabs(along) < 0.5) return 1.0f;                   // crossing the channel: no side to keep to
+    const double preferred = along > 0 ? 0.7 : 0.3;            // the vessel's own starboard side of the channel
+    const double off = t - preferred;
+    return static_cast<float>(1.0 + gateSideWeight_ * 4.0 * off * off);
+}
+
 void CostGrid::applyShoreMargin(double rangeM, double weight) {
     if (rangeM <= 0.0 || weight <= 0.0) return;
     const std::vector<float> dist = distanceToBlockedM();
