@@ -2,7 +2,7 @@
 # Run every route in benchmarks/routes.csv through the router and print one scored table.
 #   usage: benchmarks/run.sh ENC_DIR [BIN=build/openautoroute] [PARALLEL=4] [OUT=benchmarks/out]
 # Flags in the last column: N no route found, S start/end snapped >1 km to reach safe water, B blocked-water stretches,
-# W wrong-way lane travel, P route passes through a precautionary area, X a lane crossing >30 degrees from square, D route more than 1.6x the straight line.
+# W wrong-way lane travel, P a small craft (under 20 m) passes through a precautionary area, X a lane crossing >30 degrees from square, D route more than 1.6x the straight line.
 set -euo pipefail
 ENC=${1:?usage: run.sh ENC_DIR [BIN] [PARALLEL] [OUT]}
 BIN=${2:-build/openautoroute}
@@ -32,7 +32,7 @@ grep -v '^#' "$HERE/routes.csv" | grep -v '^$' | while IFS=, read -r name _ _ _ 
       ratio = v["straight_nm"] > 0 ? v["nm"] / v["straight_nm"] : 0
       snap = v["snap_start_m"] > v["snap_end_m"] ? v["snap_start_m"] : v["snap_end_m"]
       f = ""
-      if (snap > 1000) f = f "S"; if (v["blocked_m"] > 0) f = f "B"; if (v["wrong_way_m"] > 0) f = f "W"; if (v["caution_m"] > 0) f = f "P"
+      if (snap > 1000) f = f "S"; if (v["blocked_m"] > 0) f = f "B"; if (v["wrong_way_m"] > 0) f = f "W"; if (v["caution_m"] > 0 && len < 20) f = f "P"
       if (v["worst_off_deg"] > 30) f = f "X"; if (ratio > 1.6) f = f "D"
       printf "%-34s %5s %7.1f %6.2f %4d %6d %6d %6d %6d %5d %4d %4d %6.1f %s\n", name, len, v["nm"], ratio, v["waypoints"], \
              v["closest_m"], v["blocked_m"], v["wrong_way_m"], v["caution_m"], v["crossings"], v["worst_off_deg"], snap, v["seconds"], f }' <<<"$line"
