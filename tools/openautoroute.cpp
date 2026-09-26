@@ -82,14 +82,15 @@ bool snapToOpen(const CostGrid& g, Cell c, int radius, Cell& out) {
 void usage(const char* argv0) {
     std::fprintf(stderr,
                  "usage: %s --enc DIR (--from LAT,LON --to LAT,LON | --eval ROUTE.gpx) [--draft M=1.5] [--clearance M=1.0]\n"
-                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [--length-m L=12] [--under-sail] [--lane-use F] [-o route.gpx]\n", argv0);
+                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [--length-m L=12] [--under-sail] [--lane-use F] [--map LAT,LON,CELLS] [-o route.gpx]\n", argv0);
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
     std::string encDir, evalPath, outPath = "route.gpx";
-    LatLon from{}, to{};
+    LatLon from{}, to{}, mapAt{};
+    int mapRadius = 0;
     bool haveFrom = false, haveTo = false, applyTss = true, underSail = false;
     double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0, lengthM = 12.0, laneUse = -1.0;
     for (int i = 1; i < argc; ++i) {
@@ -102,6 +103,12 @@ int main(int argc, char** argv) {
         else if (a == "--draft" && hasVal) draft = std::atof(argv[++i]);
         else if (a == "--clearance" && hasVal) clearance = std::atof(argv[++i]);
         else if (a == "--cell-m" && hasVal) cellM = std::atof(argv[++i]);
+        else if (a == "--map" && hasVal) {  // debug: ASCII picture of the grid around a point, route overlaid
+            const std::string v = argv[++i];
+            const size_t c2 = v.rfind(',');
+            if (c2 == std::string::npos || !parseLatLon(v.substr(0, c2).c_str(), mapAt)) { usage(argv[0]); return 2; }
+            mapRadius = std::atoi(v.c_str() + c2 + 1);
+        }
         else if (a == "--no-tss") applyTss = false;
         else if (a == "--under-sail" || a == "--sail") underSail = true;  // engine off, sails doing the work
         else if (a == "--length-m" && hasVal) lengthM = std::atof(argv[++i]);
@@ -214,6 +221,43 @@ int main(int argc, char** argv) {
     for (size_t i = 1; i < route.size(); ++i) nm += haversineM(route[i - 1], route[i]) / 1852.0;
     // Clearance report: sample each leg about every cell and look up the distance to blocked water. Samples within
     // 1 km of either end are skipped, since a start in a marina or a berth is at the shore by definition.
+    if (mapRadius > 0) {
+        // '#' blocked, '.' open, 'n/e/s/w' lane by flow direction (lower case), '*' route (upper case where over a lane)
+        std::vector<std::string> canvas;
+        const Cell mc = grid.cellAt(mapAt);
+        for (int r = mc.row - mapRadius; r <= mc.row + mapRadius; ++r) {
+            std::string line;
+            for (int c = mc.col - mapRadius; c <= mc.col + mapRadius; ++c) {
+                const Cell cell{c, r};
+                char ch = ' ';
+                if (grid.inBounds(cell)) {
+                    const float lane = grid.laneDirection(cell);
+                    if (grid.blocked(cell)) ch = '#';
+                    else if (!std::isnan(lane)) ch = "nesw"[static_cast<int>(std::floor((lane + 45.0f) / 90.0f)) & 3];
+                    else ch = '.';
+                }
+                line += ch;
+            }
+            canvas.push_back(line);
+        }
+        for (size_t i = 1; i < route.size(); ++i) {
+            const double leg = haversineM(route[i - 1], route[i]);
+            const int steps = std::max(1, static_cast<int>(leg / (grid.cellSizeM() / 2)));
+            for (int k = 0; k <= steps; ++k) {
+                const double t = static_cast<double>(k) / steps;
+                const Cell c = grid.cellAt({route[i - 1].lat + t * (route[i].lat - route[i - 1].lat),
+                                            route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)});
+                const int y = c.row - (mc.row - mapRadius), x = c.col - (mc.col - mapRadius);
+                if (y >= 0 && y < static_cast<int>(canvas.size()) && x >= 0 && x < static_cast<int>(canvas[y].size())) {
+                    char& ch = canvas[y][x];
+                    ch = ch == 'n' || ch == 'e' || ch == 's' || ch == 'w' ? static_cast<char>(ch - 32) : '*';
+                }
+            }
+        }
+        std::printf("map: %d cells (%.0f m each) around %.4f,%.4f, north up. # blocked, . open, n/e/s/w lane flow, "
+                    "* route, N/E/S/W route inside a lane\n", 2 * mapRadius + 1, grid.cellSizeM(), mapAt.lat, mapAt.lon);
+        for (const auto& line : canvas) std::printf("%s\n", line.c_str());
+    }
     std::vector<double> clearances;
     double travelled = 0.0, unsafeM = 0.0;
     struct Spot { LatLon at; double alongM; };
