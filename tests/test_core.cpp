@@ -112,6 +112,8 @@ static void testShoreMargin() {
     auto route = findRoute(g, g.centre({0, 1}), g.centre({19, 1}));
     for (const LatLon& p : route) deepest = std::max(deepest, g.cellAt(p).row);
     CHECK(deepest >= 4);  // the route swings out from the shore mid-way
+}
+
 static void testInputValidation() {
     CostGrid g = makeGrid(3, 1);
     const std::vector<float> dist{0.0f, 10.0f, 20.0f};
