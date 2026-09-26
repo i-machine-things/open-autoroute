@@ -77,7 +77,7 @@ float laneFactor(double headingDeg, double laneDeg) {
     if (theta <= 25.0) return 1.0f;
     if (theta >= 155.0) return kBlocked;
     const double s = std::sin(theta * 3.14159265358979 / 180.0);
-    return static_cast<float>(3.0 + 6.0 * (1.0 - s));
+    return static_cast<float>(3.0 + 30.0 * (1.0 - s));
 }
 
 bool lineOfSight(const CostGrid& grid, Cell a, Cell b) {

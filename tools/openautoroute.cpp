@@ -250,7 +250,8 @@ int main(int argc, char** argv) {
                 const int y = c.row - (mc.row - mapRadius), x = c.col - (mc.col - mapRadius);
                 if (y >= 0 && y < static_cast<int>(canvas.size()) && x >= 0 && x < static_cast<int>(canvas[y].size())) {
                     char& ch = canvas[y][x];
-                    ch = ch == 'n' || ch == 'e' || ch == 's' || ch == 'w' ? static_cast<char>(ch - 32) : '*';
+                    if (ch == 'n' || ch == 'e' || ch == 's' || ch == 'w') ch = static_cast<char>(ch - 32);  // upper case: route in a lane
+                    else if (ch != 'N' && ch != 'E' && ch != 'S' && ch != 'W') ch = '*';
                 }
             }
         }

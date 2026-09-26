@@ -9,8 +9,9 @@ namespace oar {
 /// Cost multiplier for travelling on `headingDeg` through a traffic-lane cell whose flow is `laneDeg` (COLREGs Rule 10):
 ///   within 25 degrees of the flow: 1 (using the lane normally)
 ///   within 25 degrees of against the flow: kBlocked (wrong-way travel is not allowed)
-///   otherwise it is a crossing: 3 at exactly 90 degrees, rising toward 9 as the crossing gets more oblique, so the
-///   router spends as little time as possible in the lane and prefers to cross at right angles
+///   otherwise it is a crossing: 3 at exactly 90 degrees, rising steeply as the crossing gets more oblique (about 7 at
+///   60 degrees to the flow, 18 at 30, 20 at 25), so the router spends as little time as possible in the lane and only
+///   crosses at right angles, not just at the cheapest place
 float laneFactor(double headingDeg, double laneDeg);
 
 /// A* over an 8-connected grid, followed by a line-of-sight pass that removes the staircase artefacts of grid
