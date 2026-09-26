@@ -32,6 +32,7 @@ struct StampOptions {
     bool applyTss = true;       // traffic separation schemes (Rule 10)
     double cautionFactor = 1.0; // cost multiplier for precautionary areas
     double airDraftM = 0.0;     // height above the waterline, for bridge and overhead cable clearance
+    double vesselLengthM = 12.0; // areas to be avoided bind ships, not small craft (see RESARE below)
     bool hazardObjects = true;  // the chart-object hazard rules below (developer switch, for comparing runs)
     std::vector<std::string> skipClasses;  // developer switch: hazard classes to ignore, to find which rule blocks a route
 };
@@ -44,7 +45,8 @@ struct StampOptions {
 ///   - UNSARE, FSHFAC, MARCUL, PRDARE, OSPARE, HULKES: blocked
 ///   - fixed structures (SLCONS, PONTON, PILPNT, MORFAC, FNCLNE, DYKCON, CAUSWY, CONVYR, PYLONS, FLODOC, DRYDOC, GATCON, DAMCON, GRIDRN,
 ///     OILBAR, OFSPLF) and RAPIDS / WATFAL: blocked; offshore platform points also get a 250 m berth
-///   - RESARE: blocked for entry prohibited or area to be avoided, or an offshore safety zone, military area or minefield; costly for
+///   - RESARE: blocked for entry prohibited, an offshore safety zone or a minefield, and for an area to be avoided when the vessel is 50 m
+///     or longer (those bind ships; a smaller vessel pays x20); a military area is x30 (blocked if entry is also prohibited); costly for
 ///     entry restricted, swimming, dredging, reserve and sanctuary areas; anchoring, fishing and similar restrictions do not stop a transit
 ///   - BOYISD / BCNISD: 100 m blocked; BOYCAR / BCNCAR: the danger side of the mark blocked out to 150 m
 ///   - BRIDGE, CBLOHD, PIPOHD: blocked unless the clearance (closed clearance for an opening bridge) is at least air draft plus 1 m

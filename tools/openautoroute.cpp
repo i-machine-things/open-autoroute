@@ -225,6 +225,7 @@ int main(int argc, char** argv) {
         so.applyTss = applyTss;
         so.cautionFactor = cautionFactor;
         so.airDraftM = airDraft;
+        so.vesselLengthM = lengthM;
         so.hazardObjects = useHazards;
         so.skipClasses = skipClasses;
         stampChart(d, so, grid);

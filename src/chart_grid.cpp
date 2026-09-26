@@ -178,12 +178,15 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
             // restrictions (1 to 6, 9 to 13, 15, 16) do not stop a transit. CATREA (attribute 56): 1 offshore safety zone, 9 military
             // area and 14 minefield forbid entry; the rest only ask for care.
             const uint32_t restrn = f.restrn, catrea = f.catrea;
-            const bool forbidden = (restrn & ((1u << 7) | (1u << 14))) || (catrea & ((1u << 1) | (1u << 9) | (1u << 14)));
+            const bool ship = opt.vesselLengthM >= 50.0;  // "area to be avoided" designations (ATBA) are aimed at large ships
+            const bool forbidden = (restrn & (1u << 7)) || (catrea & ((1u << 1) | (1u << 14))) || ((restrn & (1u << 14)) && ship);
             if (forbidden) {
                 shutGeometry(f, grid, shut, scratch);
             } else {
                 float factor = 1.0f;
-                if (restrn & (1u << 8)) factor = 10.0f;                                    // entry restricted
+                if (restrn & (1u << 14)) factor = 20.0f;                                   // area to be avoided, for a smaller vessel
+                if (catrea & (1u << 9)) factor = std::max(factor, 30.0f);                  // military area: usually only while in use
+                if (restrn & (1u << 8)) factor = std::max(factor, 10.0f);                  // entry restricted
                 if (catrea & (1u << 18)) factor = std::max(factor, 20.0f);                 // swimming area
                 if (catrea & ((1u << 21) | (1u << 8) | (1u << 12))) factor = std::max(factor, 8.0f);  // dredging, degaussing range, aid safety zone
                 if (catrea & ((1u << 4) | (1u << 5) | (1u << 6) | (1u << 7) | (1u << 10) | (1u << 20) | (1u << 22) | (1u << 23))) factor = std::max(factor, 5.0f);  // reserves, sanctuaries, wreck and research areas

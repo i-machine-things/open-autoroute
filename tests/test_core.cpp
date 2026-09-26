@@ -875,13 +875,30 @@ static void testHazardRestrictedAreas() {
     // Areas that forbid entry. (A blocked polygon's outline is painted too, so a neighbour can be fringed by one cell: the safe
     // direction. Keep forbidden areas apart from the ones checked for staying open.)
     CostGrid forbidden = stampHazards({resare(45.990, 46.0, -124.000, -123.998, 1u << 7, 0),      // cols 0-1: entry prohibited (RESTRN 7)
-                                       resare(45.990, 46.0, -123.997, -123.995, 1u << 14, 0),     // cols 3-4: area to be avoided (14)
-                                       resare(45.990, 46.0, -123.994, -123.992, 0, 1u << 9),      // cols 6-7: military area (CATREA 9)
+                                       resare(45.990, 46.0, -123.994, -123.992, 0, 1u << 1),      // cols 6-7: offshore safety zone (CATREA 1)
                                        resare(45.990, 46.0, -123.990, -123.988, 0, 1u << 14)});   // cols 10-11: minefield (CATREA 14)
     CHECK(forbidden.blocked({0, 5}) && forbidden.blocked({1, 5}));
-    CHECK(forbidden.blocked({3, 5}) && forbidden.blocked({4, 5}));
     CHECK(forbidden.blocked({6, 5}) && forbidden.blocked({7, 5}));
     CHECK(forbidden.blocked({10, 5}) && forbidden.blocked({11, 5}));
+
+    // An area to be avoided (RESTRN 14) binds ships: blocked at 120 m, but only x20 for a 12 m boat. A military area (CATREA 9) is x30.
+    auto avoid = [&](double length) {
+        CostGrid g = makeGrid(12, 10);
+        g.fill(kBlocked);
+        ChartData d;
+        d.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.988, 30.0));
+        d.features.push_back(resare(45.990, 46.0, -124.000, -123.996, 1u << 14, 0));   // cols 0-3: area to be avoided
+        d.features.push_back(resare(45.990, 46.0, -123.994, -123.990, 0, 1u << 9));    // cols 6-9: military area
+        StampOptions o;
+        o.vesselLengthM = length;
+        stampChart(d, o, g);
+        return g;
+    };
+    CostGrid ship = avoid(120.0), boat = avoid(12.0);
+    CHECK(ship.blocked({1, 5}));                              // a ship must avoid it
+    CHECK(!boat.blocked({1, 5}) && boat.cost({1, 5}) == 20.0f);  // a small craft is only warned off
+    CHECK(!ship.blocked({7, 5}) && ship.cost({7, 5}) == 30.0f);  // military area: dear, never a wall
+    CHECK(boat.cost({7, 5}) == 30.0f);
 
     // Areas that only ask for care, or restrict something other than passing through.
     CostGrid soft = stampHazards({resare(45.990, 46.0, -124.000, -123.997, 1u << 1, 0),           // cols 0-2: anchoring prohibited only
