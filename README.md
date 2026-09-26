@@ -13,6 +13,20 @@ The project relies on a shared C++ core designed for two primary deployment targ
 
 ---
 
+## Building
+
+The `v0.1.0` core is in progress. It needs a C++17 compiler and CMake:
+
+```bash
+cmake -S . -B build
+cmake --build build -j2
+ctest --test-dir build --output-on-failure
+```
+
+S-57 chart parsing (not yet implemented) will use GDAL; enable it with `-DOAR_WITH_GDAL=ON`.
+
+---
+
 ## Roadmap
 
 Planned releases run from `v0.1.0` (rule-compliant core router) through `v0.6.0+` (current and flow modeling). See [ROADMAP.md](ROADMAP.md) for the full milestones and the validation regions the router will be tested against.
