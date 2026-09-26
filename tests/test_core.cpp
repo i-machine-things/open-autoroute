@@ -15,6 +15,7 @@
 #include "openautoroute/gpx.hpp"
 #include "openautoroute/pathfinder.hpp"
 #include "openautoroute/s57.hpp"
+#include "openautoroute/vessel.hpp"
 
 static int failures = 0;
 #define CHECK(cond)                                                          \
@@ -300,6 +301,14 @@ static void testLaneUseFactor() {
     CHECK(leftLane);
 }
 
+static void testVesselClass() {
+    CHECK(isSmallVessel({19.9, false}));   // Rule 10(j): under 20 m
+    CHECK(!isSmallVessel({20.0, false}));  // 20 m and over is not covered
+    CHECK(isSmallVessel({60.0, true}));    // a sailing vessel is small whatever its length
+    CHECK(defaultLaneUseFactor({12.0, false}) > 1.0);   // small craft keep out of lanes
+    CHECK(defaultLaneUseFactor({120.0, false}) < 1.0);  // large vessels are drawn into them
+}
+
 static void testLargeVesselStaysInLane() {
     // Eastbound lane (rows 3-5); both ends are in open water beside it. A large vessel (cheap lane) should run along
     // the lane; the default vessel should not touch it.
@@ -534,6 +543,7 @@ int main() {
     testLaneFactor();
     testNoWrongWayInLane();
     testCrossesLaneAtRightAngles();
+    testVesselClass();
     testLaneUseFactor();
     testLargeVesselStaysInLane();
     testStampTss();

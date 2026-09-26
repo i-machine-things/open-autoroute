@@ -43,10 +43,12 @@ shoals, shallow or depth-unknown obstructions and wrecks, and water with no char
 Rule 9 (keeping right in narrow channels) is not applied yet.
 Rule 10 (traffic separation schemes) is applied: separation zones and lines are never entered, travel against a lane's
 flow is refused, and lane crossings are priced so they are made as close to square to the flow as the grid allows. What a
-vessel does with lanes depends on its size, following Rule 10(j): under 20 m (65.6 ft) or a sailing vessel (`--sail`)
-stays out of lanes and only crosses them, while a larger vessel is drawn into them and stays in. `--length-ft` sets the
-length (default 40 ft), `--no-tss` switches all of this off, and `--lane-use` overrides the lane cost directly.
+vessel does with lanes depends on its size, following Rule 10(j): under 20 m or a sailing vessel (`--sail`) stays out
+of lanes and only crosses them, while a larger vessel is drawn into them and stays in. `--length-m` sets the length
+(default 12 m), `--no-tss` switches all of this off, and `--lane-use` overrides the lane cost directly.
 `--eval route.gpx` scores any GPX route, such as one from another planner, against the same rules.
+
+The core is metric (metres, nautical miles, knots); converting to feet is left to the user interface.
 
 Routes are also kept off the shore: cost rises within `--margin-m` (default 500 m) of any blocked water, scaled by
 `--margin-weight` (default 10). Set `--margin-weight 0` to turn that off. The tool prints the closest and median
