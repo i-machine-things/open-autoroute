@@ -99,20 +99,23 @@ struct FeatRec {
 
 uint64_t keyOf(uint8_t rcnm, uint32_t rcid) { return (static_cast<uint64_t>(rcnm) << 32) | rcid; }
 
+// Codes verified against OpenCPN's s57objectclasses.csv (the IHO S-57 object catalogue).
 const char* classOf(uint16_t objl) {
     switch (objl) {
         case 30: return "COALNE";
         case 42: return "DEPARE";
         case 43: return "DEPCNT";
+        case 46: return "DRGARE";
         case 51: return "FAIRWY";
         case 71: return "LNDARE";
         case 86: return "OBSTRN";
         case 129: return "SOUNDG";
-        case 143: return "TSSBND";
-        case 144: return "TSSCRS";
-        case 145: return "TSSLPT";
-        case 146: return "TSSRON";
-        case 147: return "TSEZNE";
+        case 145: return "TSELNE";
+        case 146: return "TSSBND";
+        case 147: return "TSSCRS";
+        case 148: return "TSSLPT";
+        case 149: return "TSSRON";
+        case 150: return "TSEZNE";
         case 153: return "UWTROC";
         case 159: return "WRECKS";
         default: return nullptr;

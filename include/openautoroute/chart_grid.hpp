@@ -9,7 +9,7 @@ namespace oar {
 /// overwritten, so stamping charts from coarse to fine scale lets the largest-scale chart win where it has data.
 ///
 /// Safety rules (a cell is open only if the chart positively says it is deep enough):
-///   - DEPARE with DRVAL1 >= minDepthM is open; shallower, or DRVAL1 unknown, is blocked
+///   - DEPARE or DRGARE (dredged) with DRVAL1 >= minDepthM is open; shallower, or DRVAL1 unknown, is blocked
 ///   - LNDARE is blocked
 ///   - OBSTRN / WRECKS / UWTROC / SOUNDG points shoaler than minDepthM block their cell; an OBSTRN, WRECKS or UWTROC
 ///     with no depth value is treated as unsafe

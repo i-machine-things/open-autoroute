@@ -58,7 +58,7 @@ void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid) {
 
     for (const ChartFeature& f : chart.features) {
         if (f.geometry != Geometry::Area) continue;
-        if (f.objectClass == "DEPARE") {
+        if (f.objectClass == "DEPARE" || f.objectClass == "DRGARE") {
             paintArea(f, (!std::isnan(f.drval1) && f.drval1 >= minDepthM) ? kOpen : kShut, grid, state);
         } else if (f.objectClass == "LNDARE") {
             paintArea(f, kShut, grid, state);
