@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
+  <rte>
+    <name>open-autoroute</name>
+    <rtept lat="47.980835" lon="-122.226502"><name>WP001</name></rtept>
+    <rtept lat="47.979218" lon="-122.226101"><name>WP002</name></rtept>
+    <rtept lat="47.978949" lon="-122.226101"><name>WP003</name></rtept>
+    <rtept lat="47.978949" lon="-122.226903"><name>WP004</name></rtept>
+    <rtept lat="47.978140" lon="-122.226903"><name>WP005</name></rtept>
+    <rtept lat="47.977062" lon="-122.230514"><name>WP006</name></rtept>
+    <rtept lat="47.976793" lon="-122.230916"><name>WP007</name></rtept>
+    <rtept lat="47.976793" lon="-122.231718"><name>WP008</name></rtept>
+    <rtept lat="47.976254" lon="-122.232521"><name>WP009</name></rtept>
+    <rtept lat="47.976523" lon="-122.234125"><name>WP010</name></rtept>
+    <rtept lat="47.975984" lon="-122.234125"><name>WP011</name></rtept>
+    <rtept lat="47.976254" lon="-122.234928"><name>WP012</name></rtept>
+    <rtept lat="47.968977" lon="-122.246162"><name>WP013</name></rtept>
+    <rtept lat="47.968977" lon="-122.255390"><name>WP014</name></rtept>
+    <rtept lat="47.961970" lon="-122.282674"><name>WP015</name></rtept>
+    <rtept lat="47.954425" lon="-122.311562"><name>WP016</name></rtept>
+    <rtept lat="47.951730" lon="-122.314772"><name>WP017</name></rtept>
+    <rtept lat="47.934213" lon="-122.319185"><name>WP018</name></rtept>
+    <rtept lat="47.888399" lon="-122.341654"><name>WP019</name></rtept>
+    <rtept lat="47.800005" lon="-122.406251"><name>WP020</name></rtept>
+    <rtept lat="47.702718" lon="-122.409461"><name>WP021</name></rtept>
+    <rtept lat="47.697058" lon="-122.415078"><name>WP022</name></rtept>
+    <rtept lat="47.687896" lon="-122.429522"><name>WP023</name></rtept>
+    <rtept lat="47.686009" lon="-122.430726"><name>WP024</name></rtept>
+    <rtept lat="47.684123" lon="-122.431930"><name>WP025</name></rtept>
+    <rtept lat="47.682775" lon="-122.432732"><name>WP026</name></rtept>
+    <rtept lat="47.680889" lon="-122.433936"><name>WP027</name></rtept>
+    <rtept lat="47.679541" lon="-122.434738"><name>WP028</name></rtept>
+    <rtept lat="47.679002" lon="-122.435140"><name>WP029</name></rtept>
+    <rtept lat="47.676846" lon="-122.435140"><name>WP030</name></rtept>
+    <rtept lat="47.675499" lon="-122.434337"><name>WP031</name></rtept>
+    <rtept lat="47.669301" lon="-122.431930"><name>WP032</name></rtept>
+    <rtept lat="47.663911" lon="-122.443565"><name>WP033</name></rtept>
+    <rtept lat="47.659868" lon="-122.446374"><name>WP034</name></rtept>
+    <rtept lat="47.649358" lon="-122.436343"><name>WP035</name></rtept>
+    <rtept lat="47.644777" lon="-122.432732"><name>WP036</name></rtept>
+    <rtept lat="47.637231" lon="-122.425510"><name>WP037</name></rtept>
+    <rtept lat="47.612168" lon="-122.424708"><name>WP038</name></rtept>
+    <rtept lat="47.612977" lon="-122.492515"><name>WP039</name></rtept>
+    <rtept lat="47.621061" lon="-122.498934"><name>WP040</name></rtept>
+    <rtept lat="47.620792" lon="-122.508965"><name>WP041</name></rtept>
+    <rtept lat="47.621331" lon="-122.512576"><name>WP042</name></rtept>
+  </rte>
+</gpx>
