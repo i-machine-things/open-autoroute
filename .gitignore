@@ -4,3 +4,6 @@ cmake-build-*/
 *.a
 *.so
 compile_commands.json
+
+# Isolated worktrees created by review agents
+.claude/worktrees/
