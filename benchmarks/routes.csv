@@ -15,7 +15,7 @@ puget_seattle_port_townsend_large,47.6055,-122.3688,48.1001,-122.7556,120,30,Pug
 puget_tacoma_seattle_small,47.2700,-122.4200,47.6055,-122.3688,12,30,Tacoma to Seattle
 puget_tacoma_seattle_large,47.2700,-122.4200,47.6055,-122.3688,120,30,Tacoma to Seattle, large vessel
 puget_everett_bainbridge,47.9820,-122.2280,47.6250,-122.5130,12,30,Everett to Bainbridge crossing the sound
-juan_de_fuca_pa_victoria,48.1250,-123.4350,48.4250,-123.3750,12,30,Port Angeles to Victoria across the Strait TSS
+puget_edmonds_kingston,47.8100,-122.3850,47.7950,-122.4950,12,30,Edmonds to Kingston across the Puget Sound TSS lanes
 juan_de_fuca_large,48.3900,-124.8500,48.2300,-123.1000,120,60,Along the Strait of Juan de Fuca in the lanes
 # Other US waters
 sf_sausalito_half_moon_bay,37.8590,-122.4870,37.4990,-122.4850,12,30,Golden Gate and out along the coast
