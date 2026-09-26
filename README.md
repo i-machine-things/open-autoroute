@@ -23,7 +23,25 @@ cmake --build build -j2
 ctest --test-dir build --output-on-failure
 ```
 
+No CMake? `make` builds the same thing with plain g++ (`make test` runs the tests).
+
 S-57 charts are read by a built-in ISO 8211 parser, so there is no GDAL dependency.
+
+### Trying a route in OpenCPN
+
+`build/openautoroute` reads ENC cells, routes between two points and writes a GPX file. Import it in OpenCPN
+(Route Manager, Import) to see it on the same charts:
+
+```bash
+build/openautoroute --enc ~/Documents/Charts/ENC_ROOT \
+    --from 47.605,-122.360 --to 48.115,-122.760 \
+    --draft 1.5 --clearance 1.0 -o route.gpx
+```
+
+Cells are painted coarse-to-fine, and a cell is open only when a chart positively shows it is deep enough. Land,
+shoals, shallow or depth-unknown obstructions and wrecks, and water with no chart coverage are all blocked. COLREGs
+Rules 9 and 10 are not applied yet, so the route does not keep right in channels or cross traffic lanes correctly.
+It is a development tool, not for navigation.
 
 ---
 
