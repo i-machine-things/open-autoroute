@@ -1,5 +1,6 @@
 #include "openautoroute/cost_grid.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
@@ -42,6 +43,45 @@ void CostGrid::applyChannelCentering(const std::vector<float>& distToCentreM, do
         // 0 on the centreline, approaching 1 at the channel edge and beyond.
         const double t = 1.0 - std::exp(-3.0 * distToCentreM[i] / halfWidthM);
         cost_[i] *= static_cast<float>(1.0 + penalty * t);
+    }
+}
+
+std::vector<float> CostGrid::distanceToBlockedM() const {
+    // Two-pass chamfer transform in cell units (weights 1 and sqrt 2), then scale to metres.
+    const float inf = 1e30f, diag = 1.41421356f;
+    std::vector<float> d(cost_.size());
+    for (size_t i = 0; i < d.size(); ++i) d[i] = cost_[i] == kBlocked ? 0.0f : inf;
+    auto at = [&](int c, int r) -> float& { return d[static_cast<size_t>(r) * cols_ + c]; };
+    for (int r = 0; r < rows_; ++r) {
+        for (int c = 0; c < cols_; ++c) {
+            float& v = at(c, r);
+            if (c > 0) v = std::min(v, at(c - 1, r) + 1.0f);
+            if (r > 0) v = std::min(v, at(c, r - 1) + 1.0f);
+            if (r > 0 && c > 0) v = std::min(v, at(c - 1, r - 1) + diag);
+            if (r > 0 && c + 1 < cols_) v = std::min(v, at(c + 1, r - 1) + diag);
+        }
+    }
+    for (int r = rows_ - 1; r >= 0; --r) {
+        for (int c = cols_ - 1; c >= 0; --c) {
+            float& v = at(c, r);
+            if (c + 1 < cols_) v = std::min(v, at(c + 1, r) + 1.0f);
+            if (r + 1 < rows_) v = std::min(v, at(c, r + 1) + 1.0f);
+            if (r + 1 < rows_ && c + 1 < cols_) v = std::min(v, at(c + 1, r + 1) + diag);
+            if (r + 1 < rows_ && c > 0) v = std::min(v, at(c - 1, r + 1) + diag);
+        }
+    }
+    const float m = static_cast<float>(cellSizeM());
+    for (float& v : d) v = v >= inf ? inf : v * m;
+    return d;
+}
+
+void CostGrid::applyShoreMargin(double rangeM, double weight) {
+    if (rangeM <= 0.0 || weight <= 0.0) return;
+    const std::vector<float> dist = distanceToBlockedM();
+    for (size_t i = 0; i < cost_.size(); ++i) {
+        if (cost_[i] == kBlocked || dist[i] >= rangeM) continue;
+        const double t = 1.0 - dist[i] / rangeM;
+        cost_[i] *= static_cast<float>(1.0 + weight * t * t);
     }
 }
 

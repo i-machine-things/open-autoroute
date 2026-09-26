@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <array>
+#include <algorithm>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -80,6 +81,35 @@ static void testChannelCentering() {
     int centreWaypoints = 0;
     for (const LatLon& p : route) centreWaypoints += g.cellAt(p).row == 1;
     CHECK(centreWaypoints >= 2);
+}
+
+static void testShoreMargin() {
+    // Open 20 x 9 basin with a blocked "shore" row along the top. With a margin the route must run well below it.
+    CostGrid g = makeGrid(20, 9);
+    for (int c = 0; c < 20; ++c) g.setCost({c, 0}, kBlocked);
+    const auto dist = g.distanceToBlockedM();
+    CHECK(dist[0] == 0.0f);
+    CHECK(std::fabs(dist[3 * 20 + 5] - static_cast<float>(3 * g.cellSizeM())) < 1.0f);  // 3 rows below the shore
+
+    auto closestRow = [&](const CostGrid& grid) {
+        auto route = findRoute(grid, grid.centre({0, 1}), grid.centre({19, 1}));  // both ends hug the shore
+        int minRow = 99;
+        for (const LatLon& p : route) minRow = std::min(minRow, grid.cellAt(p).row);
+        return std::make_pair(route.size(), minRow);
+    };
+    CostGrid plain = g;
+    const auto before = closestRow(plain);
+    CHECK(before.second == 1);  // no margin: straight along the shore
+
+    g.applyShoreMargin(6 * g.cellSizeM(), 6.0);
+    CHECK(g.cost({5, 1}) > g.cost({5, 6}));  // near the shore costs more than open water
+    CHECK(g.blocked({5, 0}));                // blocked cells stay blocked
+    const auto after = closestRow(g);
+    CHECK(after.first >= 3 && after.second >= 1);
+    int deepest = 0;
+    auto route = findRoute(g, g.centre({0, 1}), g.centre({19, 1}));
+    for (const LatLon& p : route) deepest = std::max(deepest, g.cellAt(p).row);
+    CHECK(deepest >= 4);  // the route swings out from the shore mid-way
 }
 
 static void testGpx() {
@@ -314,6 +344,7 @@ int main() {
     testRoutesAroundWall();
     testNoRoute();
     testChannelCentering();
+    testShoreMargin();
     testGpx();
     testStampChart();
     testFinerChartWins();

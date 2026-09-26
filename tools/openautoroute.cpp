@@ -61,7 +61,7 @@ bool snapToOpen(const CostGrid& g, Cell c, int radius, Cell& out) {
 void usage(const char* argv0) {
     std::fprintf(stderr,
                  "usage: %s --enc DIR --from LAT,LON --to LAT,LON [--draft M=1.5] [--clearance M=1.0]\n"
-                 "          [--cell-m M=30] [-o route.gpx]\n", argv0);
+                 "          [--cell-m M=30] [--margin-m M=300] [--margin-weight W=6] [-o route.gpx]\n", argv0);
 }
 
 }  // namespace
@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
     std::string encDir, outPath = "route.gpx";
     LatLon from{}, to{};
     bool haveFrom = false, haveTo = false;
-    double draft = 1.5, clearance = 1.0, cellM = 30.0;
+    double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 300.0, marginWeight = 6.0;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         const bool hasVal = i + 1 < argc;
@@ -80,6 +80,8 @@ int main(int argc, char** argv) {
         else if (a == "--draft" && hasVal) draft = std::atof(argv[++i]);
         else if (a == "--clearance" && hasVal) clearance = std::atof(argv[++i]);
         else if (a == "--cell-m" && hasVal) cellM = std::atof(argv[++i]);
+        else if (a == "--margin-m" && hasVal) marginM = std::atof(argv[++i]);
+        else if (a == "--margin-weight" && hasVal) marginWeight = std::atof(argv[++i]);
         else if ((a == "-o" || a == "--out") && hasVal) outPath = argv[++i];
         else { usage(argv[0]); return 2; }
     }
@@ -133,6 +135,11 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // Keep off the shore: penalise cells near blocked water (see CostGrid::applyShoreMargin). Also measure how close the
+    // finished route gets, using the distances from before the penalty changes any costs.
+    const std::vector<float> shoreDist = grid.distanceToBlockedM();
+    grid.applyShoreMargin(marginM, marginWeight);
+
     Cell s = grid.cellAt(from), g = grid.cellAt(to);
     Cell s2, g2;
     if (!grid.inBounds(s) || !grid.inBounds(g) || !snapToOpen(grid, s, 40, s2) || !snapToOpen(grid, g, 40, g2)) {
@@ -151,6 +158,18 @@ int main(int argc, char** argv) {
     }
     double nm = 0;
     for (size_t i = 1; i < route.size(); ++i) nm += haversineM(route[i - 1], route[i]) / 1852.0;
+    // Closest approach: sample each leg about every cell and look up the distance to blocked water.
+    double closest = 1e18;
+    for (size_t i = 1; i < route.size(); ++i) {
+        const int steps = std::max(1, static_cast<int>(haversineM(route[i - 1], route[i]) / grid.cellSizeM()));
+        for (int k = 0; k <= steps; ++k) {
+            const double t = static_cast<double>(k) / steps;
+            const Cell c = grid.cellAt({route[i - 1].lat + t * (route[i].lat - route[i - 1].lat),
+                                        route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)});
+            if (grid.inBounds(c)) closest = std::min<double>(closest, shoreDist[static_cast<size_t>(c.row) * grid.cols() + c.col]);
+        }
+    }
+    std::printf("closest approach to land, shoal or uncharted water: %.0f m\n", closest);
     std::ofstream(outPath) << routeToGpx(route, "open-autoroute");
     std::printf("%zu charts, %zu waypoints, %.1f nm (straight line %.1f nm), wrote %s\n", static_cast<size_t>(used),
                 route.size(), nm, haversineM(from, to) / 1852.0, outPath.c_str());

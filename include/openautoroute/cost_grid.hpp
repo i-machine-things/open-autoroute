@@ -48,6 +48,18 @@ public:
     /// `distToCentreM` is row-major; cells farther than `halfWidthM` get the full penalty.
     void applyChannelCentering(const std::vector<float>& distToCentreM, double halfWidthM, double penalty);
 
+    /// Distance in metres from each cell centre to the nearest blocked cell centre (0 for blocked cells; a very large
+    /// value everywhere if the grid has no blocked cells). Chamfer approximation, accurate to a few percent.
+    std::vector<float> distanceToBlockedM() const;
+
+    /// Steer routes away from land, shoals and uncharted water: open cells within `rangeM` of a blocked cell get their
+    /// cost multiplied by `1 + weight * (1 - d / rangeM)^2`, so the cheapest line keeps well off the shore and, in a
+    /// narrow channel, drifts toward the middle. Blocked cells are untouched; rangeM <= 0 or weight <= 0 does nothing.
+    void applyShoreMargin(double rangeM, double weight);
+
+    /// Metres per cell along a row / column at the grid's latitude (cells are meant to be square in metres).
+    double cellSizeM() const { return cellSizeDeg_ * 111320.0; }
+
 private:
     size_t index(Cell c) const { return static_cast<size_t>(c.row) * cols_ + c.col; }
 
