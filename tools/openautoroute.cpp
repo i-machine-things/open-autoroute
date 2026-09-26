@@ -158,18 +158,28 @@ int main(int argc, char** argv) {
     }
     double nm = 0;
     for (size_t i = 1; i < route.size(); ++i) nm += haversineM(route[i - 1], route[i]) / 1852.0;
-    // Closest approach: sample each leg about every cell and look up the distance to blocked water.
-    double closest = 1e18;
+    // Clearance report: sample each leg about every cell and look up the distance to blocked water. Samples within
+    // 1 km of either end are skipped, since a start in a marina or a berth is at the shore by definition.
+    std::vector<double> clearances;
+    double travelled = 0.0;
     for (size_t i = 1; i < route.size(); ++i) {
-        const int steps = std::max(1, static_cast<int>(haversineM(route[i - 1], route[i]) / grid.cellSizeM()));
+        const double leg = haversineM(route[i - 1], route[i]);
+        const int steps = std::max(1, static_cast<int>(leg / grid.cellSizeM()));
         for (int k = 0; k <= steps; ++k) {
             const double t = static_cast<double>(k) / steps;
+            const double along = travelled + t * leg;
+            if (along < 1000.0 || along > nm * 1852.0 - 1000.0) continue;
             const Cell c = grid.cellAt({route[i - 1].lat + t * (route[i].lat - route[i - 1].lat),
                                         route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)});
-            if (grid.inBounds(c)) closest = std::min<double>(closest, shoreDist[static_cast<size_t>(c.row) * grid.cols() + c.col]);
+            if (grid.inBounds(c)) clearances.push_back(shoreDist[static_cast<size_t>(c.row) * grid.cols() + c.col]);
         }
+        travelled += leg;
     }
-    std::printf("closest approach to land, shoal or uncharted water: %.0f m\n", closest);
+    if (!clearances.empty()) {
+        std::sort(clearances.begin(), clearances.end());
+        std::printf("clearance from land, shoal or uncharted water (excluding 1 km at each end): closest %.0f m, "
+                    "median %.0f m\n", clearances.front(), clearances[clearances.size() / 2]);
+    }
     std::ofstream(outPath) << routeToGpx(route, "open-autoroute");
     std::printf("%zu charts, %zu waypoints, %.1f nm (straight line %.1f nm), wrote %s\n", static_cast<size_t>(used),
                 route.size(), nm, haversineM(from, to) / 1852.0, outPath.c_str());
