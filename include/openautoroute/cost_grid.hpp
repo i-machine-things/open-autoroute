@@ -75,17 +75,21 @@ public:
     }
     bool isCaution(Cell c) const { return !caution_.empty() && caution_[index(c)] != 0; }
 
-    /// Cells inside a charted channel (fairway or dredged area, the dashed limits on a chart). applyChannelPreference() makes
-    /// leaving them costly so a route stays inside the marked channel.
+    /// Cells inside a charted channel (fairway or dredged area, the dashed limits on a chart). Only the narrow stretches matter:
+    /// markNarrowChannels() picks those out, and applyChannelPreference() makes leaving them costly so a route stays inside.
     void setChannel(Cell c) {
         if (channel_.empty()) channel_.assign(cost_.size(), 0);
         channel_[index(c)] = 1;
     }
     bool isChannel(Cell c) const { return !channel_.empty() && channel_[index(c)] != 0; }
-    /// Distance in metres from each cell centre to the nearest channel cell (0 inside one; very large without channels).
-    std::vector<float> distanceToChannelM() const;
-    /// Multiply the cost of open cells that are outside every charted channel but within `rangeM` of one by `penalty`, so a
-    /// route follows the channel instead of running alongside it. Channel cells and cells far from any channel are untouched.
+    /// Flag the channel cells whose channel is narrow: local width (twice the largest distance from a channel cell to the nearest
+    /// non-channel cell, searched within `maxWidthM`) of at most `maxWidthM`. Wide fairways, bays and traffic schemes are left
+    /// alone, so the channel rules only act where a marked channel really confines a vessel.
+    void markNarrowChannels(double maxWidthM);
+    bool isNarrowChannel(Cell c) const { return !narrow_.empty() && narrow_[index(c)] != 0; }
+    /// Multiply the cost of open cells outside every charted channel but within `rangeM` of a NARROW channel by `penalty`, so a route
+    /// stays between the dashed limits there. Wide channels are ignored, and cells of a traffic lane, separation zone or
+    /// precautionary area are never touched, so this cannot interfere with the traffic separation rules.
     void applyChannelPreference(double rangeM, double penalty);
 
     /// Position across a buoyed channel for a cell near a red/green gate: t runs 0 at the port-hand mark to 1 at the starboard-hand
@@ -157,6 +161,7 @@ private:
     std::vector<float> marginAxis_;    // degrees, axis of the nearest lane
     std::vector<uint8_t> caution_;  // empty until a precautionary-area cell is set
     std::vector<uint8_t> channel_;  // empty until a channel cell is set
+    std::vector<uint8_t> narrow_;   // empty until markNarrowChannels finds one
     std::vector<float> gateT_;      // NaN outside gate corridors; empty until a gate is applied
     std::vector<float> gateAxis_;
     float gateSideWeight_ = 0.0f;

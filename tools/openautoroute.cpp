@@ -214,10 +214,14 @@ int main(int argc, char** argv) {
     }
     grid.assignZoneDirections();  // separation zones take their direction from the lanes beside them
     // Buoyed channels: pair opposite red/green marks into gates so the route stays between them (see applyChannelGates).
-    const std::vector<Gate> gates = useMarks ? applyChannelGates(grid, marks) : std::vector<Gate>{};
+    const std::vector<Gate> gates = useMarks ? applyChannelGates(grid, marks, 500.0) : std::vector<Gate>{};
     if (useMarks) std::printf("%zu channel gates from %zu lateral marks\n", gates.size(), marks.size());
-    // Stay inside the charted channel limits (the dashed lines): leaving a fairway or dredged area toward open water costs more.
-    if (useChannels) grid.applyChannelPreference(3000.0, channelPenalty);
+    // Narrow charted channels (fairway or dredged area under 600 m wide): stay between the dashed limits. Wide channels are left
+    // alone so open-water and traffic-separation routing is unchanged.
+    if (useChannels) {
+        grid.markNarrowChannels(600.0);
+        grid.applyChannelPreference(300.0, channelPenalty);
+    }
     grid.setLaneUseFactor(laneUse);
     // Leeway: a vessel that avoids lanes also keeps a wide berth from lanes, zones and the ends of lane parts, so it prefers
     // open water to a narrow strip between a shore and a lane.

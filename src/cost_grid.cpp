@@ -166,19 +166,49 @@ float CostGrid::laneMarginFactor(Cell c, double headingDeg) const {
     return static_cast<float>(1.0 + marginWeight_[i] * along);
 }
 
-std::vector<float> CostGrid::distanceToChannelM() const {
-    std::vector<float> d(cost_.size(), 1e30f);
-    for (size_t i = 0; i < d.size(); ++i) {
-        if (!channel_.empty() && channel_[i]) d[i] = 0.0f;
+void CostGrid::markNarrowChannels(double maxWidthM) {
+    narrow_.clear();
+    if (channel_.empty() || maxWidthM <= 0.0) return;
+    // dOut: distance from each channel cell to the nearest non-channel cell (0 for non-channel cells).
+    std::vector<float> seed(cost_.size(), 0.0f);
+    for (size_t i = 0; i < seed.size(); ++i) seed[i] = channel_[i] ? 1e30f : 0.0f;
+    const std::vector<float> dOut = chamferM(std::move(seed));
+    // Local half-width of a channel: the largest dOut in the neighbourhood (approximately the medial axis distance). A separable
+    // running maximum over a square window of radius `r` cells.
+    const int r = std::max(1, static_cast<int>(std::ceil(maxWidthM / cellSizeM())));
+    std::vector<float> tmp(cost_.size(), 0.0f), localMax(cost_.size(), 0.0f);
+    for (int row = 0; row < rows_; ++row) {
+        for (int col = 0; col < cols_; ++col) {
+            float m = 0.0f;
+            const int lo = std::max(0, col - r), hi = std::min(cols_ - 1, col + r);
+            for (int c = lo; c <= hi; ++c) m = std::max(m, dOut[static_cast<size_t>(row) * cols_ + c]);
+            tmp[static_cast<size_t>(row) * cols_ + col] = m;
+        }
     }
-    return chamferM(std::move(d));
+    for (int col = 0; col < cols_; ++col) {
+        for (int row = 0; row < rows_; ++row) {
+            float m = 0.0f;
+            const int lo = std::max(0, row - r), hi = std::min(rows_ - 1, row + r);
+            for (int rr = lo; rr <= hi; ++rr) m = std::max(m, tmp[static_cast<size_t>(rr) * cols_ + col]);
+            localMax[static_cast<size_t>(row) * cols_ + col] = m;
+        }
+    }
+    narrow_.assign(cost_.size(), 0);
+    for (size_t i = 0; i < cost_.size(); ++i) {
+        if (channel_[i] && 2.0f * localMax[i] <= static_cast<float>(maxWidthM)) narrow_[i] = 1;
+    }
 }
 
 void CostGrid::applyChannelPreference(double rangeM, double penalty) {
-    if (channel_.empty() || rangeM <= 0.0 || penalty <= 1.0) return;
-    const std::vector<float> dist = distanceToChannelM();
+    if (narrow_.empty() || rangeM <= 0.0 || penalty <= 1.0) return;
+    std::vector<float> d(cost_.size(), 1e30f);
+    for (size_t i = 0; i < d.size(); ++i) {
+        if (narrow_[i]) d[i] = 0.0f;
+    }
+    const std::vector<float> dist = chamferM(std::move(d));
     for (size_t i = 0; i < cost_.size(); ++i) {
         if (cost_[i] == kBlocked || channel_[i] || dist[i] >= rangeM) continue;
+        if ((!lane_.empty() && !std::isnan(lane_[i])) || (!zone_.empty() && zone_[i]) || (!caution_.empty() && caution_[i])) continue;  // traffic separation is not ours to touch
         cost_[i] *= static_cast<float>(penalty);
     }
 }

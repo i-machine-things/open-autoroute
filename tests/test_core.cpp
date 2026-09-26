@@ -597,13 +597,15 @@ static void testKeepToStarboardSide() {
 }
 
 static void testChannelPreference() {
-    // An L-shaped charted channel. Cutting the corner leaves it; with the preference the route stays inside the dashed limits.
+    // An L-shaped NARROW charted channel (5 cells, about 550 m). Cutting the corner leaves it; with the preference the route stays
+    // inside the dashed limits.
     CostGrid g = makeGrid(40, 40);
     for (int r = 0; r < 40; ++r) {
         for (int c = 0; c < 40; ++c) {
             if ((r >= 30 && r <= 34) || (c >= 30 && c <= 34)) g.setChannel({c, r});
         }
     }
+    g.markNarrowChannels(1000.0);
     const LatLon a = g.centre({2, 32}), b = g.centre({32, 2});
     auto cellsOutside = [&](const std::vector<LatLon>& route) {
         int out = 0;
@@ -623,6 +625,23 @@ static void testChannelPreference() {
     CostGrid none = makeGrid(10, 10);
     none.applyChannelPreference(5 * none.cellSizeM(), 8.0);  // no channels charted: a no-op
     CHECK(none.cost({3, 3}) == 1.0f);
+
+    // A WIDE channel (a bay-sized fairway) is not narrow: it changes nothing, so open-water routing is untouched.
+    CostGrid wide = makeGrid(60, 60);
+    for (int r = 10; r < 50; ++r) for (int c = 0; c < 60; ++c) wide.setChannel({c, r});  // 40 cells wide, about 4.4 km
+    wide.markNarrowChannels(600.0);
+    CHECK(!wide.isNarrowChannel({30, 30}));
+    wide.applyChannelPreference(10 * wide.cellSizeM(), 8.0);
+    CHECK(wide.cost({30, 5}) == 1.0f);  // outside the wide fairway but nothing is penalised
+
+    // Traffic separation is never touched: a lane beside a narrow channel keeps its cost even inside the channel's range.
+    CostGrid lanes = makeGrid(40, 40);
+    for (int r = 0; r < 40; ++r) for (int c = 18; c <= 21; ++c) lanes.setChannel({c, r});
+    lanes.markNarrowChannels(1000.0);
+    for (int r = 0; r < 40; ++r) lanes.setLaneDirection({24, r}, 0.0f);
+    lanes.applyChannelPreference(10 * lanes.cellSizeM(), 8.0);
+    CHECK(lanes.cost({24, 10}) == 1.0f);   // a lane cell in range: untouched
+    CHECK(lanes.cost({26, 10}) == 8.0f);   // ordinary water in range: penalised
 }
 
 static void testWaterBodies() {

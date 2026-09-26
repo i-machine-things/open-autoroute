@@ -218,6 +218,8 @@ std::vector<Gate> applyChannelGates(CostGrid& grid, const std::vector<LateralMar
         for (int row = std::max(0, std::min(lo.row, hi.row)); row <= std::min(grid.rows() - 1, std::max(lo.row, hi.row)); ++row) {
             for (int col = std::max(0, std::min(lo.col, hi.col)); col <= std::min(grid.cols() - 1, std::max(lo.col, hi.col)); ++col) {
                 if (grid.blocked({col, row})) continue;
+                // Never act on a traffic lane, separation zone or precautionary area: those have their own rules.
+                if (!std::isnan(grid.laneDirection({col, row})) || grid.isZone({col, row}) || grid.isCaution({col, row})) continue;
                 const P c = toP(grid.centre({col, row}));
                 const double along = (c.x - mx) * cx + (c.y - my) * cy;
                 if (std::fabs(along) > reach) continue;
