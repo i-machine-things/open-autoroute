@@ -35,6 +35,17 @@ public:
     void setCost(Cell c, float cost) { cost_[index(c)] = cost; }
     void fill(float cost) { cost_.assign(cost_.size(), cost); }
 
+    /// Traffic-lane flow direction (degrees true) for a cell inside a traffic separation scheme lane, NaN elsewhere.
+    /// The router uses it to keep vessels going the right way in a lane and crossing lanes near 90 degrees (COLREGs
+    /// Rule 10). Kept apart from the cost because it changes the cost of a step depending on the heading.
+    void setLaneDirection(Cell c, float degrees) {
+        if (lane_.empty()) lane_.assign(cost_.size(), std::numeric_limits<float>::quiet_NaN());
+        lane_[index(c)] = degrees;
+    }
+    float laneDirection(Cell c) const {
+        return lane_.empty() ? std::numeric_limits<float>::quiet_NaN() : lane_[index(c)];
+    }
+
     LatLon centre(Cell c) const;
     /// Cell containing `p`; the result may be out of bounds, check with inBounds().
     Cell cellAt(LatLon p) const;
@@ -69,6 +80,7 @@ private:
     double cellSizeDeg_;
     double cellSizeLonDeg_;
     std::vector<float> cost_;
+    std::vector<float> lane_;  // empty until a lane is set
 };
 
 }  // namespace oar

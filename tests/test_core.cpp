@@ -215,6 +215,96 @@ static void testFinerChartWins() {
     CHECK(!findRoute(g, g.centre({0, 5}), g.centre({9, 5})).empty());
 }
 
+// --- COLREGs Rule 10 -----------------------------------------------------------------------------------------------
+
+static void testLaneFactor() {
+    CHECK(laneFactor(0.0, 0.0) == 1.0f);        // with the flow
+    CHECK(laneFactor(20.0, 0.0) == 1.0f);       // within the 25 degree tolerance
+    CHECK(laneFactor(350.0, 0.0) == 1.0f);      // wraps around north
+    CHECK(laneFactor(180.0, 0.0) == kBlocked);  // against the flow
+    CHECK(laneFactor(170.0, 0.0) == kBlocked);
+    CHECK(std::fabs(laneFactor(90.0, 0.0) - 3.0f) < 1e-4f);  // perpendicular crossing: cheapest way through
+    CHECK(laneFactor(45.0, 0.0) > laneFactor(90.0, 0.0));    // oblique crossings cost more
+    CHECK(laneFactor(60.0, 0.0) > laneFactor(80.0, 0.0));
+    CHECK(std::fabs(laneFactor(270.0, 0.0) - laneFactor(90.0, 0.0)) < 1e-4f);  // crossing either way costs the same
+}
+
+static double legHeading(const CostGrid& g, LatLon a, LatLon b) {
+    const Cell ca = g.cellAt(a), cb = g.cellAt(b);
+    return bearingDeg(g.centre(ca), g.centre(cb));
+}
+
+static void testNoWrongWayInLane() {
+    // Eastbound lane band across the middle of the grid (rows 3-5). Going east along it is fine; going west is not.
+    CostGrid g = makeGrid(24, 9);
+    for (int r = 3; r <= 5; ++r) for (int c = 0; c < 24; ++c) g.setLaneDirection({c, r}, 90.0f);
+    auto east = findRoute(g, g.centre({1, 4}), g.centre({22, 4}));
+    CHECK(east.size() == 2);  // straight along the lane, with the flow
+
+    auto west = findRoute(g, g.centre({22, 4}), g.centre({1, 4}));
+    CHECK(!west.empty());
+    for (size_t i = 1; i < west.size(); ++i) {
+        const LatLon mid{(west[i - 1].lat + west[i].lat) / 2, (west[i - 1].lon + west[i].lon) / 2};
+        const float lane = g.laneDirection(g.cellAt(mid));
+        if (!std::isnan(lane)) CHECK(laneFactor(legHeading(g, west[i - 1], west[i]), lane) != kBlocked);
+    }
+}
+
+static void testCrossesLaneAtRightAngles() {
+    // Northbound lane band (cols 10-13) running the full height. A diagonal route must still cross it square-on.
+    CostGrid g = makeGrid(24, 24);
+    for (int r = 0; r < 24; ++r) for (int c = 10; c <= 13; ++c) g.setLaneDirection({c, r}, 0.0f);
+    auto route = findRoute(g, g.centre({1, 1}), g.centre({22, 22}));
+    CHECK(route.size() >= 3);
+    int crossingLegs = 0;
+    for (size_t i = 1; i < route.size(); ++i) {
+        const Cell a = g.cellAt(route[i - 1]), b = g.cellAt(route[i]);
+        const bool inBand = (a.col >= 10 && a.col <= 13) || (b.col >= 10 && b.col <= 13) || (a.col < 10 && b.col > 13);
+        if (!inBand || a.col == b.col) continue;
+        ++crossingLegs;
+        CHECK(angleDiffDeg(legHeading(g, route[i - 1], route[i]), 90.0) < 15.0);  // near 90 degrees to the flow
+    }
+    CHECK(crossingLegs >= 1);
+
+    // With the lane not known (Rule 10 off) the same route is the plain diagonal.
+    CostGrid plain = makeGrid(24, 24);
+    CHECK(findRoute(plain, plain.centre({1, 1}), plain.centre({22, 22})).size() == 2);
+}
+
+static ChartFeature laneFeature(const char* cls, double lat0, double lat1, double lon0, double lon1, double orient) {
+    ChartFeature f = areaFeature(cls, lat0, lat1, lon0, lon1);
+    f.orient = orient;
+    return f;
+}
+
+static void testStampTss() {
+    CostGrid g = makeGrid(12, 10);
+    g.fill(kBlocked);
+    ChartData d;
+    d.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.988, 30.0));       // all deep water
+    d.features.push_back(laneFeature("TSSLPT", 45.990, 46.0, -123.999, -123.997, 346.0));    // lane, cols 1-2
+    d.features.push_back(areaFeature("TSEZNE", 45.990, 46.0, -123.996, -123.994));           // zone, cols 4-5
+    ChartFeature line;
+    line.objectClass = "TSELNE";
+    line.geometry = Geometry::Line;
+    line.parts.push_back({{{45.9995, -123.9925}, {45.9905, -123.9925}}, false});             // separation line, col 7
+    d.features.push_back(line);
+    stampChart(d, 2.5, g);
+
+    CHECK(g.laneDirection({1, 5}) == 346.0f && g.laneDirection({2, 5}) == 346.0f);
+    CHECK(std::isnan(g.laneDirection({0, 5})) && std::isnan(g.laneDirection({3, 5})));
+    CHECK(!g.blocked({1, 5}));  // a lane is open water: it only restricts direction
+    CHECK(g.blocked({4, 5}) && g.blocked({5, 5}));  // separation zone is never entered
+    CHECK(g.blocked({7, 5}));                        // separation line
+    CHECK(!g.blocked({6, 5}) && !g.blocked({8, 5}));
+
+    CostGrid off = makeGrid(12, 10);
+    off.fill(kBlocked);
+    stampChart(d, 2.5, off, false);
+    CHECK(std::isnan(off.laneDirection({1, 5})));  // Rule 10 off: no lanes recorded
+    CHECK(!off.blocked({4, 5}));                   // and the zone is ordinary water
+}
+
 static void testS57MissingFile() {
     ChartData d;
     std::string err;
@@ -390,6 +480,10 @@ int main() {
     testGpx();
     testStampChart();
     testFinerChartWins();
+    testLaneFactor();
+    testNoWrongWayInLane();
+    testCrossesLaneAtRightAngles();
+    testStampTss();
     testS57MissingFile();
     testS57Synthetic();
     testS57Malformed();

@@ -14,6 +14,9 @@ namespace oar {
 ///   - OBSTRN / WRECKS / UWTROC / SOUNDG points shoaler than minDepthM block their cell; an OBSTRN, WRECKS or UWTROC
 ///     with no depth value is treated as unsafe
 /// Cells no chart covers stay whatever the caller filled the grid with (normally kBlocked: no data is not safe water).
-void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid);
+///
+/// With `applyTss` (default) the chart's traffic separation scheme is applied too, for COLREGs Rule 10: TSEZNE zones
+/// and TSELNE lines are blocked, and TSSLPT lane parts store their flow direction (ORIENT) on the grid for the router.
+void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid, bool applyTss = true);
 
 }  // namespace oar

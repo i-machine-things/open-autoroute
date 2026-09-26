@@ -81,7 +81,7 @@ bool snapToOpen(const CostGrid& g, Cell c, int radius, Cell& out) {
 void usage(const char* argv0) {
     std::fprintf(stderr,
                  "usage: %s --enc DIR (--from LAT,LON --to LAT,LON | --eval ROUTE.gpx) [--draft M=1.5] [--clearance M=1.0]\n"
-                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [-o route.gpx]\n", argv0);
+                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [-o route.gpx]\n", argv0);
 }
 
 }  // namespace
@@ -89,7 +89,7 @@ void usage(const char* argv0) {
 int main(int argc, char** argv) {
     std::string encDir, evalPath, outPath = "route.gpx";
     LatLon from{}, to{};
-    bool haveFrom = false, haveTo = false;
+    bool haveFrom = false, haveTo = false, applyTss = true;
     double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -101,6 +101,7 @@ int main(int argc, char** argv) {
         else if (a == "--draft" && hasVal) draft = std::atof(argv[++i]);
         else if (a == "--clearance" && hasVal) clearance = std::atof(argv[++i]);
         else if (a == "--cell-m" && hasVal) cellM = std::atof(argv[++i]);
+        else if (a == "--no-tss") applyTss = false;
         else if (a == "--margin-m" && hasVal) marginM = std::atof(argv[++i]);
         else if (a == "--margin-weight" && hasVal) marginWeight = std::atof(argv[++i]);
         else if ((a == "-o" || a == "--out") && hasVal) outPath = argv[++i];
@@ -162,7 +163,7 @@ int main(int argc, char** argv) {
         Bounds b;
         for (const auto& f : d.features) for (const auto& r : f.parts) for (const auto& p : r.points) b.add(p);
         if (!b.overlaps(box)) continue;
-        stampChart(d, minDepth, grid);
+        stampChart(d, minDepth, grid, applyTss);
         std::printf("  chart %s\n", name.c_str());
         ++used;
     }
@@ -206,6 +207,10 @@ int main(int argc, char** argv) {
     struct Spot { LatLon at; double alongM; };
     std::vector<Spot> unsafeSpots;  // first sample of each separate unsafe stretch
     bool inUnsafe = false;
+    // Rule 10: maximal runs of samples inside a traffic lane, with how the route's heading relates to the lane's flow.
+    struct LaneRun { LatLon at; double alongM = 0, lengthM = 0, thetaSum = 0, thetaMin = 180, thetaMax = 0; float lane = 0; int n = 0; };
+    std::vector<LaneRun> laneRuns;
+    bool inLane = false;
     for (size_t i = 1; i < route.size(); ++i) {
         const double leg = haversineM(route[i - 1], route[i]);
         const int steps = std::max(1, static_cast<int>(leg / grid.cellSizeM()));
@@ -221,6 +226,22 @@ int main(int argc, char** argv) {
                 if (!inUnsafe) unsafeSpots.push_back({here, along});
             }
             inUnsafe = unsafe;
+            const float lane = grid.inBounds(hc) ? grid.laneDirection(hc) : std::nanf("");
+            if (std::isnan(lane)) {
+                inLane = false;
+            } else {
+                const double theta = angleDiffDeg(bearingDeg(route[i - 1], route[i]), lane);
+                if (!inLane || laneRuns.back().lane != lane) {
+                    laneRuns.push_back({here, along, 0, 0, 180, 0, lane, 0});
+                    inLane = true;
+                }
+                LaneRun& run = laneRuns.back();
+                run.lengthM += leg / steps;
+                run.thetaSum += theta;
+                run.thetaMin = std::min(run.thetaMin, theta);
+                run.thetaMax = std::max(run.thetaMax, theta);
+                ++run.n;
+            }
             if (along < 1000.0 || along > nm * 1852.0 - 1000.0) continue;
             const Cell c = grid.cellAt({route[i - 1].lat + t * (route[i].lat - route[i - 1].lat),
                                         route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)});
@@ -240,6 +261,27 @@ int main(int argc, char** argv) {
             std::printf("  at %.5f,%.5f (%.1f nm along)\n", unsafeSpots[i].at.lat, unsafeSpots[i].at.lon,
                         unsafeSpots[i].alongM / 1852.0);
         }
+        // Rule 10 report. A run within 25 degrees of the flow is normal lane use, within 25 degrees of the opposite is
+        // wrong-way travel, and anything between is a crossing, judged by how far it is from square to the flow.
+        int withFlow = 0, crossings = 0, wrongWay = 0;
+        double wrongWayM = 0, worstOff = 0;
+        for (const LaneRun& r : laneRuns) {
+            const double mean = r.thetaSum / r.n;
+            if (mean <= 25.0) ++withFlow;
+            else if (mean >= 155.0) { ++wrongWay; wrongWayM += r.lengthM; }
+            else { ++crossings; worstOff = std::max(worstOff, std::fabs(mean - 90.0)); }
+        }
+        std::printf("traffic lanes (Rule 10): %zu lane transit(s): %d with the flow, %d crossing, %d wrong-way (%.0f m)\n",
+                    laneRuns.size(), withFlow, crossings, wrongWay, wrongWayM);
+        for (size_t i = 0; i < laneRuns.size() && i < 12; ++i) {
+            const LaneRun& r = laneRuns[i];
+            const double mean = r.thetaSum / r.n;
+            const char* kind = mean <= 25.0 ? "with flow" : mean >= 155.0 ? "WRONG WAY" : "crossing";
+            std::printf("  %-9s lane %3.0f deg, %4.0f m in lane, heading %.0f deg off the flow", kind, r.lane, r.lengthM, mean);
+            if (mean > 25.0 && mean < 155.0) std::printf(" (%.0f deg from square)", std::fabs(mean - 90.0));
+            std::printf(" at %.4f,%.4f\n", r.at.lat, r.at.lon);
+        }
+        if (crossings > 0) std::printf("  worst crossing is %.0f deg from square\n", worstOff);
         std::printf("%zu charts, %zu waypoints, %.1f nm (straight line %.1f nm)\n", static_cast<size_t>(used), route.size(),
                     nm, haversineM(from, to) / 1852.0);
         return 0;

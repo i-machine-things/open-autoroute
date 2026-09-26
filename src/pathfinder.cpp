@@ -21,23 +21,55 @@ float heuristic(Cell a, Cell b) {
     return (dx + dy) + (1.41421356f - 2.0f) * std::min(dx, dy);
 }
 
-// Sum of cell costs along the Bresenham segment a->b (endpoints included). Only meaningful after lineOfSight().
+// Cost multiplier for one move between adjacent cells: the worst lane factor of the two cells (1 outside lanes).
+float moveFactor(const CostGrid& grid, Cell a, Cell b, double headingDeg) {
+    float f = 1.0f;
+    for (Cell c : {a, b}) {
+        const float lane = grid.laneDirection(c);
+        if (!std::isnan(lane)) f = std::max(f, laneFactor(headingDeg, lane));
+    }
+    return f;
+}
+
+// Heading in degrees true of a move from a to b. Cells are square in metres and rows run south.
+double cellHeading(Cell a, Cell b) {
+    const double deg = std::atan2(static_cast<double>(b.col - a.col), static_cast<double>(a.row - b.row)) * 180.0 / 3.14159265358979;
+    return deg < 0 ? deg + 360.0 : deg;
+}
+
+float moveCost(const CostGrid& grid, Cell a, Cell b, double headingDeg) {
+    const float len = (a.col != b.col && a.row != b.row) ? 1.41421356f : 1.0f;
+    return len * 0.5f * (grid.cost(a) + grid.cost(b)) * moveFactor(grid, a, b, headingDeg);
+}
+
+// Cost of the straight segment a->b, walking the Bresenham cells and using the segment's own heading for lane factors.
+// kBlocked when the segment runs against a lane's flow. Only meaningful after lineOfSight().
 float segmentCost(const CostGrid& grid, Cell a, Cell b) {
+    const double heading = cellHeading(a, b);
     float total = 0.0f;
     int x = a.col, y = a.row;
     const int dx = std::abs(b.col - a.col), dy = std::abs(b.row - a.row);
     const int sx = a.col < b.col ? 1 : -1, sy = a.row < b.row ? 1 : -1;
     int err = dx - dy;
-    while (true) {
-        total += grid.cost({x, y});
-        if (x == b.col && y == b.row) return total;
+    while (!(x == b.col && y == b.row)) {
+        const Cell from{x, y};
         const int e2 = 2 * err;
         if (e2 > -dy) { err -= dy; x += sx; }
         if (e2 < dx) { err += dx; y += sy; }
+        total += moveCost(grid, from, {x, y}, heading);
     }
+    return total;
 }
 
 }  // namespace
+
+float laneFactor(double headingDeg, double laneDeg) {
+    const double theta = angleDiffDeg(headingDeg, laneDeg);  // 0 = with the flow, 180 = against it
+    if (theta <= 25.0) return 1.0f;
+    if (theta >= 155.0) return kBlocked;
+    const double s = std::sin(theta * 3.14159265358979 / 180.0);
+    return static_cast<float>(3.0 + 6.0 * (1.0 - s));
+}
 
 bool lineOfSight(const CostGrid& grid, Cell a, Cell b) {
     // Bresenham walk; also rejects diagonal corner cutting between two blocked neighbours. Both ends inside the grid keeps
@@ -85,8 +117,9 @@ std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal) {
                 if (dr != 0 && dc != 0 && (grid.blocked({c.col + dc, c.row}) || grid.blocked({c.col, c.row + dr}))) {
                     continue;  // no squeezing diagonally between two blocked cells
                 }
-                const float step = (dr != 0 && dc != 0) ? 1.41421356f : 1.0f;
-                const float cand = best[cur.idx] + step * 0.5f * (grid.cost(c) + grid.cost(nb));
+                const float move = moveCost(grid, c, nb, cellHeading(c, nb));
+                if (move == kBlocked) continue;  // wrong way through a traffic lane
+                const float cand = best[cur.idx] + move;
                 if (cand < best[idxOf(nb)]) {
                     best[idxOf(nb)] = cand;
                     parent[idxOf(nb)] = cur.idx;
@@ -101,19 +134,20 @@ std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal) {
     for (int i = idxOf(g); i != -1; i = parent[i]) cells.push_back({i % cols, i / cols});
     std::reverse(cells.begin(), cells.end());
 
-    // Greedy string-pulling: keep a waypoint only where a shortcut becomes unsafe or more expensive. Checking cost
-    // as well as line of sight stops smoothing from cutting through penalised cells (e.g. out of a channel centre).
+    // Cumulative cost along the grid path, so a shortcut can be compared with the stretch it replaces.
+    std::vector<float> cum(cells.size(), 0.0f);
+    for (size_t i = 1; i < cells.size(); ++i) cum[i] = cum[i - 1] + moveCost(grid, cells[i - 1], cells[i], cellHeading(cells[i - 1], cells[i]));
+
+    // Greedy string-pulling: keep a waypoint only where a shortcut becomes unsafe or more expensive. Checking cost as well
+    // as line of sight stops smoothing from cutting through penalised cells (a channel edge, or a traffic lane at an angle).
     std::vector<LatLon> route{grid.centre(cells.front())};
     size_t anchor = 0;
-    float pathSum = grid.cost(cells[0]);  // cost of the grid path from cells[anchor] to cells[i-1]
-    for (size_t i = 1; i < cells.size(); ++i) {
-        pathSum += grid.cost(cells[i]);
+    for (size_t i = 2; i < cells.size(); ++i) {
         if (i - anchor < 2) continue;
         if (!lineOfSight(grid, cells[anchor], cells[i]) ||
-            segmentCost(grid, cells[anchor], cells[i]) > pathSum + 1e-3f) {
+            segmentCost(grid, cells[anchor], cells[i]) > cum[i] - cum[anchor] + 1e-3f) {
             anchor = i - 1;
             route.push_back(grid.centre(cells[anchor]));
-            pathSum = grid.cost(cells[anchor]) + grid.cost(cells[i]);
         }
     }
     if (cells.size() > 1) route.push_back(grid.centre(cells.back()));
