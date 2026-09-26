@@ -1,6 +1,6 @@
 // Command-line router: read ENC cells, route between two points, write a GPX that OpenCPN can import.
 //
-//   openautoroute --enc DIR --from LAT,LON --to LAT,LON [--draft M] [--clearance M] [--cell-m M] [-o route.gpx]
+//   openautoroute --enc DIR --from LAT,LON --to LAT,LON [--draft M] [--clearance M] [--cell-m M] [--name NAME] [-o route.gpx]
 //   openautoroute --enc DIR --eval route.gpx [--draft M] ...   (score an existing route, e.g. from another planner)
 //
 // DIR is searched recursively for `.000` base cells (e.g. an ENC_ROOT folder). Only cells that overlap the route's
@@ -98,7 +98,7 @@ void usage(const char* argv0) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::string encDir, evalPath, outPath = "route.gpx";
+    std::string encDir, evalPath, outPath = "route.gpx", routeName;
     LatLon from{}, to{}, mapAt{};
     int mapRadius = 0;
     bool haveFrom = false, haveTo = false, applyTss = true, underSail = false;
@@ -149,6 +149,7 @@ int main(int argc, char** argv) {
         else if (a == "--lane-use" && hasVal) laneUse = std::atof(argv[++i]);
         else if (a == "--margin-m" && hasVal) marginM = std::atof(argv[++i]);
         else if (a == "--margin-weight" && hasVal) marginWeight = std::atof(argv[++i]);
+        else if (a == "--name" && hasVal) routeName = argv[++i];
         else if ((a == "-o" || a == "--out") && hasVal) outPath = argv[++i];
         else { usage(argv[0]); return 2; }
     }
@@ -504,7 +505,15 @@ int main(int argc, char** argv) {
         printSummary();
         return 0;
     }
-    std::ofstream(outPath) << routeToGpx(route, "open-autoroute");
+    // OpenCPN's Route Manager shows the route name and the names of the first and last waypoints (its From and To columns).
+    char desc[200];
+    std::snprintf(desc, sizeof desc, "open-autoroute: %.1f nm, %.1f m vessel, %.1f m draft plus %.1f m clearance", nm, lengthM, draft, clearance);
+    if (routeName.empty()) {
+        char nb[80];
+        std::snprintf(nb, sizeof nb, "open-autoroute %.3f,%.3f to %.3f,%.3f", from.lat, from.lon, to.lat, to.lon);
+        routeName = nb;
+    }
+    std::ofstream(outPath) << routeToGpx(route, routeName, "START", "END", desc);
     std::printf("%zu charts, %zu waypoints, %.1f nm (straight line %.1f nm), wrote %s\n", static_cast<size_t>(used),
                 route.size(), nm, haversineM(from, to) / 1852.0, outPath.c_str());
     printSummary();

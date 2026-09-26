@@ -16,7 +16,7 @@ rm -f "$OUT"/*.txt "$OUT"/*.gpx
 run_one() {
   IFS=, read -r name flat flon tlat tlon len cell _notes <<<"$1"
   # shellcheck disable=SC2086
-  "$BIN" ${OAR_ARGS:-} --enc "$ENC" --from "$flat,$flon" --to "$tlat,$tlon" --length-m "$len" --cell-m "$cell" --summary \
+  "$BIN" ${OAR_ARGS:-} --enc "$ENC" --from "$flat,$flon" --to "$tlat,$tlon" --length-m "$len" --cell-m "$cell" --summary --name "$name" \
       -o "$OUT/$name.gpx" >"$OUT/$name.txt" 2>&1 || true
 }
 export -f run_one

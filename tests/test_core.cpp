@@ -159,6 +159,22 @@ static void testInputValidation() {
     CHECK(gpx.find("<name>abc\td</name>") != std::string::npos);
 }
 
+static void testGpxNames() {
+    const std::vector<LatLon> pts{{46.0, -124.0}, {46.1, -124.1}, {46.2, -124.2}};
+    const std::string plain = routeToGpx(pts, "r");
+    CHECK(plain.find("<name>WP001</name>") != std::string::npos && plain.find("<name>WP003</name>") != std::string::npos);
+    CHECK(plain.find("<desc>") == std::string::npos);
+    // OpenCPN fills its From and To columns from the first and last waypoint names.
+    const std::string named = routeToGpx(pts, "Edmonds to Kingston", "START", "END", "4.7 nm & more");
+    CHECK(named.find("<name>Edmonds to Kingston</name>") != std::string::npos);
+    CHECK(named.find("<name>START</name>") != std::string::npos && named.find("<name>END</name>") != std::string::npos);
+    CHECK(named.find("<name>WP002</name>") != std::string::npos);      // the middle one keeps its number
+    CHECK(named.find("<name>WP001</name>") == std::string::npos && named.find("<name>WP003</name>") == std::string::npos);
+    CHECK(named.find("<desc>4.7 nm &amp; more</desc>") != std::string::npos);
+    // A route of one waypoint has a first that is also its last: START wins, and nothing is emitted twice.
+    CHECK(routeToGpx({{46.0, -124.0}}, "r", "START", "END").find("<name>START</name>") != std::string::npos);
+}
+
 static void testGpxLocaleIndependent() {
     // A comma-decimal global locale must not leak into the GPX numbers. The locale may not be installed; then skip.
     try {
@@ -1235,6 +1251,7 @@ int main() {
     testChannelCentering();
     testShoreMargin();
     testInputValidation();
+    testGpxNames();
     testGpxLocaleIndependent();
     testGpx();
     testStampChart();
