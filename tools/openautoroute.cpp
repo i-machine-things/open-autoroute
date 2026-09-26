@@ -322,15 +322,15 @@ int main(int argc, char** argv) {
                     "* smoothed route, o raw A* path, N/E/S/W path in a lane\n", 2 * mapRadius + 1, grid.cellSizeM(), mapAt.lat, mapAt.lon);
         for (const auto& line : canvas) std::printf("%s\n", line.c_str());
         if (trace) {
-            std::printf("raw path cells in the window (col,row: lane flow, zone, caution, interior, cost), in travel order:\n");
+            std::printf("raw path cells in the window (col,row: lane flow, zone, caution, cost), in travel order:\n");
             Cell prev{-1, -1};
             for (const Cell& c : rawPath) {
                 if (std::abs(c.col - mc.col) > mapRadius || std::abs(c.row - mc.row) > mapRadius) continue;
                 const float lane = grid.laneDirection(c);
                 std::printf("  (%d,%d)", c.col, c.row);
                 if (prev.col >= 0) std::printf(" step %+d,%+d", c.col - prev.col, c.row - prev.row);
-                std::printf(" lane=%s%.0f zone=%d caution=%d interior=%d cost=%.2f\n", std::isnan(lane) ? "-" : "", std::isnan(lane) ? 0.0f : lane,
-                            grid.isZone(c) ? 1 : 0, grid.isCaution(c) ? 1 : 0, grid.isLaneInterior(c) ? 1 : 0, grid.cost(c));
+                std::printf(" lane=%s%.0f zone=%d caution=%d cost=%.2f\n", std::isnan(lane) ? "-" : "", std::isnan(lane) ? 0.0f : lane,
+                            grid.isZone(c) ? 1 : 0, grid.isCaution(c) ? 1 : 0, grid.cost(c));
                 prev = c;
             }
         }
