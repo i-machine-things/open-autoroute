@@ -6,6 +6,7 @@
 // DIR is searched recursively for `.000` base cells (e.g. an ENC_ROOT folder). Only cells that overlap the route's
 // bounding box are kept in memory.
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -82,7 +83,7 @@ bool snapToOpen(const CostGrid& g, Cell c, int radius, Cell& out) {
 void usage(const char* argv0) {
     std::fprintf(stderr,
                  "usage: %s --enc DIR (--from LAT,LON --to LAT,LON | --eval ROUTE.gpx) [--draft M=1.5] [--clearance M=1.0]\n"
-                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [--length-m L=12] [--under-sail] [--lane-use F] [--lane-margin-m M=150] [--simplify T=0.05] [--map LAT,LON,CELLS] [-o route.gpx]\n", argv0);
+                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [--length-m L=12] [--under-sail] [--lane-use F] [--lane-margin-m M=150] [--simplify T=0.05] [--summary] [--map LAT,LON,CELLS] [-o route.gpx]\n", argv0);
 }
 
 }  // namespace
@@ -93,6 +94,9 @@ int main(int argc, char** argv) {
     int mapRadius = 0;
     bool haveFrom = false, haveTo = false, applyTss = true, underSail = false;
     double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0, lengthM = 12.0, laneUse = -1.0, simplify = 0.05, laneMarginM = 150.0;
+    bool summary = false;
+    const auto startedAt = std::chrono::steady_clock::now();
+    double snapStartM = 0.0, snapEndM = 0.0;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         const bool hasVal = i + 1 < argc;
@@ -110,6 +114,7 @@ int main(int argc, char** argv) {
             mapRadius = std::atoi(v.c_str() + c2 + 1);
         }
         else if (a == "--lane-margin-m" && hasVal) laneMarginM = std::atof(argv[++i]);
+        else if (a == "--summary") summary = true;  // one machine-readable line at the end, for benchmark scripts
         else if (a == "--simplify" && hasVal) simplify = std::atof(argv[++i]);
         else if (a == "--no-tss") applyTss = false;
         else if (a == "--under-sail" || a == "--sail") underSail = true;  // engine off, sails doing the work
@@ -180,13 +185,16 @@ int main(int argc, char** argv) {
         std::printf("  chart %s\n", name.c_str());
         ++used;
     }
+    // On any failure, still emit a summary line (found=0 and why) so a benchmark run records it and carries on.
+    const auto fail = [&](const char* reason) {
+        if (summary) std::printf("SUMMARY found=0 reason=%s\n", reason);
+        return 1;
+    };
     if (used == 0) {
         std::fprintf(stderr, "no ENC cells under %s overlap the route area\n", encDir.c_str());
-        return 1;
+        return fail("no_charts");
     }
 
-    // Keep off the shore: penalise cells near blocked water (see CostGrid::applyShoreMargin). Also measure how close the
-    // finished route gets, using the distances from before the penalty changes any costs.
     // Vessel type decides how lanes are used (COLREGs Rule 10(j), see vessel.hpp). --lane-use overrides the factor.
     const Vessel vessel{lengthM, underSail};
     if (laneUse < 0.0) laneUse = defaultLaneUseFactor(vessel);
@@ -196,6 +204,8 @@ int main(int argc, char** argv) {
         std::printf("vessel %.1f m%s: %s (lane-use factor %.2f)\n", lengthM, underSail ? ", under sail" : "",
                     laneUse > 1.0 ? "stays out of traffic lanes, crosses square-on" : "uses traffic lanes", laneUse);
     }
+    // Keep off the shore: penalise cells near blocked water (see CostGrid::applyShoreMargin). The clearance report uses the
+    // distances from before the penalty changes any costs.
     const std::vector<float> shoreDist = grid.distanceToBlockedM();
     grid.applyShoreMargin(marginM, marginWeight);
 
@@ -209,16 +219,18 @@ int main(int argc, char** argv) {
         if (!grid.inBounds(s) || !grid.inBounds(g) || !snapToOpen(grid, s, 40, s2) || !snapToOpen(grid, g, 40, g2)) {
             std::fprintf(stderr, "start or end is not near charted water deep enough for %.1f m draft + %.1f m clearance\n",
                          draft, clearance);
-            return 1;
+            return fail("endpoint_not_in_safe_water");
         }
-        if (!(s == s2)) std::printf("start moved to nearest safe water (%.0f m)\n", haversineM(from, grid.centre(s2)));
-        if (!(g == g2)) std::printf("end moved to nearest safe water (%.0f m)\n", haversineM(to, grid.centre(g2)));
+        snapStartM = haversineM(from, grid.centre(s2));
+        snapEndM = haversineM(to, grid.centre(g2));
+        if (!(s == s2)) std::printf("start moved to nearest safe water (%.0f m)\n", snapStartM);
+        if (!(g == g2)) std::printf("end moved to nearest safe water (%.0f m)\n", snapEndM);
 
         route = findRoute(grid, grid.centre(s2), grid.centre(g2), simplify, &rawPath);
         if (route.empty()) {
             std::fprintf(stderr, "no route found: the charts show no continuous water at least %.1f m deep between the points\n",
                          minDepth);
-            return 1;
+            return fail("no_route");
         }
     }
     double nm = 0;
@@ -322,22 +334,31 @@ int main(int argc, char** argv) {
         std::printf("clearance from land, shoal or uncharted water (excluding 1 km at each end): closest %.0f m, "
                     "median %.0f m\n", clearances.front(), clearances[clearances.size() / 2]);
     }
+    // Rule 10 counts. A run within 25 degrees of the flow is normal lane use, within 25 degrees of the opposite is wrong-way
+    // travel, and anything between is a crossing, judged by how far it is from square to the flow.
+    int withFlow = 0, crossings = 0, wrongWay = 0;
+    double wrongWayM = 0, worstOff = 0;
+    for (const LaneRun& r : laneRuns) {
+        const double mean = r.thetaSum / r.n;
+        if (mean <= 25.0) ++withFlow;
+        else if (mean >= 155.0) { ++wrongWay; wrongWayM += r.lengthM; }
+        else { ++crossings; worstOff = std::max(worstOff, std::fabs(mean - 90.0)); }
+    }
+    const auto printSummary = [&]() {
+        if (!summary) return;
+        const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count();
+        std::printf("SUMMARY found=1 nm=%.2f straight_nm=%.2f waypoints=%zu charts=%d closest_m=%.0f median_m=%.0f blocked_m=%.0f "
+                    "lane_runs=%zu with_flow=%d crossings=%d wrong_way_m=%.0f worst_off_deg=%.0f snap_start_m=%.0f snap_end_m=%.0f "
+                    "seconds=%.1f\n", nm, haversineM(from, to) / 1852.0, route.size(), used,
+                    clearances.empty() ? -1.0 : clearances.front(), clearances.empty() ? -1.0 : clearances[clearances.size() / 2],
+                    unsafeM, laneRuns.size(), withFlow, crossings, wrongWayM, worstOff, snapStartM, snapEndM, secs);
+    };
     if (!evalPath.empty()) {
         std::printf("unsafe by the chart rules: %.0f m of %.0f m (%.1f%%) in %zu stretch(es)\n", unsafeM, nm * 1852.0,
                     100.0 * unsafeM / (nm * 1852.0), unsafeSpots.size());
         for (size_t i = 0; i < unsafeSpots.size() && i < 10; ++i) {
             std::printf("  at %.5f,%.5f (%.1f nm along)\n", unsafeSpots[i].at.lat, unsafeSpots[i].at.lon,
                         unsafeSpots[i].alongM / 1852.0);
-        }
-        // Rule 10 report. A run within 25 degrees of the flow is normal lane use, within 25 degrees of the opposite is
-        // wrong-way travel, and anything between is a crossing, judged by how far it is from square to the flow.
-        int withFlow = 0, crossings = 0, wrongWay = 0;
-        double wrongWayM = 0, worstOff = 0;
-        for (const LaneRun& r : laneRuns) {
-            const double mean = r.thetaSum / r.n;
-            if (mean <= 25.0) ++withFlow;
-            else if (mean >= 155.0) { ++wrongWay; wrongWayM += r.lengthM; }
-            else { ++crossings; worstOff = std::max(worstOff, std::fabs(mean - 90.0)); }
         }
         std::printf("traffic lanes (Rule 10): %zu lane transit(s): %d with the flow, %d crossing, %d wrong-way (%.0f m)\n",
                     laneRuns.size(), withFlow, crossings, wrongWay, wrongWayM);
@@ -352,10 +373,12 @@ int main(int argc, char** argv) {
         if (crossings > 0) std::printf("  worst crossing is %.0f deg from square\n", worstOff);
         std::printf("%zu charts, %zu waypoints, %.1f nm (straight line %.1f nm)\n", static_cast<size_t>(used), route.size(),
                     nm, haversineM(from, to) / 1852.0);
+        printSummary();
         return 0;
     }
     std::ofstream(outPath) << routeToGpx(route, "open-autoroute");
     std::printf("%zu charts, %zu waypoints, %.1f nm (straight line %.1f nm), wrote %s\n", static_cast<size_t>(used),
                 route.size(), nm, haversineM(from, to) / 1852.0, outPath.c_str());
+    printSummary();
     return 0;
 }
