@@ -48,11 +48,11 @@ Vessel 12 m. **4.7 nm**, 5 waypoints, closest approach to hazards 597 m, 0.0 km 
 
 ### puget_seattle_port_townsend_large.gpx
 
-Vessel 120 m. **38.5 nm**, 25 waypoints, closest approach to hazards 330 m, 6.0 km in precautionary areas, 2 lane crossing(s), worst 46 degrees off square. Flags: X.
+Vessel 120 m. **38.6 nm**, 27 waypoints, closest approach to hazards 339 m, 4.3 km in precautionary areas, 1 lane crossing(s), worst 27 degrees off square. Flags: none.
 
 **Why look:** 120 m vessel: should USE the lanes with the flow, not fight them.
 
-**Expect:** Worst crossing 46 degrees off square (flagged X), 6 km inside precautionary areas (expected for a ship). Check the crossings are sensible and it never runs the wrong way.
+**Expect:** One crossing, worst 27 degrees off square, 4.3 km inside precautionary areas (expected for a ship). It was 46 degrees before a lane-cost fix; check the crossing is sensible and it never runs the wrong way.
 
 - [ ] Looks right   - [ ] Problem (where, and what):
 
@@ -188,7 +188,7 @@ Vessel 100 m. **47.9 nm**, 109 waypoints, closest approach to hazards 30 m, 0.0 
 | san_juan_bellingham_roche.gpx | 12 | 35.9 | 26 |  |
 | puget_tacoma_seattle_large.gpx | 120 | 24.9 | 25 | Ship; no precautionary flag. |
 | puget_everett_bainbridge.gpx | 12 | 30.1 | 42 | Two crossings about 7 degrees off square; closest approach 30 m, check where. |
-| sf_approach_oakland_large.gpx | 120 | 21.7 | 26 | Ship approach; 20 km in precautionary areas (expected). |
+| sf_approach_oakland_large.gpx | 120 | 21.6 | 15 | Golden Gate zigzag reported in review and fixed (was 26 waypoints, a stack of 12 in 300 m near the bridge): please confirm it is clean. 19 km in precautionary areas (expected for a ship). |
 | chesapeake_annapolis_norfolk.gpx | 12 | 133.1 | 79 | 133 nm; endpoint moved 1.5 km to reach safe water, check the Norfolk end. |
 | lake_michigan_chicago_milwaukee.gpx | 12 | 72.8 | 19 | Open water; harbour entrances at each end. |
 | maine_portland_rockland.gpx | 12 | 70.0 | 40 | Rocky coast, many islands. |
