@@ -84,6 +84,13 @@ This note was created based on issues encountered with PyInstaller executables r
 - **Don't set required status-check contexts before the repo has CI that produces them.** A required context that never reports a status permanently blocks merges. `ci.yml` isn't part of the bootstrap file set (it needs per-project tailoring — see "tailor or language-agnostic" above), so bootstrap-time protection only sets what's safe without knowing future job names (no force-push, no deletion, enforced for admins); add required checks once that repo's own CI is customized and green.
 - **Avoid `required_pull_request_reviews` on a solo-maintained repo.** GitHub won't let an author approve their own PR, so requiring even 1 approval with no other reviewer deadlocks every merge. Rely on required status checks (which do block direct pushes too, since a bare push's commit never gets the PR-triggered check runs) instead of an approval-count gate.
 
+## C++ Input Validation & Output Formats
+
+- **Validate public-API inputs.** Reject negative penalties and distances, non-finite coordinates and out-of-range cells by throwing or returning false; never assume callers pass sane values.
+- **Bounds-check both ends before walking a segment.** A helper that takes two cells (e.g. `lineOfSight`) must return false for out-of-grid endpoints, not index outside the grid.
+- **Format numbers for file formats with a classic-locale stream, not printf.** A comma-decimal global locale makes `%f` write `46,100000`, which is invalid GPX/XML.
+- **Strip XML 1.0-forbidden control characters from text.** Everything below 0x20 except tab, LF and CR is illegal even when escaped; escaping alone does not make it valid.
+
 ## General Style Notes
 
 - **Keep lines under 120 characters.** Long lines are hard to review side-by-side in a diff or split editor pane, and tend to signal a line doing too many things at once. Wrap or break up expressions rather than letting them run long.
