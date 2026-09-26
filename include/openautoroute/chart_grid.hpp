@@ -45,9 +45,9 @@ struct StampOptions {
 ///   - UNSARE, FSHFAC, MARCUL, PRDARE, OSPARE, HULKES: blocked
 ///   - fixed structures (SLCONS, PONTON, PILPNT, MORFAC, FNCLNE, DYKCON, CAUSWY, CONVYR, PYLONS, FLODOC, DRYDOC, GATCON, DAMCON, GRIDRN,
 ///     OILBAR, OFSPLF) and RAPIDS / WATFAL: blocked; offshore platform points also get a 250 m berth
-///   - RESARE: blocked for entry prohibited, an offshore safety zone or a minefield, and for an area to be avoided when the vessel is 50 m
+///   - RESARE: blocked for entry prohibited or a minefield, and for an area to be avoided when the vessel is 50 m
 ///     or longer (those bind ships; a smaller vessel pays x20); a military area is x30 (blocked if entry is also prohibited); costly for
-///     entry restricted, swimming, dredging, reserve and sanctuary areas; anchoring, fishing and similar restrictions do not stop a transit
+///     entry restricted or an offshore safety zone (x10, these are usually security zones needing permission), swimming, dredging, reserve and sanctuary areas; anchoring, fishing and similar restrictions do not stop a transit
 ///   - BOYISD / BCNISD: 100 m blocked; BOYCAR / BCNCAR: the danger side of the mark blocked out to 150 m
 ///   - BRIDGE, CBLOHD, PIPOHD: blocked unless the clearance (closed clearance for an opening bridge) is at least air draft plus 1 m
 ///   - MIPARE x30 (danger zones usually apply only while in use and can span a waterway), CTNARE x3, DMPGRD x15, ACHARE x3, WEDKLP x1.5, WATTUR x3, SPLARE x5: costlier

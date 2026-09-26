@@ -875,7 +875,7 @@ static void testHazardRestrictedAreas() {
     // Areas that forbid entry. (A blocked polygon's outline is painted too, so a neighbour can be fringed by one cell: the safe
     // direction. Keep forbidden areas apart from the ones checked for staying open.)
     CostGrid forbidden = stampHazards({resare(45.990, 46.0, -124.000, -123.998, 1u << 7, 0),      // cols 0-1: entry prohibited (RESTRN 7)
-                                       resare(45.990, 46.0, -123.994, -123.992, 0, 1u << 1),      // cols 6-7: offshore safety zone (CATREA 1)
+                                       resare(45.990, 46.0, -123.994, -123.992, 1u << 7, 1u << 1),  // cols 6-7: offshore safety zone with entry prohibited
                                        resare(45.990, 46.0, -123.990, -123.988, 0, 1u << 14)});   // cols 10-11: minefield (CATREA 14)
     CHECK(forbidden.blocked({0, 5}) && forbidden.blocked({1, 5}));
     CHECK(forbidden.blocked({6, 5}) && forbidden.blocked({7, 5}));
@@ -909,6 +909,11 @@ static void testHazardRestrictedAreas() {
     CHECK(soft.cost({4, 5}) == 10.0f);                          // entry restricted: costly, not blocked
     CHECK(soft.cost({7, 5}) == 20.0f);                          // swimming area
     CHECK(!soft.blocked({10, 5}) && soft.cost({10, 5}) == 1.0f);
+
+    // An offshore safety zone with entry only RESTRICTED (a security zone needing permission, as at the Battery and Long Beach) is
+    // costly but never a wall: otherwise a harbour or a whole waterway could be cut off.
+    CostGrid zone = stampHazards({resare(45.990, 46.0, -124.000, -123.996, 1u << 8, 1u << 1)});
+    CHECK(!zone.blocked({1, 5}) && zone.cost({1, 5}) == 10.0f);
 }
 
 static void testHazardPenalties() {
