@@ -67,6 +67,14 @@ public:
     /// stamped; zone cells that touch no lane keep no direction.
     void assignZoneDirections();
 
+    /// Precautionary-area cells (where lanes converge and vessels must take particular care). Their extra cost is in cost(); this
+    /// records where they are so a finished route can be checked and reported.
+    void setCaution(Cell c) {
+        if (caution_.empty()) caution_.assign(cost_.size(), 0);
+        caution_[index(c)] = 1;
+    }
+    bool isCaution(Cell c) const { return !caution_.empty() && caution_[index(c)] != 0; }
+
     LatLon centre(Cell c) const;
     /// Cell containing `p`; the result may be out of bounds, check with inBounds().
     Cell cellAt(LatLon p) const;
@@ -118,6 +126,7 @@ private:
     std::vector<float> lane_;  // empty until a lane is set
     std::vector<float> marginWeight_;  // empty until applyLaneMargin sets it
     std::vector<float> marginAxis_;    // degrees, axis of the nearest lane
+    std::vector<uint8_t> caution_;  // empty until a precautionary-area cell is set
     std::vector<uint8_t> zone_;   // empty until a zone cell is set
     std::vector<float> zoneDir_;
     float laneUseFactor_ = 1.0f;

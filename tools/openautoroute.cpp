@@ -92,7 +92,7 @@ std::map<int, Snap> nearestPerBody(const CostGrid& g, const WaterBodies& bodies,
 void usage(const char* argv0) {
     std::fprintf(stderr,
                  "usage: %s --enc DIR (--from LAT,LON --to LAT,LON | --eval ROUTE.gpx) [--draft M=1.5] [--clearance M=1.0]\n"
-                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [--length-m L=12] [--under-sail] [--lane-use F] [--lane-margin-m M=1000] [--simplify T=0.05] [--summary] [--map LAT,LON,CELLS] [-o route.gpx]\n", argv0);
+                 "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [--length-m L=12] [--under-sail] [--lane-use F] [--lane-margin-m M=1000] [--caution F] [--simplify T=0.05] [--summary] [--map LAT,LON,CELLS] [-o route.gpx]\n", argv0);
 }
 
 }  // namespace
@@ -102,7 +102,7 @@ int main(int argc, char** argv) {
     LatLon from{}, to{}, mapAt{};
     int mapRadius = 0;
     bool haveFrom = false, haveTo = false, applyTss = true, underSail = false;
-    double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0, lengthM = 12.0, laneUse = -1.0, simplify = 0.05, laneMarginM = 1000.0;
+    double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0, lengthM = 12.0, laneUse = -1.0, simplify = 0.05, laneMarginM = 1000.0, caution = -1.0;
     bool summary = false;
     const auto startedAt = std::chrono::steady_clock::now();
     double snapStartM = 0.0, snapEndM = 0.0;
@@ -122,6 +122,7 @@ int main(int argc, char** argv) {
             if (c2 == std::string::npos || !parseLatLon(v.substr(0, c2).c_str(), mapAt)) { usage(argv[0]); return 2; }
             mapRadius = std::atoi(v.c_str() + c2 + 1);
         }
+        else if (a == "--caution" && hasVal) caution = std::atof(argv[++i]);
         else if (a == "--lane-margin-m" && hasVal) laneMarginM = std::atof(argv[++i]);
         else if (a == "--summary") summary = true;  // one machine-readable line at the end, for benchmark scripts
         else if (a == "--simplify" && hasVal) simplify = std::atof(argv[++i]);
@@ -183,7 +184,10 @@ int main(int argc, char** argv) {
     const Vessel vessel{lengthM, underSail};
     if (laneUse < 0.0) laneUse = defaultLaneUseFactor(vessel);
     const bool avoidsLanes = laneUse > 1.0;
-    const double cautionFactor = avoidsLanes ? 3.0 : 1.5;  // precautionary areas: small craft avoid them, ships just take care
+    // Precautionary areas are where lanes converge and traffic is heaviest. A small craft should go round or cross the lanes
+    // square elsewhere rather than through one (a square lane crossing costs far less than passing through the area);
+    // ships expect to pass through them and only take care.
+    const double cautionFactor = caution > 0.0 ? caution : (avoidsLanes ? 12.0 : 1.5);
 
     int used = 0;
     for (const auto& [name, path] : cells) {
@@ -329,7 +333,9 @@ int main(int argc, char** argv) {
     // 1 km of either end are skipped, since a start in a marina or a berth is at the shore by definition.
     if (mapRadius > 0) drawMap();
     std::vector<double> clearances;
-    double travelled = 0.0, unsafeM = 0.0;
+    double travelled = 0.0, unsafeM = 0.0, cautionM = 0.0;
+    int cautionStretches = 0;
+    bool inCaution = false;
     struct Spot { LatLon at; double alongM; };
     std::vector<Spot> unsafeSpots;  // first sample of each separate unsafe stretch
     bool inUnsafe = false;
@@ -352,6 +358,12 @@ int main(int argc, char** argv) {
                 if (!inUnsafe) unsafeSpots.push_back({here, along});
             }
             inUnsafe = unsafe;
+            const bool caut = grid.inBounds(hc) && grid.isCaution(hc);
+            if (caut) {
+                cautionM += leg / steps;
+                if (!inCaution) ++cautionStretches;
+            }
+            inCaution = caut;
             const float lane = grid.inBounds(hc) ? grid.laneDirection(hc) : std::nanf("");
             if (std::isnan(lane)) {
                 inLane = false;
@@ -394,10 +406,10 @@ int main(int argc, char** argv) {
         if (!summary) return;
         const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count();
         std::printf("SUMMARY found=1 nm=%.2f straight_nm=%.2f waypoints=%zu charts=%d closest_m=%.0f median_m=%.0f blocked_m=%.0f "
-                    "lane_runs=%zu with_flow=%d crossings=%d wrong_way_m=%.0f worst_off_deg=%.0f snap_start_m=%.0f snap_end_m=%.0f "
+                    "caution_m=%.0f lane_runs=%zu with_flow=%d crossings=%d wrong_way_m=%.0f worst_off_deg=%.0f snap_start_m=%.0f snap_end_m=%.0f "
                     "seconds=%.1f\n", nm, haversineM(from, to) / 1852.0, route.size(), used,
                     clearances.empty() ? -1.0 : clearances.front(), clearances.empty() ? -1.0 : clearances[clearances.size() / 2],
-                    unsafeM, laneRuns.size(), withFlow, crossings, wrongWayM, worstOff, snapStartM, snapEndM, secs);
+                    unsafeM, cautionM, laneRuns.size(), withFlow, crossings, wrongWayM, worstOff, snapStartM, snapEndM, secs);
     };
     if (!evalPath.empty()) {
         std::printf("unsafe by the chart rules: %.0f m of %.0f m (%.1f%%) in %zu stretch(es)\n", unsafeM, nm * 1852.0,
@@ -406,6 +418,7 @@ int main(int argc, char** argv) {
             std::printf("  at %.5f,%.5f (%.1f nm along)\n", unsafeSpots[i].at.lat, unsafeSpots[i].at.lon,
                         unsafeSpots[i].alongM / 1852.0);
         }
+        std::printf("precautionary areas: %.0f m in %d stretch(es)\n", cautionM, cautionStretches);
         std::printf("traffic lanes (Rule 10): %zu lane transit(s): %d with the flow, %d crossing, %d wrong-way (%.0f m)\n",
                     laneRuns.size(), withFlow, crossings, wrongWay, wrongWayM);
         for (size_t i = 0; i < laneRuns.size() && i < 12; ++i) {

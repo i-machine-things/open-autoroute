@@ -464,7 +464,7 @@ static void testWaterBodies() {
     for (int r = 0; r < 6; ++r) g.setCost({5, r}, kBlocked);
     const WaterBodies split = findWaterBodies(g);
     CHECK(split.size.size() == 2);
-    CHECK(split.size[0] + split.size[1] == 50);  // every open cell belongs to one body
+    CHECK(split.size[0] + split.size[1] == 54);  // every open cell belongs to one body (60 cells minus the 6-cell wall)
     CHECK(split.label[5] == -1);                 // blocked cells have no body
     CHECK(split.label[0] != split.label[9]);
 
@@ -519,6 +519,7 @@ static void testPrecautionaryAreaCost() {
     stampChart(d, 2.5, g, true, 3.0);
     CHECK(g.cost({5, 5}) == 3.0f);
     CHECK(g.cost({1, 5}) == 1.0f);
+    CHECK(g.isCaution({5, 5}) && !g.isCaution({1, 5}));  // remembered so a finished route can be checked
     CostGrid off = makeGrid(12, 10);
     off.fill(kBlocked);
     stampChart(d, 2.5, off, true, 1.0);  // no caution factor: ordinary water

@@ -131,7 +131,10 @@ void stampChart(const ChartData& chart, double minDepthM, CostGrid& grid, bool a
             const uint8_t s = state[i];
             if (s != kUnknown) grid.setCost({col, row}, s == kOpen ? 1.0f : kBlocked);
             if (s == kOpen && zone[i]) grid.setZone({col, row});  // water, but a separation zone: crossable only square on
-            if (s == kOpen && caution[i]) grid.setCost({col, row}, static_cast<float>(cautionFactor));
+            if (s == kOpen && caution[i]) {
+                grid.setCost({col, row}, static_cast<float>(cautionFactor));
+                grid.setCaution({col, row});
+            }
         }
     }
 }
