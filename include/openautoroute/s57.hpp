@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -7,19 +9,36 @@
 
 namespace oar {
 
-/// One chart object reduced to what routing needs: its S-57 class and its outline in lat/lon.
+enum class Geometry { Point, Line, Area };
+
+/// A run of vertices. For areas, `hole` marks an interior ring (an island inside a water polygon, say).
+struct Ring {
+    std::vector<LatLon> points;
+    bool hole = false;
+};
+
+/// One chart object reduced to what routing needs. Attributes the object does not carry stay NaN.
 struct ChartFeature {
-    std::string objectClass;  // e.g. "DEPCNT", "LNDARE", "FAIRWY", "TSSLPT", "OBSTRN"
-    std::vector<LatLon> outline;
-    double depthM = 0.0;  // valid for DEPCNT / DEPARE / OBSTRN
+    std::string objectClass;  // S-57 acronym, e.g. "DEPARE", "DEPCNT", "LNDARE", "FAIRWY", "TSSLPT", "WRECKS"
+    Geometry geometry = Geometry::Point;
+    std::vector<Ring> parts;  // Point: one ring, one vertex. Line: one polyline. Area: exterior + hole rings.
+    double drval1 = std::numeric_limits<double>::quiet_NaN();  // DEPARE: shallowest depth in the area (m)
+    double drval2 = std::numeric_limits<double>::quiet_NaN();  // DEPARE: deepest depth in the area (m)
+    double valdco = std::numeric_limits<double>::quiet_NaN();  // DEPCNT: contour depth (m)
+    double valsou = std::numeric_limits<double>::quiet_NaN();  // OBSTRN/WRECKS/UWTROC/SOUNDG: sounding (m)
+    double orient = std::numeric_limits<double>::quiet_NaN();  // TSSLPT/FAIRWY: orientation, degrees true
 };
 
 struct ChartData {
     std::vector<ChartFeature> features;
 };
 
-/// Read routing-relevant objects from an S-57 ENC cell (v0.1.0: DEPCNT, LNDARE, FAIRWY, TSS, hazards).
-/// Requires the OAR_WITH_GDAL build option. On failure returns false and fills `error`.
+/// Read routing-relevant objects from an S-57 ENC base cell (`.000`). Kept: COALNE, DEPARE, DEPCNT, FAIRWY, LNDARE,
+/// OBSTRN, SOUNDG (one point per sounding), TSSBND, TSSCRS, TSSLPT, TSSRON, TSEZNE, UWTROC, WRECKS. Update files
+/// (`.001`, ...) are not applied. Pure C++ (ISO 8211 reader); no GDAL needed. On failure returns false, fills `error`.
 bool loadS57(const std::string& path, ChartData& out, std::string& error);
+
+/// Same as loadS57 for a cell already in memory. Exposed so tests can feed hand-built records.
+bool loadS57Buffer(const std::vector<uint8_t>& bytes, ChartData& out, std::string& error);
 
 }  // namespace oar

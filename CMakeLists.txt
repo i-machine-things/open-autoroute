@@ -16,16 +16,12 @@ add_library(openautoroute_core STATIC
 target_include_directories(openautoroute_core PUBLIC include)
 target_compile_options(openautoroute_core PRIVATE -Wall -Wextra -Wpedantic)
 
-# S-57 parsing goes through GDAL/OGR when available; the rest of the core builds and tests without it.
-option(OAR_WITH_GDAL "Parse S-57 ENCs with GDAL/OGR" OFF)
-if(OAR_WITH_GDAL)
-  find_package(GDAL REQUIRED)
-  target_link_libraries(openautoroute_core PUBLIC GDAL::GDAL)
-  target_compile_definitions(openautoroute_core PUBLIC OAR_WITH_GDAL=1)
-endif()
-
 enable_testing()
 add_executable(test_core tests/test_core.cpp)
 target_link_libraries(test_core PRIVATE openautoroute_core)
 target_compile_options(test_core PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME core COMMAND test_core)
+
+# Bulk validation tool: parses every cell in a directory tree (see tools/s57_scan.cpp).
+add_executable(s57_scan tools/s57_scan.cpp)
+target_link_libraries(s57_scan PRIVATE openautoroute_core)

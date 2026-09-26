@@ -15,7 +15,7 @@ Key files:
 - `CMakeLists.txt`, `src/`, `include/openautoroute/`, `tests/` — the C++ core (S-57 parsing, cost grid, COLREGs, pathfinding, GPX export)
 
 Environment / deployment:
-C++17 core built with CMake. S-57 ENC parsing is planned via GDAL/OGR (optional dependency). Offline-first: the plugin runs on local charts. Development machine is low-spec (Celeron, ~3.7GB RAM) — keep builds light (`-j2`).
+C++17 core built with CMake. S-57 ENC parsing uses a built-in ISO 8211 reader (no GDAL); large-scale chart tests run in the server sandbox, not on the dev machine. Offline-first: the plugin runs on local charts. Development machine is low-spec (Celeron, ~3.7GB RAM) — keep builds light (`-j2`).
 
 ## Rule 0: Always Read First
 

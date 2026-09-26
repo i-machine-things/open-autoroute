@@ -23,7 +23,7 @@ cmake --build build -j2
 ctest --test-dir build --output-on-failure
 ```
 
-S-57 chart parsing (not yet implemented) will use GDAL; enable it with `-DOAR_WITH_GDAL=ON`.
+S-57 charts are read by a built-in ISO 8211 parser, so there is no GDAL dependency.
 
 ---
 
