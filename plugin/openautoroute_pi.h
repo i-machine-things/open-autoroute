@@ -33,6 +33,7 @@ public:
     void OnContextMenuItemCallback(int id) override;
     void SetCursorLatLon(double lat, double lon) override;
     void SetPositionFix(PlugIn_Position_Fix& pfix) override;
+    bool MouseEventHook(wxMouseEvent& event) override;
 
     // Used by the dialog.
     bool HaveShip() const { return haveShip_; }
@@ -41,7 +42,11 @@ public:
     double CursorLat() const { return cursorLat_; }
     double CursorLon() const { return cursorLon_; }
     wxString DefaultEncDir() const;
-    void Closed() { dialog_ = nullptr; }
+    void Closed() { CancelPick(); dialog_ = nullptr; }
+
+    /// Hide the dialog and let the next left-click on the chart set its "from" or "to" position (a right-click cancels).
+    void BeginPick(bool forFrom);
+    void CancelPick();
 
 private:
     void ShowDialog();
@@ -51,4 +56,5 @@ private:
     int toolId_ = 0, fromItem_ = 0, toItem_ = 0;
     double cursorLat_ = 0.0, cursorLon_ = 0.0, shipLat_ = 0.0, shipLon_ = 0.0;
     bool haveShip_ = false;
+    bool picking_ = false, pickFrom_ = true;
 };

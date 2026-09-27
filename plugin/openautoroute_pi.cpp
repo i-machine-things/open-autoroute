@@ -121,7 +121,7 @@ AutoRouteDialog::AutoRouteDialog(wxWindow* parent, openautoroute_pi* owner)
     grid->Add(from_, 1, wxEXPAND);
     auto* fromButtons = new wxBoxSizer(wxHORIZONTAL);
     auto* shipBtn = new wxButton(this, wxID_ANY, "Ship", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-    auto* curFrom = new wxButton(this, wxID_ANY, "Cursor", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    auto* curFrom = new wxButton(this, wxID_ANY, "Pick on chart", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
     fromButtons->Add(shipBtn, 0, wxRIGHT, 3);
     fromButtons->Add(curFrom);
     grid->Add(fromButtons);
@@ -129,7 +129,7 @@ AutoRouteDialog::AutoRouteDialog(wxWindow* parent, openautoroute_pi* owner)
     grid->Add(label("To (lat, lon)"), 0, wxALIGN_CENTER_VERTICAL);
     to_ = new wxTextCtrl(this, wxID_ANY, to);
     grid->Add(to_, 1, wxEXPAND);
-    auto* curTo = new wxButton(this, wxID_ANY, "Cursor", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    auto* curTo = new wxButton(this, wxID_ANY, "Pick on chart", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
     grid->Add(curTo);
 
     grid->Add(label("Units"), 0, wxALIGN_CENTER_VERTICAL);
@@ -220,8 +220,8 @@ void AutoRouteDialog::OnShipFrom(wxCommandEvent&) {
     if (owner_->HaveShip()) SetFrom(owner_->ShipLat(), owner_->ShipLon());
     else wxMessageBox("OpenCPN has no position fix yet.", "Auto-route");
 }
-void AutoRouteDialog::OnCursorFrom(wxCommandEvent&) { SetFrom(owner_->CursorLat(), owner_->CursorLon()); }
-void AutoRouteDialog::OnCursorTo(wxCommandEvent&) { SetTo(owner_->CursorLat(), owner_->CursorLon()); }
+void AutoRouteDialog::OnCursorFrom(wxCommandEvent&) { owner_->BeginPick(true); }
+void AutoRouteDialog::OnCursorTo(wxCommandEvent&) { owner_->BeginPick(false); }
 
 // Switching units converts what is already typed, so the numbers keep meaning the same thing.
 void AutoRouteDialog::OnUnits(wxCommandEvent&) {
@@ -402,7 +402,7 @@ int openautoroute_pi::Init() {
     toolId_ = InsertPlugInTool("", &icon_, &icon_, wxITEM_NORMAL, "Auto-route", "Plan a route between two points", nullptr, -1, 0, this);
     fromItem_ = AddCanvasContextMenuItem(new wxMenuItem(nullptr, wxID_ANY, "Auto-route from here"), this);
     toItem_ = AddCanvasContextMenuItem(new wxMenuItem(nullptr, wxID_ANY, "Auto-route to here"), this);
-    return WANTS_TOOLBAR_CALLBACK | INSTALLS_TOOLBAR_TOOL | INSTALLS_CONTEXTMENU_ITEMS | WANTS_CURSOR_LATLON | WANTS_NMEA_EVENTS | WANTS_CONFIG;
+    return WANTS_TOOLBAR_CALLBACK | INSTALLS_TOOLBAR_TOOL | INSTALLS_CONTEXTMENU_ITEMS | WANTS_CURSOR_LATLON | WANTS_MOUSE_EVENTS | WANTS_NMEA_EVENTS | WANTS_CONFIG;
 }
 
 bool openautoroute_pi::DeInit() {
@@ -459,6 +459,46 @@ void openautoroute_pi::OnContextMenuItemCallback(int id) {
     ShowDialog();
     if (id == fromItem_) dialog_->SetFrom(cursorLat_, cursorLon_);
     else if (id == toItem_) dialog_->SetTo(cursorLat_, cursorLon_);
+}
+
+void openautoroute_pi::BeginPick(bool forFrom) {
+    if (!dialog_) return;
+    picking_ = true;
+    pickFrom_ = forFrom;
+    dialog_->Hide();   // out of the way, so the whole chart can be clicked
+    if (wxWindow* canvas = GetOCPNCanvasWindow()) canvas->SetCursor(wxCursor(wxCURSOR_CROSS));
+}
+
+void openautoroute_pi::CancelPick() {
+    if (!picking_) return;
+    picking_ = false;
+    if (wxWindow* canvas = GetOCPNCanvasWindow()) canvas->SetCursor(wxNullCursor);
+    if (dialog_) {
+        dialog_->Show();
+        dialog_->Raise();
+    }
+}
+
+// While picking, the next left-click on the chart is the position; a right-click cancels. Both are consumed so the chart does not also react.
+bool openautoroute_pi::MouseEventHook(wxMouseEvent& event) {
+    if (!picking_) return false;
+    if (event.LeftDown() || event.LeftUp() || event.LeftDClick()) {
+        if (event.LeftUp()) {
+            const bool forFrom = pickFrom_;
+            const double lat = cursorLat_, lon = cursorLon_;
+            CancelPick();
+            if (dialog_) {
+                if (forFrom) dialog_->SetFrom(lat, lon);
+                else dialog_->SetTo(lat, lon);
+            }
+        }
+        return true;
+    }
+    if (event.RightDown() || event.RightUp()) {
+        if (event.RightUp()) CancelPick();
+        return true;
+    }
+    return false;
 }
 
 void openautoroute_pi::SetCursorLatLon(double lat, double lon) {
