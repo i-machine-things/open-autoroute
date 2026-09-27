@@ -91,6 +91,16 @@ This note was created based on issues encountered with PyInstaller executables r
 - **Format numbers for file formats with a classic-locale stream, not printf.** A comma-decimal global locale makes `%f` write `46,100000`, which is invalid GPX/XML.
 - **Strip XML 1.0-forbidden control characters from text.** Everything below 0x20 except tab, LF and CR is illegal even when escaped; escaping alone does not make it valid.
 
+## OpenCPN Plugin and Route Jobs
+
+- **Per-job state must not leak into another job.** State kept from the last route job (its waypoints) is only valid for that job type; check the job before using it in a message, or a plain plan can name waypoints from an earlier route.
+- **Several inputs can map to one output index.** When matching user waypoints to planned points by index, place every waypoint whose index matches (loop, not if): two waypoints in one grid cell share a point, and a single test drops all later ones.
+- **Decide "moved" from the planner's cell test, not a distance.** Snapping to a neighbour cell can be under one cell size, so a distance threshold keeps a point on land. The planner reports pointMoved per point; use it for both the position and the notice.
+
+## Testing
+
+- **Make sure a callback test actually calls the callback.** findRoute reports progress every 16384 pops, so a small grid never calls it and the CHECKs inside never run. Count the calls and assert them; test cancel with a callback that returns false.
+
 ## S-57 Chart Objects and COLREGs (how to handle each class)
 
 - **Source.** Rule text checked: international Rules 9 and 10 and US Inland Rule 9 (33 USC 2009). Other rule numbers here are from memory; verify before citing in code.

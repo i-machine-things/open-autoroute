@@ -467,7 +467,7 @@ wxString AutoRouteDialog::NoRouteText(const PlanResult& result) const {
     else if (result.failReason == "no_charts") why = "no chart cells in that folder cover the area";
     else if (result.failReason == "no_route") why = "no legal route was found between the points";
     wxString text = "No route: " + why + ".";
-    if (result.failedLeg >= 0 && routePts_.size() > 2) {
+    if (job_ == Job::Replan && result.failedLeg >= 0 && routePts_.size() > 2) {   // routePts_ is from the last route job
         text += wxString::Format(" The leg with no route is from waypoint %d to waypoint %d.", result.failedLeg + 1, result.failedLeg + 2);
     }
     if (job_ == Job::Replan) text += "\n\nYour route was not changed.";
@@ -478,13 +478,14 @@ wxString AutoRouteDialog::NoRouteText(const PlanResult& result) const {
 wxString AutoRouteDialog::RouteSummary(const PlanResult& result) const {
     wxString text = wxString::Format("%.1f nm (straight line %.1f nm), %zu waypoints, %d charts.\n", result.nm, result.straightNm,
                                      result.route.size(), result.chartsUsed);
-    if (result.snapStartM > 1.0) text += wxString::Format("The start was moved %s to reach safe water.\n", Length(result.snapStartM));
+    // Moved means the point's own grid cell was not usable, not the few metres to the centre of its cell.
+    const auto moved = [&](size_t i) { return i < result.pointMoved.size() && result.pointMoved[i]; };
+    const size_t last = result.pointMoved.empty() ? 0 : result.pointMoved.size() - 1;
+    if (moved(0)) text += wxString::Format("The start was moved %s to reach safe water.\n", Length(result.snapStartM));
     for (size_t i = 0; i < result.snapViaM.size(); ++i) {
-        if (result.snapViaM[i] > cellM_) {
-            text += wxString::Format("Waypoint %zu was moved %s to reach safe water.\n", i + 2, Length(result.snapViaM[i]));
-        }
+        if (moved(i + 1)) text += wxString::Format("Waypoint %zu was moved %s to reach safe water.\n", i + 2, Length(result.snapViaM[i]));
     }
-    if (result.snapEndM > 1.0) text += wxString::Format("The end was moved %s to reach safe water.\n", Length(result.snapEndM));
+    if (last > 0 && moved(last)) text += wxString::Format("The end was moved %s to reach safe water.\n", Length(result.snapEndM));
     if (result.areasCrossed.empty()) {
         text += "\nNo restricted or dangerous charted areas are crossed.";
     } else {
@@ -512,19 +513,20 @@ void AutoRouteDialog::FinishReplan(const PlanResult& result) {
     const auto build = [&](std::unique_ptr<HostApi121::Route> route) {
         size_t next = 0;   // the next of the user's waypoints to place
         for (size_t i = 0; i < result.route.size(); ++i) {
-            if (unchanged && next < result.pointIndex.size() && result.pointIndex[next] == i) {
+            // Every user waypoint planned onto this point: two in one grid cell share a point, and both are kept.
+            bool placed = false;
+            while (unchanged && next < result.pointIndex.size() && result.pointIndex[next] == i) {
                 PlugIn_Waypoint_ExV2* wp = freshCopy(*own[next]);
-                // A point already in safe water keeps its exact position; one that had to move goes where the plan put it.
-                const double moved = next == 0 ? result.snapStartM : next + 1 == routePts_.size() ? result.snapEndM : result.snapViaM[next - 1];
-                if (moved > cellM_) {
+                // A point in usable water keeps its exact position; one that had to move goes where the plan put it.
+                if (next >= result.pointMoved.size() || result.pointMoved[next]) {
                     wp->m_lat = result.route[i].lat;
                     wp->m_lon = result.route[i].lon;
                 }
                 route->pWaypointList->Append(wp);
                 ++next;
-            } else {
-                route->pWaypointList->Append(new PlugIn_Waypoint_ExV2(result.route[i].lat, result.route[i].lon, "diamond", ""));
+                placed = true;
             }
+            if (!placed) route->pWaypointList->Append(new PlugIn_Waypoint_ExV2(result.route[i].lat, result.route[i].lon, "diamond", ""));
         }
         return route;
     };
