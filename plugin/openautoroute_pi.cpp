@@ -404,9 +404,11 @@ bool openautoroute_pi::DeInit() {
 }
 
 int openautoroute_pi::GetAPIVersionMajor() { return API_VERSION_MAJOR; }
-int openautoroute_pi::GetAPIVersionMinor() { return API_VERSION_MINOR; }
+// Must match the base class this plugin is built on (opencpn_plugin_118), not the newest API the header describes: OpenCPN casts the plugin
+// to the class named by this number and calls it incompatible when the cast fails.
+int openautoroute_pi::GetAPIVersionMinor() { return 18; }
 int openautoroute_pi::GetPlugInVersionMajor() { return 0; }
-int openautoroute_pi::GetPlugInVersionMinor() { return 1; }
+int openautoroute_pi::GetPlugInVersionMinor() { return 2; }
 wxBitmap* openautoroute_pi::GetPlugInBitmap() { return &icon_; }
 wxString openautoroute_pi::GetCommonName() { return "Auto-route"; }
 wxString openautoroute_pi::GetShortDescription() { return "Plan a safe route between two points from NOAA S-57 charts"; }
