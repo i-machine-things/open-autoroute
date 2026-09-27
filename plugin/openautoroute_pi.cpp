@@ -57,6 +57,10 @@ public:
     AutoRouteDialog(wxWindow* parent, openautoroute_pi* owner);
     ~AutoRouteDialog() override;
 
+    /// Stop everything the dialog has running and save its settings, synchronously. The plugin calls this from DeInit and then deletes the
+    /// dialog before returning, because OpenCPN unloads the plugin's library straight after: no thread or queued callback may outlive that.
+    void Shutdown();
+
     void SetFrom(double lat, double lon) { from_->SetValue(pointText(lat, lon)); }
     void SetTo(double lat, double lon) { to_->SetValue(pointText(lat, lon)); }
 
@@ -244,11 +248,19 @@ void AutoRouteDialog::OnCancelOrClose(wxCommandEvent&) {
     }
 }
 
+// Closing only hides the dialog (planning is cancelled); the plugin keeps it and deletes it in DeInit, while its code is still loaded.
 void AutoRouteDialog::OnClose(wxCloseEvent&) {
     Save();
     cancel_flag_ = true;
-    owner_->Closed();
-    Destroy();
+    owner_->CancelPick();
+    Hide();
+}
+
+void AutoRouteDialog::Shutdown() {
+    Save();
+    cancel_flag_ = true;
+    if (worker_.joinable()) worker_.join();   // the planner checks the flag often, so this is quick
+    owner_->CancelPick();
 }
 
 void AutoRouteDialog::OnPlan(wxCommandEvent&) {
@@ -402,8 +414,10 @@ int openautoroute_pi::Init() {
 bool openautoroute_pi::DeInit() {
     wxLogMessage("open-autoroute plugin: DeInit");
     if (dialog_) {
-        dialog_->Close();   // saves its settings and destroys itself (which also stops any planning)
+        AutoRouteDialog* d = dialog_;
         dialog_ = nullptr;
+        d->Shutdown();   // stop the worker and save, then delete now: the library is unloaded as soon as DeInit returns
+        delete d;        // (also drops any callbacks still queued for it)
     }
     RemovePlugInTool(toolId_);
     return true;
@@ -447,7 +461,7 @@ std::vector<std::string> openautoroute_pi::ChartFolders() const {
 
 void openautoroute_pi::ShowDialog() {
     if (!dialog_) dialog_ = new AutoRouteDialog(GetOCPNCanvasWindow(), this);
-    dialog_->Show();
+    dialog_->Show();   // a closed dialog is only hidden, so this brings it back with its settings
     dialog_->Raise();
 }
 

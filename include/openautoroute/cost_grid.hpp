@@ -51,11 +51,19 @@ public:
     /// Hazards that a lock corridor must never reopen: charted wrecks, rocks and obstructions that are unsafe, a bridge or cable charted lower
     /// than the vessel, unsurveyed and prohibited areas, land drawn as points and lines. (A corridor reopens only what is an artefact of
     /// chart resolution: guide walls, gate walkways, bank depth areas.)
-    void setHardHazard(Cell c, bool on) {
-        if (hardHazard_.empty()) { if (!on) return; hardHazard_.assign(cost_.size(), 0); }
-        hardHazard_[index(c)] = on ? 1 : 0;
+    /// Physical hazards persist over every chart, like hazardShut: once recorded they are never cleared by a finer chart that omits them.
+    void setHardHazard(Cell c) {
+        if (hardHazard_.empty()) hardHazard_.assign(cost_.size(), 0);
+        hardHazard_[index(c)] = 1;
     }
-    bool isHardHazard(Cell c) const { return !hardHazard_.empty() && hardHazard_[index(c)]; }
+    /// Unsurveyed, prohibited and unknown-clearance areas are the covering chart's own verdict, replaced by each chart that covers the cell.
+    void setLocalHardHazard(Cell c, bool on) {
+        if (localHardHazard_.empty()) { if (!on) return; localHardHazard_.assign(cost_.size(), 0); }
+        localHardHazard_[index(c)] = on ? 1 : 0;
+    }
+    bool isHardHazard(Cell c) const {
+        return (!hardHazard_.empty() && hardHazard_[index(c)]) || (!localHardHazard_.empty() && localHardHazard_[index(c)]);
+    }
     void openLockCorridors();
     void clearHazardShut(Cell c) {
         if (!hazardShut_.empty()) hazardShut_[index(c)] = 0;
@@ -194,7 +202,8 @@ private:
     std::vector<float> cost_;
     struct LockCorridor { LatLon a, b; double halfWidthM; };
     std::vector<LockCorridor> corridors_;
-    std::vector<uint8_t> hardHazard_;   // empty until a hazard a lock corridor must keep is set
+    std::vector<uint8_t> hardHazard_;        // empty until a physical hazard a lock corridor must keep is set
+    std::vector<uint8_t> localHardHazard_;   // empty until a covering chart's own hard area is set
     std::vector<uint8_t> landCell_;   // empty until a land cell is set (the covering chart's own verdict)
     std::vector<uint8_t> hazardShut_;  // empty until a hazard blocks a cell
     std::vector<float> lane_;  // empty until a lane is set

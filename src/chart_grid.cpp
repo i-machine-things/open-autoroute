@@ -570,8 +570,8 @@ void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& g
             // Physical hazards accumulate over every chart; the depth and land verdict, and every area, is the covering chart's own.
             if (shut[i]) grid.setHazardShut(cell);
             // What a lock corridor must keep: physical hazards persist like `shut`; unsurveyed, prohibited and unknown-clearance areas are the covering chart's own.
-            if (hard[i]) grid.setHardHazard(cell, true);
-            else if (s != kUnknown) grid.setHardHazard(cell, shutLocal[i] != 0);
+            if (hard[i]) grid.setHardHazard(cell);
+            if (s != kUnknown) grid.setLocalHardHazard(cell, shutLocal[i] != 0);
             if (s != kUnknown) grid.setCost(cell, s == kOpen ? 1.0f : kBlocked);
             if (s == kOpen && channel[i]) grid.setChannel(cell);
             if (s == kOpen && zone[i]) grid.setZone(cell);  // water, but a separation zone: crossable only square on

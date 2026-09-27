@@ -1442,6 +1442,30 @@ static void testPlannerRejectsBadNumbers() {
     }
 }
 
+// A wreck recorded only on a coarser chart must not be reopened by a lock corridor that a finer chart supplies: the finer chart's own
+// (empty) verdict for that cell must not erase the physical hazard.
+static void testLockCorridorKeepsCoarseChartHazard() {
+    CostGrid g = makeGrid(30, 10);
+    g.fill(kBlocked);
+    ChartData coarse, fine;
+    coarse.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.970, 0.5));   // shoal everywhere
+    coarse.features.push_back(pointFeature("WRECKS", {10, 5}, g, 1.0));                     // a wreck only the coarse chart carries
+    fine.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.970, 0.5));      // the same water, no wreck drawn
+    const LatLon mid = g.centre({12, 5});
+    ChartFeature basin;
+    basin.objectClass = "LOKBSN";
+    basin.geometry = Geometry::Area;
+    basin.parts.push_back({{{mid.lat + 0.0002, mid.lon - 0.0012}, {mid.lat + 0.0002, mid.lon + 0.0012}, {mid.lat - 0.0002, mid.lon + 0.0012}, {mid.lat - 0.0002, mid.lon - 0.0012}}, true});
+    fine.features.push_back(basin);
+    StampOptions o;
+    stampChart(coarse, o, g);
+    stampChart(fine, o, g);
+    g.openLockCorridors();
+    CHECK(g.blocked({10, 5}));      // the wreck stays shut
+    CHECK(!g.blocked({12, 5}));     // the chamber itself opens
+    CHECK(!g.blocked({9, 5}));      // and the shoal beside the wreck, on the approach line
+}
+
 static void testHazardPenalties() {
     ChartFeature military = areaFeature("MIPARE", 45.996, 46.0, -124.000, -123.996);   // cols 0-3, rows 0-3: heavily costly, never a wall
     ChartFeature caution = areaFeature("CTNARE", 45.990, 45.994, -124.000, -123.996);   // cols 0-3, rows 6-9
@@ -1786,6 +1810,7 @@ int main() {
     testEncCatalog();
     testFindEncCells();
     testLandRasterisation();
+    testLockCorridorKeepsCoarseChartHazard();
     testPlannerRejectsBadNumbers();
     testSharedScratchStamping();
     testLockCorridor();

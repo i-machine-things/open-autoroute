@@ -44,8 +44,6 @@ public:
     double CursorLat() const { return cursorLat_; }
     double CursorLon() const { return cursorLon_; }
     std::vector<std::string> ChartFolders() const;
-    void Closed() { CancelPick(); dialog_ = nullptr; }
-
     /// Hide the dialog and let the next left-click on the chart set its "from" or "to" position (a right-click cancels).
     void BeginPick(bool forFrom);
     void CancelPick();

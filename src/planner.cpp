@@ -225,9 +225,10 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     // Load overlapping cells; stamp coarse-to-fine by the usage band in the cell name (US5xxxxx = harbour scale).
     std::vector<std::pair<std::string, fs::path>> cells;
     for (const std::string& dir : encDirs) {
-        for (const auto& [name, path] : findEncCells(dir, box.minLat, box.maxLat, box.minLon, box.maxLon, req.useCatalogue)) {
-            const bool dup = std::any_of(cells.begin(), cells.end(), [&](const auto& c) { return c.second == fs::path(path); });   // folders may nest
-            if (!dup) cells.emplace_back(name, path);
+        for (const auto& found : findEncCells(dir, box.minLat, box.maxLat, box.minLon, box.maxLon, req.useCatalogue)) {
+            const fs::path p(found.second);   // (a structured binding cannot be captured by a lambda in C++17)
+            const bool dup = std::any_of(cells.begin(), cells.end(), [&](const auto& c) { return c.second == p; });   // folders may nest
+            if (!dup) cells.emplace_back(found.first, p);
         }
     }
     std::sort(cells.begin(), cells.end(), [](const auto& a, const auto& b) {
