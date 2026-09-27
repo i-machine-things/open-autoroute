@@ -97,10 +97,10 @@ jobs:
           cmake --build build -j"$(nproc)"
       - name: Package
         run: |
-          mkdir -p dist stage/openautoroute-$TAG-linux-x86_64
+          mkdir -p dist stage/openautoroute-cli-$TAG-linux-x86_64
           strip build/openautoroute
-          cp build/openautoroute README.md LICENSE stage/openautoroute-$TAG-linux-x86_64/
-          tar -C stage -czf dist/openautoroute-$TAG-linux-x86_64.tar.gz openautoroute-$TAG-linux-x86_64
+          cp build/openautoroute README.md LICENSE stage/openautoroute-cli-$TAG-linux-x86_64/
+          tar -C stage -czf dist/openautoroute-cli-$TAG-linux-x86_64.tar.gz openautoroute-cli-$TAG-linux-x86_64
           # The plugin package is what OpenCPN's Options > Plugins > "Import plugin..." takes. It is built on Ubuntu 24.04 with wxWidgets 3.2;
           # on another system, build it from source (see the README).
           VERSION="${TAG#v}" TARGET=ubuntu-x86_64 TARGET_VERSION=24.04 plugin/package.sh build/plugin/libopenautoroute_pi.so dist

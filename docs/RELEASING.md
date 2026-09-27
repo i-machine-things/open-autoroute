@@ -29,7 +29,7 @@ The 29-route benchmark needs the full NOAA chart set (over 2 GB), so it is not i
 The workflow refuses the tag unless it is a milestone in `ROADMAP.md` (`vX.Y.0`, and the previous milestone is already released) or the
 next patch of a milestone that is already released and still current (once `vX.(Y+1).0` is out, `vX.Y` is closed: no backports), and its
 commit is on master. Leading zeros (`v0.1.01`) are refused. Versions below 1.0 are published as pre-releases.
-The release has the command-line tool and the OpenCPN plugin package, with checksums, and notes made from the roadmap milestone (or, for
+The release has two files with self-explaining names, `openautoroute-cli-vX.Y.Z-linux-x86_64.tar.gz` (the command-line tool) and `openautoroute-opencpn-plugin-vX.Y.Z-ubuntu24.04-x86_64.tar.gz` (the plugin, for Options, Plugins, Import plugin), with checksums, and notes made from the roadmap milestone (or, for
 a patch, the milestone it patches) plus the changes since the previous release. Both are built on Ubuntu 24.04, so they need glibc 2.39 or
 newer (the tool links libstdc++ statically; the plugin also needs wxWidgets 3.2). On an older system, build from source. The tool reports
 its version with `openautoroute --version`.

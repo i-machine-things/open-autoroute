@@ -7,7 +7,9 @@ OUT=${2:-.}
 VERSION=${VERSION:-0.0.0-dev}
 TARGET=${TARGET:-debian-x86_64}
 TARGET_VERSION=${TARGET_VERSION:-13}
-TOP=openautoroute_pi-${VERSION#0.0.0-}-$TARGET
+# The file name says what it is: openautoroute-opencpn-plugin-v0.1.0-ubuntu24.04-x86_64 (dev builds: ...-dev-debian13-x86_64).
+label=${VERSION#0.0.0-}; [ "$label" = dev ] || label=v$label
+TOP=openautoroute-opencpn-plugin-$label-${TARGET%%-*}$TARGET_VERSION-${TARGET#*-}
 TMP=$(mktemp -d)
 mkdir -p "$TMP/$TOP/usr/lib/opencpn"
 cp "$LIB" "$TMP/$TOP/usr/lib/opencpn/libopenautoroute_pi.so"

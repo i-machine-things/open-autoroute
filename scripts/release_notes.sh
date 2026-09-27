@@ -29,6 +29,12 @@ else
     on { print }' ROADMAP.md | sed '/./,$!d'
 fi
 echo
+echo "## Which file do I want?"
+echo
+echo "- **openautoroute-opencpn-plugin-$tag-ubuntu24.04-x86_64.tar.gz**: the plugin for OpenCPN. In OpenCPN: Options, Plugins, Import plugin, and pick this file. It is built on Ubuntu 24.04 for OpenCPN 5.14 (wxWidgets 3.2), and needs glibc 2.39 or newer."
+echo "- **openautoroute-cli-$tag-linux-x86_64.tar.gz**: the command-line tool, for scripts and for checking routes without OpenCPN. You do not need it for the plugin."
+echo "- **SHA256SUMS**: checksums for both files (\`sha256sum -c SHA256SUMS\`)."
+echo
 if [ -n "$prev" ]; then
   echo "## Changes since $prev"
   subjects=$(git log --no-merges --format='%s (%h)' "$prev..$ref")
