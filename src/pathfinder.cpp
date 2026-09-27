@@ -300,4 +300,47 @@ std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, d
     return route;
 }
 
+std::vector<LatLon> findRouteThrough(const CostGrid& grid, const std::vector<LatLon>& points, double simplifyTolerance,
+                                     std::vector<Cell>* rawPath, double minLegM, const std::function<bool(double)>* progress,
+                                     std::vector<size_t>* pointIndex, int* failedLeg) {
+    if (failedLeg) *failedLeg = -1;
+    if (pointIndex) pointIndex->clear();
+    if (rawPath) rawPath->clear();
+    if (points.size() < 2) return {};
+    // Each leg's share of the progress bar is its share of the straight-line length, so a long leg does not look stuck.
+    double total = 0.0;
+    std::vector<double> before(points.size(), 0.0);
+    for (size_t i = 1; i < points.size(); ++i) {
+        total += haversineM(points[i - 1], points[i]);
+        before[i] = total;
+    }
+    total = std::max(total, 1e-9);
+    std::vector<LatLon> route{grid.centre(grid.cellAt(points.front()))};
+    if (pointIndex) pointIndex->push_back(0);
+    for (size_t leg = 0; leg + 1 < points.size(); ++leg) {
+        const Cell a = grid.cellAt(points[leg]), b = grid.cellAt(points[leg + 1]);
+        if (a == b) {   // two points in one cell (a doubled waypoint): nothing to plan, the point is already on the route
+            if (!grid.inBounds(a) || grid.blocked(a)) {
+                if (failedLeg) *failedLeg = static_cast<int>(leg);
+                return {};
+            }
+            if (pointIndex) pointIndex->push_back(route.size() - 1);
+            continue;
+        }
+        const double lo = before[leg] / total, hi = before[leg + 1] / total;
+        std::function<bool(double)> legProgress = [&](double f) { return (*progress)(lo + (hi - lo) * f); };
+        std::vector<Cell> legRaw;
+        const std::vector<LatLon> part = findRoute(grid, points[leg], points[leg + 1], simplifyTolerance, rawPath ? &legRaw : nullptr,
+                                                   minLegM, progress ? &legProgress : nullptr);
+        if (part.size() < 2) {
+            if (failedLeg) *failedLeg = static_cast<int>(leg);
+            return {};
+        }
+        route.insert(route.end(), part.begin() + 1, part.end());   // the leg starts where the last one ended
+        if (pointIndex) pointIndex->push_back(route.size() - 1);
+        if (rawPath) rawPath->insert(rawPath->end(), legRaw.begin() + (rawPath->empty() ? 0 : 1), legRaw.end());
+    }
+    return route;
+}
+
 }  // namespace oar

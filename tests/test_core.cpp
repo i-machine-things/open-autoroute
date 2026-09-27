@@ -1762,6 +1762,38 @@ static void testS57RealCell() {
     std::printf("real cell %s: %zu features\n", path, d.features.size());
 }
 
+static void testRouteThroughViaPoints() {
+    // A wall with gaps at the top and bottom: planned straight, the route takes the nearer (bottom) gap; with a via point in the
+    // top gap it must go through the top one, and every given point is a waypoint of the result, in order.
+    CostGrid g = makeGrid(30, 30);
+    for (int r = 2; r < 28; ++r) g.setCost({15, r}, kBlocked);
+    const LatLon a = g.centre({2, 25}), via = g.centre({15, 0}), b = g.centre({27, 25});
+    std::vector<size_t> at;
+    int failed = 7;
+    const auto route = findRouteThrough(g, {a, via, b}, 0.0, nullptr, 0.0, nullptr, &at, &failed);
+    CHECK(failed == -1);
+    CHECK(at.size() == 3);
+    CHECK(at.size() == 3 && at[0] == 0 && at[2] == route.size() - 1 && at[0] < at[1] && at[1] < at[2]);
+    CHECK(at.size() == 3 && g.cellAt(route[at[1]]) == g.cellAt(via));
+    for (const LatLon& p : route) CHECK(!g.blocked(g.cellAt(p)));
+    // A doubled point adds no leg; a point with no way to it names the leg that failed.
+    CHECK(findRouteThrough(g, {a, a, b}, 0.0, nullptr, 0.0, nullptr, &at, &failed).size() >= 2 && at.size() == 3 && at[1] == 0);
+    for (int c = 16; c < 30; ++c) g.setCost({c, 10}, kBlocked);   // seal b's side off below the top gap
+    for (int c = 16; c < 30; ++c) g.setCost({c, 1}, kBlocked);
+    g.setCost({15, 0}, kBlocked);
+    g.setCost({15, 1}, kBlocked);
+    g.setCost({15, 28}, kBlocked);
+    g.setCost({15, 29}, kBlocked);
+    CHECK(findRouteThrough(g, {a, g.centre({10, 10}), b}, 0.0, nullptr, 0.0, nullptr, nullptr, &failed).empty());
+    CHECK(failed == 1);
+    CHECK(findRouteThrough(g, {a}, 0.0).empty());
+    // Progress runs across all legs and cancelling stops the search.
+    CostGrid open = makeGrid(30, 30);
+    double last = 0.0;
+    std::function<bool(double)> watch = [&](double f) { CHECK(f >= last - 1e-9 && f <= 1.0 + 1e-9); last = f; return true; };
+    CHECK(!findRouteThrough(open, {open.centre({0, 0}), open.centre({29, 0}), open.centre({29, 29})}, 0.0, nullptr, 0.0, &watch).empty());
+}
+
 int main() {
     testHaversine();
     testCellRoundTrip();
@@ -1770,6 +1802,7 @@ int main() {
     testRoutesAroundWall();
     testLongExpensiveRouteIsFound();
     testNoRoute();
+    testRouteThroughViaPoints();
     testChannelCentering();
     testShoreMargin();
     testInputValidation();

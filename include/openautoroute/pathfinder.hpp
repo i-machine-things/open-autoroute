@@ -36,6 +36,18 @@ std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, d
                               std::vector<Cell>* rawPath = nullptr, double minLegM = 0.0,
                               const std::function<bool(double)>* progress = nullptr);
 
+/// findRoute through a list of points in order (start, any via points, goal): each leg between neighbouring points is planned on
+/// its own and the legs are joined, so every given point is a waypoint of the result. This is how a route someone drew keeps its
+/// turning points while the router fills in the legs between them.
+///
+/// `pointIndex`, if given, receives the index in the result of each given point. `failedLeg`, if given, receives the index of the
+/// leg that has no route (leg i runs from point i to point i+1), or -1. Returns empty if fewer than two points are given, or if any
+/// leg has no route or the search is cancelled. `progress` covers the whole search, 0 to 1, with legs weighted by straight length.
+std::vector<LatLon> findRouteThrough(const CostGrid& grid, const std::vector<LatLon>& points, double simplifyTolerance = 0.0,
+                                     std::vector<Cell>* rawPath = nullptr, double minLegM = 0.0,
+                                     const std::function<bool(double)>* progress = nullptr,
+                                     std::vector<size_t>* pointIndex = nullptr, int* failedLeg = nullptr);
+
 /// True when the straight segment between two cells crosses no blocked cell. Exposed for testing.
 bool lineOfSight(const CostGrid& grid, Cell a, Cell b);
 
