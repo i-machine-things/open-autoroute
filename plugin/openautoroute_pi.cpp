@@ -350,7 +350,7 @@ void AutoRouteDialog::Finish(PlanResult result) {
             text += "\n";
         }
     }
-    text += "\nNot for navigation. Check the route against the chart. Depths are at chart datum, with no tide or current.";
+    text += "\nUse at your own risk. Not for navigation: check every leg against the chart and notices to mariners. Depths are at chart datum, with no tide or current. This plugin is not part of OpenCPN.";
     report_->SetValue(text);
 }
 
@@ -430,7 +430,7 @@ wxString openautoroute_pi::GetShortDescription() { return "Plan a safe route bet
 wxString openautoroute_pi::GetLongDescription() {
     return "Plans a route between two points using the open-autoroute engine: depth against your draft, land, obstructions and wrecks, "
            "traffic separation schemes, narrow channels, restricted areas and navigation locks. The route is added to the Route Manager. "
-           "A planning aid only; not for navigation. Check every route against the chart.";
+           "A planning aid only, used at your own risk; not for navigation. This plugin is not part of OpenCPN and is not supported by its developers. Check every route against the chart.";
 }
 
 // OpenCPN's own chart folders, as set in Options, Charts. The planner searches them (and everything below) for S-57 cells.

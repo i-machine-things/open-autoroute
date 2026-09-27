@@ -2,7 +2,17 @@
 
 A boat route planner that reads NOAA electronic charts and tries to draw a route a person would actually be willing to follow. It is free, open source, and early. It is a development tool, **not for navigation**: check every route against the chart yourself.
 
-The plan is a C++ core with two front ends, an OpenCPN plugin (`openautoroute_pi`) and a standalone app (`openautoroute-app`). Neither exists yet. What exists today is the core and a command-line tool that writes a GPX file you can import into OpenCPN and look at on the same charts.
+The parts are a C++ core, a command-line tool that writes a GPX file you can import into OpenCPN, and an OpenCPN plugin (`openautoroute_pi`) that calls the same core from inside OpenCPN. A standalone app (`openautoroute-app`) is planned but does not exist yet.
+
+## Read this first
+
+This project is not part of OpenCPN. OpenCPN's developers do not endorse it or support it, so do not report problems with it to them.
+
+What OpenCPN itself offers is different. Routes are drawn by hand. Its Weather Routing plugin plans routes by weather and can avoid land, and its manual warns that such routes "may not consider or 'see' normal navigation considerations and issues, therefore every route should be checked very carefully for navigation markers, shallow depths, bad currents, rocks, land and other obstacles and hazards." Adding depth, hazard and marker awareness to routing, and a route checker, is discussed in OpenCPN's own issue tracker ([issue #4387](https://github.com/OpenCPN/OpenCPN/issues/4387)); this project is separate from that work.
+
+The same warning applies here, more strongly. A chart is a picture of what was surveyed at some past date, at chart datum, with no tide, current, weather, traffic or local knowledge in it, and a line drawn by software can look more trustworthy than it is. A route that avoids every charted hazard can still put a boat on something the chart does not show.
+
+**Use it entirely at your own risk.** It is offered as a planning aid only, with no warranty of any kind (see the license). You, the skipper, are always responsible for the vessel, for checking every waypoint and every leg against up-to-date official charts and notices to mariners, and for keeping a proper lookout. The router can be wrong, and it is known to fail or to give poor routes in places (see "What it does not do" below and the routes listed as failing under "How it is tested").
 
 ## What it does today
 
