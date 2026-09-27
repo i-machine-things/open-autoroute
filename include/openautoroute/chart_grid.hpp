@@ -12,6 +12,10 @@ namespace oar {
 /// Paint one chart's verdict onto `grid`: only cells the chart actually covers (any DEPARE or LNDARE polygon) are
 /// overwritten, so stamping charts from coarse to fine scale lets the largest-scale chart win where it has data.
 ///
+/// The exception is physical hazards (wrecks, rocks, obstructions, structures, marks, a bridge with a charted low clearance): those
+/// accumulate over every chart, because a finer chart often just does not draw what a coarser one does. Areas (restricted, military,
+/// unsurveyed, dumping, caution) and bridges of unknown clearance are the covering chart's own, since overview charts draw them roughly.
+///
 /// Safety rules (a cell is open only if the chart positively says it is deep enough):
 ///   - DEPARE or DRGARE (dredged) with DRVAL1 >= minDepthM is open; shallower, or DRVAL1 unknown, is blocked
 ///   - LNDARE is blocked

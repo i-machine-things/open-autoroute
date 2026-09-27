@@ -1040,9 +1040,9 @@ static void testRestrictedAreaTextAndNotes() {
     CHECK(layer.notes[0].text.find("Naval Operating Area") == 0);
     CHECK(layer.id[5 * 12 + 1] == 0);
     CHECK(layer.id[5 * 12 + 8] == -1);             // outside the area
-    // A finer chart that covers the same water and says nothing about the area does not erase it (see testHazardsSurviveFinerChart).
+    // A finer chart that covers the same water and draws no such area replaces it, as it replaces the cost (overview-chart areas are rough).
     stampNoted({}, layer);
-    CHECK(layer.id[5 * 12 + 1] == 0);
+    CHECK(layer.id[5 * 12 + 1] == -1);
     stampNoted({resare(0, 1u << 9, careText)}, layer);
     stampNoted({resare(0, 1u << 9, careText)}, layer);
     CHECK(layer.notes.size() == 1 && layer.id[5 * 12 + 1] == 0);
@@ -1052,8 +1052,9 @@ static void testRestrictedAreaTextAndNotes() {
     CHECK(closed.id[5 * 12 + 1] >= 0 && closed.notes[closed.id[5 * 12 + 1]].kind.find("entry prohibited") == 0);
 }
 
-// A finer chart re-draws the depth areas but not every hazard: a wreck, a prohibited area or a low bridge that only the coarser chart
-// carries must survive it. (Unsurveyed areas and the "less detail" note are the exceptions: a larger-scale chart does answer those.)
+// A finer chart re-draws the depth areas but not every hazard: a wreck, an obstruction or a structure that only the coarser chart carries
+// must survive it. Areas are different: an overview chart draws restricted, military and unsurveyed areas roughly (a Golden Gate security
+// zone spans the whole strait), so the covering chart's own drawing replaces them.
 static void testHazardsSurviveFinerChart() {
     CostGrid g = makeGrid(12, 10);
     g.fill(kBlocked);
@@ -1077,8 +1078,8 @@ static void testHazardsSurviveFinerChart() {
     CHECK(g.blocked({9, 3}) && g.blocked({2, 5}) && g.blocked({6, 5}) && g.cost({10, 5}) == 30.0f && g.cost({0, 8}) == 1.5f);
     stampChart(fine, o, g);
     CHECK(g.blocked({9, 3}));                        // the wreck survives
-    CHECK(!g.blocked({6, 5}) && g.cost({6, 5}) == 30.0f);  // the prohibited area stays, as a cost: a coarse polygon must not wall off a strait
-    CHECK(g.cost({10, 5}) == 30.0f);                 // so does the military area cost
+    CHECK(!g.blocked({6, 5}) && g.cost({6, 5}) == 1.0f);   // an overview chart's prohibited area does not wall off what the finer chart shows
+    CHECK(g.cost({10, 5}) == 1.0f);                  // nor does its military area cost carry on
     CHECK(!g.blocked({3, 5}));                       // the finer chart has surveyed what the coarse one called unsurveyed
     CHECK(g.cost({0, 8}) == 1.0f);                   // and the overview-chart note is gone
 }

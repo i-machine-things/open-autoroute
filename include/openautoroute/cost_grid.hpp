@@ -36,18 +36,12 @@ public:
     void setCost(Cell c, float cost) { cost_[index(c)] = cost; }
     void fill(float cost) { cost_.assign(cost_.size(), cost); }
 
-    /// Hazards a chart reports (wrecks, rocks, structures, restricted areas, low bridges, costed areas) are remembered apart from the
+    /// Physical hazards a chart reports (wrecks, rocks, structures, a bridge with a charted low clearance) are remembered apart from the
     /// depth verdict, so a finer chart that only re-draws the depth areas cannot erase a hazard that only a coarser chart carries.
     bool isHazardShut(Cell c) const { return !hazardShut_.empty() && hazardShut_[index(c)]; }
     void setHazardShut(Cell c) {
         if (hazardShut_.empty()) hazardShut_.assign(cost_.size(), 0);
         hazardShut_[index(c)] = 1;
-    }
-    float hazardCost(Cell c) const { return hazardCost_.empty() ? 1.0f : hazardCost_[index(c)]; }
-    void raiseHazardCost(Cell c, float factor) {
-        if (hazardCost_.empty()) hazardCost_.assign(cost_.size(), 1.0f);
-        float& h = hazardCost_[index(c)];
-        h = factor > h ? factor : h;
     }
 
     /// Traffic-lane flow direction (degrees true) for a cell inside a traffic separation scheme lane, NaN elsewhere.
@@ -178,7 +172,6 @@ private:
     double cellSizeLonDeg_;
     std::vector<float> cost_;
     std::vector<uint8_t> hazardShut_;  // empty until a hazard blocks a cell
-    std::vector<float> hazardCost_;    // empty until a hazard makes a cell dearer
     std::vector<float> lane_;  // empty until a lane is set
     std::vector<float> marginWeight_;  // empty until applyLaneMargin sets it
     std::vector<float> marginAxis_;    // degrees, axis of the nearest lane
