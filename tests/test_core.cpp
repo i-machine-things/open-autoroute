@@ -1139,6 +1139,48 @@ static void testThinPolygonsStillBlock() {
     CHECK(h.blocked({4, 5}) && !h.blocked({5, 5}) && !h.blocked({6, 5}));
 }
 
+// A dam across the water with a navigation lock through it: the lock basin is open, the gates at its ends open, and everything else about
+// the dam (and any gate that is not a lock's) stays a wall. The chamber is narrower than a cell, as a real one is at 30 m cells.
+static void testNavigationLock() {
+    CostGrid grid = makeGrid(12, 10);
+    grid.fill(kBlocked);
+    ChartData d;
+    d.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.988, 30.0));
+    d.features.push_back(areaFeature("LNDARE", 45.990, 46.0, -123.9940, -123.9930));                    // the dam: land across column 6
+    const LatLon mid = grid.centre({6, 4});
+    // Lock chamber: 3 cells long, 20 m wide, through the dam on row 4. Its walls are shoreline construction lines.
+    ChartFeature basin;
+    basin.objectClass = "LOKBSN";
+    basin.geometry = Geometry::Area;
+    const double w = 0.00009, l = 0.0025;   // 10 m either side, 280 m long
+    basin.parts.push_back({{{mid.lat + w, mid.lon - l / 2}, {mid.lat + w, mid.lon + l / 2}, {mid.lat - w, mid.lon + l / 2}, {mid.lat - w, mid.lon - l / 2}}, true});
+    d.features.push_back(basin);
+    d.features.push_back(lineFeature("SLCONS", {{mid.lat + w, mid.lon - l / 2}, {mid.lat + w, mid.lon + l / 2}}));
+    d.features.push_back(lineFeature("SLCONS", {{mid.lat - w, mid.lon - l / 2}, {mid.lat - w, mid.lon + l / 2}}));
+    // A gate at each end, just outside the chamber's own cells (the chart draws them across the entrances).
+    d.features.push_back(lineFeature("GATCON", {{mid.lat + 0.0003, mid.lon - l / 2 - 0.0009}, {mid.lat - 0.0003, mid.lon - l / 2 - 0.0009}}));
+    d.features.push_back(lineFeature("GATCON", {{mid.lat + 0.0003, mid.lon + l / 2 + 0.0009}, {mid.lat - 0.0003, mid.lon + l / 2 + 0.0009}}));
+    d.features.push_back(lineFeature("GATCON", {grid.centre({2, 8}), grid.centre({2, 9})}));           // a flood gate far from any lock
+    AreaLayer areas;
+    StampOptions o;
+    o.areas = &areas;
+    stampChart(d, o, grid);
+    CHECK(!grid.blocked({5, 4}) && !grid.blocked({6, 4}) && !grid.blocked({7, 4}));   // the chamber and the dam cell it passes through
+    CHECK(grid.blocked({6, 1}) && grid.blocked({6, 8}));                              // the rest of the dam
+    CHECK(grid.blocked({2, 8}));                                                      // a gate that is no lock's
+    CHECK(!findRoute(grid, grid.centre({1, 4}), grid.centre({10, 4})).empty());       // through the lock
+    bool noted = false;
+    for (const AreaNote& n : areas.notes) noted = noted || n.kind.find("navigation lock") == 0;
+    CHECK(noted);
+    // With the hazard rules off (developer comparison switch) the lock is not read, so the dam is a wall with no way through.
+    CostGrid off = makeGrid(12, 10);
+    off.fill(kBlocked);
+    StampOptions no;
+    no.hazardObjects = false;
+    stampChart(d, no, off);
+    CHECK(off.blocked({6, 4}));
+}
+
 static void testHazardPenalties() {
     ChartFeature military = areaFeature("MIPARE", 45.996, 46.0, -124.000, -123.996);   // cols 0-3, rows 0-3: heavily costly, never a wall
     ChartFeature caution = areaFeature("CTNARE", 45.990, 45.994, -124.000, -123.996);   // cols 0-3, rows 6-9
@@ -1457,6 +1499,7 @@ int main() {
     testRestrictedAreaTextAndNotes();
     testHazardsSurviveFinerChart();
     testBridgeAcrossScales();
+    testNavigationLock();
     testThinPolygonsStillBlock();
     testHazardPenalties();
     testHazardMarks();

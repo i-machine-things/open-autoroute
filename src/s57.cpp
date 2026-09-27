@@ -128,6 +128,7 @@ const char* classOf(uint16_t objl) {
         case 55: return "FSHFAC";
         case 57: return "FLODOC";
         case 61: return "GATCON";
+        case 79: return "LOKBSN";
         case 62: return "GRIDRN";
         case 65: return "HULKES";
         case 71: return "LNDARE";

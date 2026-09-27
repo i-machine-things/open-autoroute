@@ -39,6 +39,9 @@ public:
     /// Physical hazards a chart reports (wrecks, rocks, structures, a bridge with a charted low clearance) are remembered apart from the
     /// depth verdict, so a finer chart that only re-draws the depth areas cannot erase a hazard that only a coarser chart carries.
     bool isHazardShut(Cell c) const { return !hazardShut_.empty() && hazardShut_[index(c)]; }
+    void clearHazardShut(Cell c) {
+        if (!hazardShut_.empty()) hazardShut_[index(c)] = 0;
+    }
     void setHazardShut(Cell c) {
         if (hazardShut_.empty()) hazardShut_.assign(cost_.size(), 0);
         hazardShut_[index(c)] = 1;
