@@ -1181,6 +1181,40 @@ static void testNavigationLock() {
     CHECK(off.blocked({6, 4}));
 }
 
+// The water either side of a lock chamber lies in depth areas that shoal to 0 m at the bank but are deep inside. That approach is opened
+// once every chart is stamped; the same kind of area away from a lock, land, and anything blocked for a real reason stay shut.
+static void testLockApproach() {
+    CostGrid g = makeGrid(30, 10);
+    g.fill(kBlocked);
+    ChartData d;
+    ChartFeature bank = areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.985, 0.0);           // cols 0-14: 0 to 9 m, "shoals to the bank"
+    bank.drval2 = 9.0;
+    ChartFeature farBank = areaFeature("DEPARE", 45.990, 46.0, -123.980, -123.971, 0.0);      // cols 20-28: the same, nowhere near a lock
+    farBank.drval2 = 9.0;
+    ChartFeature shallow = areaFeature("DEPARE", 45.990, 46.0, -123.985, -123.980, 0.0);      // cols 15-19, shallow throughout
+    shallow.drval2 = 1.0;
+    d.features.push_back(bank);
+    d.features.push_back(farBank);
+    d.features.push_back(shallow);
+    d.features.push_back(areaFeature("LNDARE", 45.992, 45.994, -123.9920, -123.9895));         // cols 8-9, rows 6-7: land inside the shoal, within reach
+    d.features.push_back(pointFeature("WRECKS", {8, 3}, g, 1.0));                              // a wreck in the approach
+    const LatLon mid = g.centre({12, 5});
+    ChartFeature basin;
+    basin.objectClass = "LOKBSN";
+    basin.geometry = Geometry::Area;
+    basin.parts.push_back({{{mid.lat + 0.0002, mid.lon - 0.0006}, {mid.lat + 0.0002, mid.lon + 0.0006}, {mid.lat - 0.0002, mid.lon + 0.0006}, {mid.lat - 0.0002, mid.lon - 0.0006}}, true});
+    d.features.push_back(basin);
+    StampOptions o;
+    stampChart(d, o, g);
+    CHECK(g.blocked({8, 5}));                 // before the pass: a 0 m depth area is shut
+    g.openLockApproaches(350.0);              // about 3 cells of 111 m
+    CHECK(!g.blocked({10, 5}) && !g.blocked({8, 5}) && g.cost({8, 5}) == 5.0f);   // opened, and dearer
+    CHECK(g.blocked({8, 3}));                 // the wreck stays a wall
+    CHECK(g.blocked({9, 6}));                 // land stays land, though it is within reach and sits in a depth area deep inside
+    CHECK(g.blocked({16, 5}));                // a shallow area stays shut
+    CHECK(g.blocked({24, 5}));                // and so does the same kind of area far from any lock
+}
+
 static void testHazardPenalties() {
     ChartFeature military = areaFeature("MIPARE", 45.996, 46.0, -124.000, -123.996);   // cols 0-3, rows 0-3: heavily costly, never a wall
     ChartFeature caution = areaFeature("CTNARE", 45.990, 45.994, -124.000, -123.996);   // cols 0-3, rows 6-9
@@ -1500,6 +1534,7 @@ int main() {
     testHazardsSurviveFinerChart();
     testBridgeAcrossScales();
     testNavigationLock();
+    testLockApproach();
     testThinPolygonsStillBlock();
     testHazardPenalties();
     testHazardMarks();

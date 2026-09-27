@@ -418,21 +418,6 @@ void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& g
             forEachCellInArea(f, grid, [&](int row, int col) { lock[static_cast<size_t>(row) * grid.cols() + col] = 1; });
             paintLine(f, grid, lock);
         }
-        // The water either side of a chamber is the lock's approach, a maintained channel, though the depth area it lies in usually shoals
-        // to 0 m at the bank: within about 350 m of a chamber, a depth area that is deep enough somewhere (DRVAL2) is open, unless it is land.
-        const int reach = static_cast<int>(std::ceil(350.0 / grid.cellSizeM()));
-        for (int row = 0; row < grid.rows(); ++row) {
-            for (int col = 0; col < grid.cols(); ++col) {
-                if (!lock[static_cast<size_t>(row) * grid.cols() + col]) continue;
-                for (int dr = -reach; dr <= reach; ++dr) {
-                    for (int dc = -reach; dc <= reach; ++dc) {
-                        if (!grid.inBounds({col + dc, row + dr})) continue;
-                        const size_t j = static_cast<size_t>(row + dr) * grid.cols() + col + dc;
-                        if (deepInside[j] && !land[j]) state[j] = kOpen;
-                    }
-                }
-            }
-        }
         for (int row = 0; row < grid.rows(); ++row) {
             for (int col = 0; col < grid.cols(); ++col) {
                 if (!lock[static_cast<size_t>(row) * grid.cols() + col]) continue;
@@ -469,6 +454,8 @@ void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& g
             const size_t i = static_cast<size_t>(row) * grid.cols() + col;
             const Cell cell{col, row};
             const uint8_t s = state[i];
+            if (s != kUnknown) grid.setShoalDeep(cell, deepInside[i] && !land[i] && !shut[i] && !shutLocal[i]);  // for openLockApproaches once every chart is stamped
+            if (lock[i]) grid.setLock(cell);
             if (lock[i]) {  // the lock chamber stays open: its walls and gates are what make it a lock
                 shut[i] = 0;
                 shutLocal[i] = 0;

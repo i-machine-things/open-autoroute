@@ -39,6 +39,18 @@ public:
     /// Physical hazards a chart reports (wrecks, rocks, structures, a bridge with a charted low clearance) are remembered apart from the
     /// depth verdict, so a finer chart that only re-draws the depth areas cannot erase a hazard that only a coarser chart carries.
     bool isHazardShut(Cell c) const { return !hazardShut_.empty() && hazardShut_[index(c)]; }
+    /// Navigation locks: chart stamping records lock chamber cells, and depth areas that shoal to the bank but are deep enough somewhere
+    /// inside (not land). Once every chart is stamped, openLockApproaches makes those within `reachM` of a chamber passable (cost 5),
+    /// since a lock's approach is a maintained channel. Done after stamping because the approach can lie on a different chart.
+    void setLock(Cell c) {
+        if (lockCell_.empty()) lockCell_.assign(cost_.size(), 0);
+        lockCell_[index(c)] = 1;
+    }
+    void setShoalDeep(Cell c, bool on) {
+        if (shoalDeep_.empty()) { if (!on) return; shoalDeep_.assign(cost_.size(), 0); }
+        shoalDeep_[index(c)] = on ? 1 : 0;
+    }
+    void openLockApproaches(double reachM);
     void clearHazardShut(Cell c) {
         if (!hazardShut_.empty()) hazardShut_[index(c)] = 0;
     }
@@ -174,6 +186,8 @@ private:
     double cellSizeDeg_;
     double cellSizeLonDeg_;
     std::vector<float> cost_;
+    std::vector<uint8_t> lockCell_;   // empty until a lock chamber cell is set
+    std::vector<uint8_t> shoalDeep_;  // empty until a shoal-to-the-bank depth area with deep water inside is set
     std::vector<uint8_t> hazardShut_;  // empty until a hazard blocks a cell
     std::vector<float> lane_;  // empty until a lane is set
     std::vector<float> marginWeight_;  // empty until applyLaneMargin sets it
