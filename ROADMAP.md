@@ -19,7 +19,7 @@ Status: the core router, the GPX output, the OpenCPN plugin and the 29-route ben
 
 Everything about moving routes and live data between the router and other equipment, kept apart from the routing itself:
 
-* **Legacy Plotter Output:** Stream a planned route as NMEA 0183 route (`RTE`) and waypoint (`WPL`) sentences directly into legacy serial inputs (such as the Garmin GPSMAP 541s), so there is no manual SD card GPX import.  
+* **Legacy Plotter Output:** Stream a planned route as NMEA 0183 route (`RTE`) and waypoint (`WPL`) sentences directly into legacy serial inputs (such as the Garmin GPSMAP 541s), so there is no manual SD card GPX import. The plugin does not need its own output for this: its routes are ordinary Route Manager routes, so OpenCPN's built-in **Send to GPS** sends them. Only the standalone app needs its own `RTE`/`WPL` output. *Pending hardware test:* Garmin's installation guide lists `WPL` but not `RTE` among the 541s's NMEA 0183 inputs, so standard NMEA mode should give waypoints only. The test is OpenCPN's Garmin (GRMN) host mode, with the plotter's serial port set to Garmin Data Transfer; nobody has yet confirmed that a whole route arrives that way.  
 * **Live Data Input:** Receive live NMEA 0183 and Signal K data (position, wind, speed through water, engine and fuel) over serial, network and OpenCPN's own connections, as a transport the later features build on; interpreting it stays with those features.  
 * **Link Handling:** Connection setup, error handling and safe defaults for each link (no route is ever sent to a device without the user asking for it).
 * **Live On-the-Water Testing:** Field validation runs on real marine hardware: planned routes checked against a real plotter and followed by an autopilot on the water. This waits for the plotter and autopilot links above, since it depends on them.
@@ -91,6 +91,7 @@ These come from real findings: independent reviews of the code, the gaps listed 
 **The plugin and platforms**
 
 * Draw the route options and progress on the chart, a preferences page, listing in OpenCPN's plugin catalogue, and builds for other systems and OpenCPN versions; an automated test that loads the plugin, which needs a running OpenCPN.
+* Low priority idea: send a route to a Garmin plotter over NMEA 2000 by posing as another Garmin plotter and using Garmin's plotter-to-plotter "Clone User Data" transfer. That transfer uses Garmin-proprietary messages that have not been decoded publicly (canboat has none for it), and the GPSMAP 400/500 series does not receive the standard NMEA 2000 route messages, so the format would have to be captured and worked out first. Only worth it if the serial (GRMN) route upload in `v0.2.0` fails.
 
 **Currents and flow** (formerly the last roadmap entry)
 
