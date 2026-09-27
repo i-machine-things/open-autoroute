@@ -381,13 +381,24 @@ void AutoRouteDialog::AddToOpenCPN(const PlanResult& result) {
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-extern "C" DECL_EXP opencpn_plugin* create_pi(void* ppimgr) { return new openautoroute_pi(ppimgr); }
-extern "C" DECL_EXP void destroy_pi(opencpn_plugin* p) { delete p; }
+// Each step OpenCPN takes while loading the plugin is written to OpenCPN's own log, so a failure to appear in the plugin list can be traced.
+extern "C" DECL_EXP opencpn_plugin* create_pi(void* ppimgr) {
+    wxLogMessage("open-autoroute plugin: create_pi called");
+    return new openautoroute_pi(ppimgr);
+}
+extern "C" DECL_EXP void destroy_pi(opencpn_plugin* p) {
+    wxLogMessage("open-autoroute plugin: destroy_pi called");
+    delete p;
+}
 
-openautoroute_pi::openautoroute_pi(void* ppimgr) : opencpn_plugin_118(ppimgr) { icon_ = makeIcon(); }
+openautoroute_pi::openautoroute_pi(void* ppimgr) : opencpn_plugin_118(ppimgr) {
+    icon_ = makeIcon();
+    wxLogMessage("open-autoroute plugin: constructed, icon %s", icon_.IsOk() ? "ok" : "NOT ok");
+}
 openautoroute_pi::~openautoroute_pi() = default;
 
 int openautoroute_pi::Init() {
+    wxLogMessage("open-autoroute plugin: Init");
     toolId_ = InsertPlugInTool("", &icon_, &icon_, wxITEM_NORMAL, "Auto-route", "Plan a route between two points", nullptr, -1, 0, this);
     fromItem_ = AddCanvasContextMenuItem(new wxMenuItem(nullptr, wxID_ANY, "Auto-route from here"), this);
     toItem_ = AddCanvasContextMenuItem(new wxMenuItem(nullptr, wxID_ANY, "Auto-route to here"), this);
@@ -395,6 +406,7 @@ int openautoroute_pi::Init() {
 }
 
 bool openautoroute_pi::DeInit() {
+    wxLogMessage("open-autoroute plugin: DeInit");
     if (dialog_) {
         dialog_->Close();   // saves its settings and destroys itself (which also stops any planning)
         dialog_ = nullptr;
@@ -403,14 +415,23 @@ bool openautoroute_pi::DeInit() {
     return true;
 }
 
-int openautoroute_pi::GetAPIVersionMajor() { return API_VERSION_MAJOR; }
+int openautoroute_pi::GetAPIVersionMajor() {
+    wxLogMessage("open-autoroute plugin: GetAPIVersionMajor -> %d", API_VERSION_MAJOR);
+    return API_VERSION_MAJOR;
+}
 // Must match the base class this plugin is built on (opencpn_plugin_118), not the newest API the header describes: OpenCPN casts the plugin
 // to the class named by this number and calls it incompatible when the cast fails.
 int openautoroute_pi::GetAPIVersionMinor() { return 18; }
 int openautoroute_pi::GetPlugInVersionMajor() { return 0; }
 int openautoroute_pi::GetPlugInVersionMinor() { return 2; }
-wxBitmap* openautoroute_pi::GetPlugInBitmap() { return &icon_; }
-wxString openautoroute_pi::GetCommonName() { return "Auto-route"; }
+wxBitmap* openautoroute_pi::GetPlugInBitmap() {
+    wxLogMessage("open-autoroute plugin: GetPlugInBitmap");
+    return &icon_;
+}
+wxString openautoroute_pi::GetCommonName() {
+    wxLogMessage("open-autoroute plugin: GetCommonName");
+    return "Auto-route";
+}
 wxString openautoroute_pi::GetShortDescription() { return "Plan a safe route between two points from NOAA S-57 charts"; }
 wxString openautoroute_pi::GetLongDescription() {
     return "Plans a route between two points using the open-autoroute engine: depth against your draft, land, obstructions and wrecks, "
