@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
+  <rte>
+    <name>Edmonds to Kingston (12 m)</name>
+    <desc>open-autoroute: 4.7 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="47.812916" lon="-122.386379"><name>Edmonds</name></rtept>
+    <rtept lat="47.815072" lon="-122.394404"><name>WP002</name></rtept>
+    <rtept lat="47.798363" lon="-122.425699"><name>WP003</name></rtept>
+    <rtept lat="47.794051" lon="-122.493906"><name>WP004</name></rtept>
+    <rtept lat="47.794321" lon="-122.493906"><name>Kingston</name></rtept>
+  </rte>
+</gpx>

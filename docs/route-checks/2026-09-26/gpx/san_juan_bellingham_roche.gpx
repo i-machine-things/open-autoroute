@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
+  <rte>
+    <name>Bellingham to Roche Harbor (12 m)</name>
+    <desc>open-autoroute: 35.9 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="48.739997" lon="-122.514951"><name>Bellingham</name></rtept>
+    <rtept lat="48.739458" lon="-122.504747"><name>WP002</name></rtept>
+    <rtept lat="48.725175" lon="-122.523929"><name>WP003</name></rtept>
+    <rtept lat="48.683673" lon="-122.581883"><name>WP004</name></rtept>
+    <rtept lat="48.669929" lon="-122.583923"><name>WP005</name></rtept>
+    <rtept lat="48.666965" lon="-122.593310"><name>WP006</name></rtept>
+    <rtept lat="48.659149" lon="-122.600656"><name>WP007</name></rtept>
+    <rtept lat="48.637590" lon="-122.601881"><name>WP008</name></rtept>
+    <rtept lat="48.635434" lon="-122.605962"><name>WP009</name></rtept>
+    <rtept lat="48.637051" lon="-122.616573"><name>WP010</name></rtept>
+    <rtept lat="48.639207" lon="-122.624328"><name>WP011</name></rtept>
+    <rtept lat="48.656993" lon="-122.729215"><name>WP012</name></rtept>
+    <rtept lat="48.662653" lon="-122.737786"><name>WP013</name></rtept>
+    <rtept lat="48.665348" lon="-122.740643"><name>WP014</name></rtept>
+    <rtept lat="48.668312" lon="-122.742684"><name>WP015</name></rtept>
+    <rtept lat="48.707658" lon="-122.847571"><name>WP016</name></rtept>
+    <rtept lat="48.732182" lon="-122.893281"><name>WP017</name></rtept>
+    <rtept lat="48.730834" lon="-122.910422"><name>WP018</name></rtept>
+    <rtept lat="48.714395" lon="-122.957357"><name>WP019</name></rtept>
+    <rtept lat="48.631930" lon="-123.094078"><name>WP020</name></rtept>
+    <rtept lat="48.628427" lon="-123.108362"><name>WP021</name></rtept>
+    <rtept lat="48.628427" lon="-123.166316"><name>WP022</name></rtept>
+    <rtept lat="48.620881" lon="-123.171621"><name>WP023</name></rtept>
+    <rtept lat="48.614683" lon="-123.172438"><name>WP024</name></rtept>
+    <rtept lat="48.610640" lon="-123.169173"><name>WP025</name></rtept>
+    <rtept lat="48.610910" lon="-123.158153"><name>Roche Harbor</name></rtept>
+  </rte>
+</gpx>

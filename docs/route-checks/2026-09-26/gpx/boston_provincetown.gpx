@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
+  <rte>
+    <name>Boston to Provincetown (12 m)</name>
+    <desc>open-autoroute: 51.3 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="42.356004" lon="-71.034861"><name>Boston</name></rtept>
+    <rtept lat="42.348459" lon="-71.019218"><name>WP002</name></rtept>
+    <rtept lat="42.344686" lon="-71.014125"><name>WP003</name></rtept>
+    <rtept lat="42.342530" lon="-71.008304"><name>WP004</name></rtept>
+    <rtept lat="42.332289" lon="-70.994844"><name>WP005</name></rtept>
+    <rtept lat="42.332559" lon="-70.986112"><name>WP006</name></rtept>
+    <rtept lat="42.333367" lon="-70.977381"><name>WP007</name></rtept>
+    <rtept lat="42.334445" lon="-70.971924"><name>WP008</name></rtept>
+    <rtept lat="42.336062" lon="-70.950824"><name>WP009</name></rtept>
+    <rtept lat="42.339835" lon="-70.941002"><name>WP010</name></rtept>
+    <rtept lat="42.344686" lon="-70.935545"><name>WP011</name></rtept>
+    <rtept lat="42.350345" lon="-70.932634"><name>WP012</name></rtept>
+    <rtept lat="42.355735" lon="-70.929360"><name>WP013</name></rtept>
+    <rtept lat="42.357621" lon="-70.928633"><name>WP014</name></rtept>
+    <rtept lat="42.363281" lon="-70.920993"><name>WP015</name></rtept>
+    <rtept lat="42.361664" lon="-70.875155"><name>WP016</name></rtept>
+    <rtept lat="42.358160" lon="-70.870789"><name>WP017</name></rtept>
+    <rtept lat="42.345494" lon="-70.863877"><name>WP018</name></rtept>
+    <rtept lat="42.301297" lon="-70.855873"><name>WP019</name></rtept>
+    <rtept lat="42.288092" lon="-70.849689"><name>WP020</name></rtept>
+    <rtept lat="42.284858" lon="-70.840594"><name>WP021</name></rtept>
+    <rtept lat="42.283241" lon="-70.835501"><name>WP022</name></rtept>
+    <rtept lat="42.281894" lon="-70.830771"><name>WP023</name></rtept>
+    <rtept lat="42.279738" lon="-70.822040"><name>WP024</name></rtept>
+    <rtept lat="42.277582" lon="-70.810763"><name>WP025</name></rtept>
+    <rtept lat="42.276504" lon="-70.801668"><name>WP026</name></rtept>
+    <rtept lat="42.275965" lon="-70.795847"><name>WP027</name></rtept>
+    <rtept lat="42.275426" lon="-70.780568"><name>WP028</name></rtept>
+    <rtept lat="42.274617" lon="-70.714357"><name>WP029</name></rtept>
+    <rtept lat="42.270575" lon="-70.706353"><name>WP030</name></rtept>
+    <rtept lat="42.191344" lon="-70.433142"><name>WP031</name></rtept>
+    <rtept lat="42.049052" lon="-70.243241"><name>WP032</name></rtept>
+    <rtept lat="42.033151" lon="-70.230144"><name>WP033</name></rtept>
+    <rtept lat="42.017790" lon="-70.208316"><name>WP034</name></rtept>
+    <rtept lat="42.014287" lon="-70.188307"><name>WP035</name></rtept>
+    <rtept lat="42.016173" lon="-70.175938"><name>WP036</name></rtept>
+    <rtept lat="42.030457" lon="-70.158112"><name>WP037</name></rtept>
+    <rtept lat="42.035307" lon="-70.158112"><name>WP038</name></rtept>
+    <rtept lat="42.039350" lon="-70.164297"><name>WP039</name></rtept>
+    <rtept lat="42.045279" lon="-70.181031"><name>Provincetown</name></rtept>
+  </rte>
+</gpx>

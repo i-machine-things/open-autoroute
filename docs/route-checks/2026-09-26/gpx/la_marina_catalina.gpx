@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
+  <rte>
+    <name>Marina del Rey to Avalon (Catalina) (12 m)</name>
+    <desc>open-autoroute: 41.5 nm, 12.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="33.972579" lon="-118.454911"><name>Marina del Rey</name></rtept>
+    <rtept lat="33.972579" lon="-118.449083"><name>WP002</name></rtept>
+    <rtept lat="33.968536" lon="-118.448436"><name>WP003</name></rtept>
+    <rtept lat="33.962338" lon="-118.459768"><name>WP004</name></rtept>
+    <rtept lat="33.962338" lon="-118.462682"><name>WP005</name></rtept>
+    <rtept lat="33.963146" lon="-118.463006"><name>WP006</name></rtept>
+    <rtept lat="33.964224" lon="-118.464624"><name>WP007</name></rtept>
+    <rtept lat="33.963685" lon="-118.470452"><name>WP008</name></rtept>
+    <rtept lat="33.962338" lon="-118.469481"><name>WP009</name></rtept>
+    <rtept lat="33.957487" lon="-118.475309"><name>WP010</name></rtept>
+    <rtept lat="33.955870" lon="-118.475309"><name>WP011</name></rtept>
+    <rtept lat="33.955331" lon="-118.475956"><name>WP012</name></rtept>
+    <rtept lat="33.904397" lon="-118.468510"><name>WP013</name></rtept>
+    <rtept lat="33.892270" lon="-118.457825"><name>WP014</name></rtept>
+    <rtept lat="33.774501" lon="-118.452645"><name>WP015</name></rtept>
+    <rtept lat="33.754828" lon="-118.440665"><name>WP016</name></rtept>
+    <rtept lat="33.748630" lon="-118.437751"><name>WP017</name></rtept>
+    <rtept lat="33.728148" lon="-118.424477"><name>WP018</name></rtept>
+    <rtept lat="33.654307" lon="-118.337058"><name>WP019</name></rtept>
+    <rtept lat="33.573728" lon="-118.331554"><name>WP020</name></rtept>
+    <rtept lat="33.351666" lon="-118.319575"><name>WP021</name></rtept>
+    <rtept lat="33.344929" lon="-118.325079"><name>Avalon (Catalina)</name></rtept>
+  </rte>
+</gpx>
