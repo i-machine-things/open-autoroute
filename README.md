@@ -63,6 +63,22 @@ The core works in metres and nautical miles. Converting to feet is left to whate
 - `benchmarks/run.sh` plans 29 routes across the Columbia River (including Camas to Hood River through the Bonneville lock), Puget Sound and the San Juans, San Francisco, Los Angeles, New York, Chesapeake Bay, Boston, Houston, the Keys, Lake Michigan, Maine and Hawaii, and prints one scored table. `benchmarks/compare.sh` compares two runs and flags anything that got less safe. Several of those routes still fail (Deception Pass, Ilwaco to Astoria, one in the Keys) and are listed as such.
 - Routes are also checked by hand against the charts in OpenCPN, which is the check that has found the most problems.
 
+## OpenCPN plugin
+
+`plugin/` holds an OpenCPN plugin that calls the same planner: a toolbar button and right-click items ("Auto-route from here", "Auto-route to here") open a small dialog for the two positions, vessel size (metres or feet), draft, and your ENC folder. Planning runs in the background with a progress bar and a Cancel button, and the finished route is added to the Route Manager. The crossed restricted areas and locks are listed in the dialog.
+
+It builds against OpenCPN's own plugin header and wxWidgets 3.2 (GTK3), so match the OpenCPN release you run:
+
+```bash
+# OpenCPN's plugin API header, from the source tree of your release
+git clone --depth 1 --branch "upstream/5.14.2+dfsg" https://github.com/OpenCPN/OpenCPN ~/ocpn_src
+cmake -S . -B build_pi -DOAR_BUILD_PLUGIN=ON -DOCPN_INCLUDE_DIR=$HOME/ocpn_src/include
+cmake --build build_pi --target openautoroute_pi
+mkdir -p ~/.local/lib/opencpn && cp build_pi/plugin/libopenautoroute_pi.so ~/.local/lib/opencpn/
+```
+
+Then restart OpenCPN and enable "Auto-route" under Options, Plugins. It is early: a planning aid, not for navigation.
+
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for the planned milestones, from the core router through weather, polars, live instrument data, the standalone app and currents, and for the regions the router is meant to be tested against.
