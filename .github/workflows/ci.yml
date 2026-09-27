@@ -65,9 +65,23 @@ jobs:
           ./build_san
 
   plugin:
-    name: OpenCPN plugin builds against OpenCPN's plugin header and wxWidgets 3.2
+    name: OpenCPN plugin builds against OpenCPN's plugin header and wxWidgets 3.2 (${{ matrix.system }})
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: ubuntu-24.04
+            image: ''
+          - system: debian-12
+            image: debian:bookworm   # the system the release packages are built on
+    container: ${{ matrix.image }}
     steps:
+      - name: Tools and dependencies
+        run: |
+          SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO=sudo
+          $SUDO apt-get update
+          $SUDO apt-get install -y --no-install-recommends ca-certificates git build-essential cmake libwxgtk3.2-dev libgl-dev libglu1-mesa-dev
       - uses: actions/checkout@v4
       - name: OpenCPN plugin API header (the release the plugin targets)
         uses: actions/checkout@v4
@@ -76,8 +90,6 @@ jobs:
           ref: 0cd62032bc17ff004ce47f6b5dbdcccf88348400   # OpenCPN tag upstream/5.14.2+dfsg, pinned by commit (tags can move)
           path: ocpn
           sparse-checkout: include
-      - name: Dependencies
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libwxgtk3.2-dev libgl-dev libglu1-mesa-dev
       - name: Build the plugin
         run: |
           cmake -S . -B build_pi -DCMAKE_BUILD_TYPE=Release -DOAR_BUILD_PLUGIN=ON -DOCPN_INCLUDE_DIR="$PWD/ocpn/include"

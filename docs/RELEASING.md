@@ -29,9 +29,9 @@ The 29-route benchmark needs the full NOAA chart set (over 2 GB), so it is not i
 The workflow refuses the tag unless it is a milestone in `ROADMAP.md` (`vX.Y.0`, and the previous milestone is already released) or the
 next patch of a milestone that is already released and still current (once `vX.(Y+1).0` is out, `vX.Y` is closed: no backports), and its
 commit is on master. Leading zeros (`v0.1.01`) are refused. Versions below 1.0 are published as pre-releases.
-The release has two files with self-explaining names, `openautoroute-cli-vX.Y.Z-linux-x86_64.tar.gz` (the command-line tool) and `openautoroute-opencpn-plugin-vX.Y.Z-ubuntu24.04-x86_64.tar.gz` (the plugin, for Options, Plugins, Import plugin), with checksums, and notes made from the roadmap milestone (or, for
-a patch, the milestone it patches) plus the changes since the previous release. Both are built on Ubuntu 24.04, so they need glibc 2.39 or
-newer (the tool links libstdc++ statically; the plugin also needs wxWidgets 3.2). On an older system, build from source. The tool reports
+The release has two files with self-explaining names: `openautoroute-cli-vX.Y.Z-linux-x86_64.tar.gz` (the command-line tool) and two plugin packages, `openautoroute-opencpn-plugin-vX.Y.Z-debian13-x86_64.tar.gz` and `...-debian12-x86_64.tar.gz` (Options, Plugins, Import plugin). OpenCPN refuses a plugin package whose target system does not match the computer ("Incompatible import plugin detected"), so the same binary is packaged for each system it is meant for; a Debian 12 package is also accepted on Ubuntu 24.04. All of it is built in a Debian 12 container, with checksums, and notes made from the roadmap milestone (or, for
+a patch, the milestone it patches) plus the changes since the previous release. They are built on Debian 12, so they need glibc 2.36 or
+newer (the tool links libstdc++ statically; the plugin also needs wxWidgets 3.2). On another system, build from source. The tool reports
 its version with `openautoroute --version`.
 
 `scripts/next_version.sh` prints the last release, what the next patch would be and the next milestone. It only prints.
@@ -43,8 +43,10 @@ prints the release notes in the job summary. Rehearse before the first real tag.
 
 ## Plugin package
 
-The plugin package is built on Ubuntu 24.04 with wxWidgets 3.2 against OpenCPN's plugin header for release 5.14 (pinned by commit in the
-workflows). On another system, build it from source (see the README).
+The plugin package is built on Debian 12 with wxWidgets 3.2 against OpenCPN's plugin header for release 5.14 (pinned by commit in the
+workflows). OpenCPN matches a package's target system exactly (a Debian package must match the Debian major version; a Debian 12 package is
+also accepted on Ubuntu 24.04), so to support another system add another package line in `release.yml`. Otherwise build from source (see
+the README).
 
 ## Branch protection
 

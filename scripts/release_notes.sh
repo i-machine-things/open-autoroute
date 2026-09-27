@@ -31,9 +31,11 @@ fi
 echo
 echo "## Which file do I want?"
 echo
-echo "- **openautoroute-opencpn-plugin-$tag-ubuntu24.04-x86_64.tar.gz**: the plugin for OpenCPN. In OpenCPN: Options, Plugins, Import plugin, and pick this file. It is built on Ubuntu 24.04 for OpenCPN 5.14 (wxWidgets 3.2), and needs glibc 2.39 or newer."
-echo "- **openautoroute-cli-$tag-linux-x86_64.tar.gz**: the command-line tool, for scripts and for checking routes without OpenCPN. You do not need it for the plugin."
-echo "- **SHA256SUMS**: checksums for both files (\`sha256sum -c SHA256SUMS\`)."
+echo "- **openautoroute-opencpn-plugin-$tag-debian13-x86_64.tar.gz**: the OpenCPN plugin for **Debian 13** and systems based on it (for example PeppermintOS). In OpenCPN: Options, Plugins, Import plugin, and pick this file."
+echo "- **openautoroute-opencpn-plugin-$tag-debian12-x86_64.tar.gz**: the same plugin for **Debian 12**, and for **Ubuntu 24.04** (OpenCPN accepts a Debian 12 package there)."
+echo "- OpenCPN refuses a plugin package built for another system with \"Incompatible import plugin detected\". If you get that, you picked the wrong one, or your system is not listed: build the plugin from source (see the README)."
+echo "- **openautoroute-cli-$tag-linux-x86_64.tar.gz**: the command-line tool, for scripts and for checking routes without OpenCPN. You do not need it for the plugin. Needs glibc 2.36 or newer."
+echo "- **SHA256SUMS**: checksums for all the files (\`sha256sum -c SHA256SUMS\`)."
 echo
 if [ -n "$prev" ]; then
   echo "## Changes since $prev"
