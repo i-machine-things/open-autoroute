@@ -42,7 +42,8 @@ std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, d
 ///
 /// `pointIndex`, if given, receives the index in the result of each given point. `failedLeg`, if given, receives the index of the
 /// leg that has no route (leg i runs from point i to point i+1), or -1. Returns empty if fewer than two points are given, or if any
-/// leg has no route or the search is cancelled. `progress` covers the whole search, 0 to 1, with legs weighted by straight length.
+/// leg has no route or the search is cancelled. `progress` covers the whole search, 0 to 1, with legs weighted by straight length;
+/// it is also called at the start of every leg, so a route of short legs still reports and can be cancelled.
 std::vector<LatLon> findRouteThrough(const CostGrid& grid, const std::vector<LatLon>& points, double simplifyTolerance = 0.0,
                                      std::vector<Cell>* rawPath = nullptr, double minLegM = 0.0,
                                      const std::function<bool(double)>* progress = nullptr,

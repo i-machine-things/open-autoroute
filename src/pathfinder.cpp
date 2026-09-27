@@ -328,6 +328,8 @@ std::vector<LatLon> findRouteThrough(const CostGrid& grid, const std::vector<Lat
             continue;
         }
         const double lo = before[leg] / total, hi = before[leg + 1] / total;
+        // Also report at the start of each leg: a short leg can finish before findRoute's first report, and cancel must still work.
+        if (progress && !(*progress)(lo)) return {};
         std::function<bool(double)> legProgress = [&](double f) { return (*progress)(lo + (hi - lo) * f); };
         std::vector<Cell> legRaw;
         const std::vector<LatLon> part = findRoute(grid, points[leg], points[leg + 1], simplifyTolerance, rawPath ? &legRaw : nullptr,

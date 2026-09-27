@@ -401,6 +401,7 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
             if (i == 0) snapStartM = moved;
             else if (i == last) snapEndM = moved;
             else result.snapViaM.push_back(moved);
+            result.pointMoved.push_back(!(c == ptCells[i]));
             if (!(c == ptCells[i])) emitTo(hooks.out, "%s moved to nearest safe water (%.0f m)\n", pointName(i).c_str(), moved);
         }
 

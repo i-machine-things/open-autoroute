@@ -101,6 +101,7 @@ struct PlanResult {
     double snapStartM = 0.0, snapEndM = 0.0;  // how far the endpoints were moved to reach safe water
     std::vector<double> snapViaM;             // the same for each via point, in order
     std::vector<size_t> pointIndex;           // where from, each via point and to are in `route` (planning only)
+    std::vector<bool> pointMoved;             // for each of those points: true if its own cell was not usable and it was moved
     int failedLeg = -1;                       // on "no_route" with via points: the leg with no route (leg i leaves point i; from is 0)
     std::vector<AreaCrossing> areasCrossed;   // dearest first
     RouteCheck check;               // the same measurements as numbers, for a front end that words its own report

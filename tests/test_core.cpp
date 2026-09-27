@@ -1787,11 +1787,22 @@ static void testRouteThroughViaPoints() {
     CHECK(findRouteThrough(g, {a, g.centre({10, 10}), b}, 0.0, nullptr, 0.0, nullptr, nullptr, &failed).empty());
     CHECK(failed == 1);
     CHECK(findRouteThrough(g, {a}, 0.0).empty());
-    // Progress runs across all legs and cancelling stops the search.
-    CostGrid open = makeGrid(30, 30);
+    // Progress runs across all legs and never goes backwards, and cancelling stops the search. findRoute reports only every 16384
+    // queue pops, so the grid has to be big enough for each leg to report at least once.
+    CostGrid open = makeGrid(400, 300);
     double last = 0.0;
-    std::function<bool(double)> watch = [&](double f) { CHECK(f >= last - 1e-9 && f <= 1.0 + 1e-9); last = f; return true; };
-    CHECK(!findRouteThrough(open, {open.centre({0, 0}), open.centre({29, 0}), open.centre({29, 29})}, 0.0, nullptr, 0.0, &watch).empty());
+    int calls = 0;
+    std::function<bool(double)> watch = [&](double f) {
+        ++calls;
+        CHECK(f >= last - 1e-9 && f <= 1.0 + 1e-9);
+        last = f;
+        return true;
+    };
+    const std::vector<LatLon> legs{open.centre({2, 2}), open.centre({396, 2}), open.centre({396, 296})};
+    CHECK(!findRouteThrough(open, legs, 0.0, nullptr, 0.0, &watch).empty());
+    CHECK(calls >= 2 && last > 0.0);   // at least one report per leg, and it moved on after the first
+    std::function<bool(double)> stop = [](double) { return false; };
+    CHECK(findRouteThrough(open, legs, 0.0, nullptr, 0.0, &stop).empty());
 }
 
 int main() {
