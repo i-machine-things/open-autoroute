@@ -11,6 +11,7 @@ The plan is a C++ core with two front ends, an OpenCPN plugin (`openautoroute_pi
 - Keeps some distance off shores, and follows the basic rules of the road it can read from a chart:
   - **Traffic separation schemes (Rule 10):** lanes are followed in the charted direction, zones are only crossed square-on, precautionary areas are avoided by small craft, and a boat under 20 m or under sail stays out of lanes where it can.
   - **Narrow channels (Rule 9):** between the dashed limits of a charted narrow channel, and between chains of red and green buoys, keeping to the starboard side.
+- Goes through navigation locks (the chamber, its gates and a short approach corridor are treated as passable) and lists them as a crossing, since a lockage means calling the lockmaster and waiting. Lock size and schedules are not checked.
 - Tells you which restricted or dangerous areas (military and security zones, reserves and sanctuaries, dumping grounds) a route crosses, with the chart's own wording, on screen and in the GPX description. The router only prices most of these, so it can still cross one when the way round is long; read that list before you go.
 - Scores any GPX route against the same rules (`--eval`), so it can be used to check a route from somewhere else.
 
@@ -59,7 +60,7 @@ The core works in metres and nautical miles. Converting to feet is left to whate
 ## How it is tested
 
 - `make test` runs unit tests on small hand-built grids and chart records.
-- `benchmarks/run.sh` plans 28 routes across the Columbia River, Puget Sound and the San Juans, San Francisco, Los Angeles, New York, Chesapeake Bay, Boston, Houston, the Keys, Lake Michigan, Maine and Hawaii, and prints one scored table. `benchmarks/compare.sh` compares two runs and flags anything that got less safe. Several of those routes still fail (Deception Pass, Ilwaco to Astoria, one in the Keys) and are listed as such.
+- `benchmarks/run.sh` plans 29 routes across the Columbia River (including Camas to Hood River through the Bonneville lock), Puget Sound and the San Juans, San Francisco, Los Angeles, New York, Chesapeake Bay, Boston, Houston, the Keys, Lake Michigan, Maine and Hawaii, and prints one scored table. `benchmarks/compare.sh` compares two runs and flags anything that got less safe. Several of those routes still fail (Deception Pass, Ilwaco to Astoria, one in the Keys) and are listed as such.
 - Routes are also checked by hand against the charts in OpenCPN, which is the check that has found the most problems.
 
 ## Roadmap
