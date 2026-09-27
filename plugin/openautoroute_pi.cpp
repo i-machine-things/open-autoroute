@@ -423,7 +423,7 @@ int openautoroute_pi::GetAPIVersionMajor() {
 // to the class named by this number and calls it incompatible when the cast fails.
 int openautoroute_pi::GetAPIVersionMinor() { return 18; }
 int openautoroute_pi::GetPlugInVersionMajor() { return 0; }
-int openautoroute_pi::GetPlugInVersionMinor() { return 2; }
+int openautoroute_pi::GetPlugInVersionMinor() { return 0; }   // pre-release: no version numbers until the first release
 wxBitmap* openautoroute_pi::GetPlugInBitmap() {
     wxLogMessage("open-autoroute plugin: GetPlugInBitmap");
     return &icon_;

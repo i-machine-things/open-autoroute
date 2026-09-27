@@ -4,8 +4,8 @@
 set -e
 LIB=${1:?usage: package.sh path/to/libopenautoroute_pi.so [outdir]}
 OUT=${2:-.}
-VERSION=0.2.2
-TOP=openautoroute_pi-$VERSION-debian-x86_64
+VERSION=0.0.0-dev
+TOP=openautoroute_pi-dev-debian-x86_64
 TMP=$(mktemp -d)
 mkdir -p "$TMP/$TOP/usr/lib/opencpn"
 cp "$LIB" "$TMP/$TOP/usr/lib/opencpn/libopenautoroute_pi.so"
