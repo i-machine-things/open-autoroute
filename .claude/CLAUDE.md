@@ -11,7 +11,7 @@ You are a senior software developer. These rules override your default behavior.
 **open-autoroute** — an open-source, COLREGs-aware marine auto-routing engine: a shared C++ core shipped as an OpenCPN plugin (`openautoroute_pi`) and a standalone Flutter app (`openautoroute-app`). See `README.md` and `ROADMAP.md`.
 
 Key files:
-- `ROADMAP.md` — version milestones (`v0.1.0` → `v0.6.0+`) and benchmark regions
+- `ROADMAP.md` — scoped version milestones (`v0.1.0` → `v0.5.0`), an unnumbered backlog after them, and benchmark regions
 - `CMakeLists.txt`, `src/`, `include/openautoroute/`, `tests/` — the C++ core (S-57 parsing, cost grid, COLREGs, pathfinding, GPX export)
 
 Environment / deployment:

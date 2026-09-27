@@ -2,8 +2,10 @@
 
 open-autoroute has its own versioning rule (it replaces the template's commit-count rule; see `.claude/CLAUDE.md`, Rule 4):
 
-- **A roadmap milestone met** bumps the minor version: `v0.1.0`, `v0.2.0`, `v0.3.0`, ... one per milestone in [ROADMAP.md](../ROADMAP.md).
-  Whether a milestone is met is a human decision, not a commit count.
+- **A roadmap milestone met** bumps the minor version: `v0.1.0`, `v0.2.0`, `v0.3.0`, ... one per scoped milestone heading in
+  [ROADMAP.md](../ROADMAP.md). Whether a milestone is met is a human decision, not a commit count. Work not yet scoped lives in the
+  roadmap's backlog with no version number; it gets a numbered milestone heading (with a "Done when") when it is scoped, and only then can
+  it be released as a milestone.
 - **Everything else is a patch** of the current milestone, counted up one at a time: `v0.1.0`, then `v0.1.1`, then `v0.1.2`.
 - Before `v0.1.0` there are no version numbers: dev builds and packages are unversioned.
 

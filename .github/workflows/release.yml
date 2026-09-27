@@ -43,9 +43,10 @@ jobs:
           if [ "$EVENT" = workflow_dispatch ]; then tag="$INPUT_TAG"; dry=true; else tag="$REF_NAME"; dry=false; fi
           [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo "::error::'$tag' is not a vX.Y.Z tag"; exit 1; }
           major=${BASH_REMATCH[1]}; minor=${BASH_REMATCH[2]}
-          if [ "$major" -eq 0 ] && [ "$minor" -ge 6 ]; then key='v0.6.0+'; else key="v$major.$minor.0"; fi
+          key="v$major.$minor.0"
           patch=${BASH_REMATCH[3]}
-          grep -q "^### \`$key\`" ROADMAP.md || { echo "::error::ROADMAP.md has no milestone '$key' for tag $tag"; exit 1; }
+          # Every version has its own scoped milestone heading in ROADMAP.md: backlog items get one only when they are scoped.
+          grep -q "^### \`$key\`" ROADMAP.md || { echo "::error::ROADMAP.md has no scoped milestone '$key' for tag $tag; add its heading (with a 'Done when') first"; exit 1; }
           have() { git rev-parse -q --verify "refs/tags/$1" >/dev/null; }
           if [ "$patch" -eq 0 ]; then
             # A milestone: the previous milestone must already be released (milestones go in order). Whether THIS milestone is met is the

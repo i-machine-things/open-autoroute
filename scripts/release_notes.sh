@@ -7,8 +7,8 @@ tag=${1:?usage: release_notes.sh vX.Y.Z [REF]}
 ref=${2:-$tag}
 [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo "not a vX.Y.Z tag: $tag" >&2; exit 2; }
 major=${BASH_REMATCH[1]}; minor=${BASH_REMATCH[2]}; patch=${BASH_REMATCH[3]}
-# ROADMAP.md lists one milestone per minor version, and a final "v0.6.0+" entry for everything after.
-if [ "$major" -eq 0 ] && [ "$minor" -ge 6 ]; then key='v0.6.0+'; else key="v$major.$minor.0"; fi
+# ROADMAP.md has one scoped milestone heading per minor version.
+key="v$major.$minor.0"
 # The previous release is the next-lower version by version order (not the nearest tag by commit distance, which is wrong for a patch
 # tagged out of order). The tag is put in the list even when it does not exist yet (a rehearsal), so it lands at its sorted position.
 strict='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
@@ -25,7 +25,7 @@ else
   echo
   awk -v key="### \`$key\`" '
     index($0, key) == 1 { on = 1; next }
-    on && (/^### / || /^---/) { exit }
+    on && (/^#+ / || /^---/) { exit }
     on { print }' ROADMAP.md | sed '/./,$!d'
 fi
 echo
