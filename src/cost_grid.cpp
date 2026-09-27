@@ -274,7 +274,7 @@ void CostGrid::applyShoreMargin(double rangeM, double weight) {
 namespace oar {
 
 void CostGrid::openLockApproaches(double reachM) {
-    if (lockCell_.empty() || shoalDeep_.empty()) return;
+    if (lockCell_.empty()) return;
     const int reach = static_cast<int>(std::ceil(reachM / cellSizeM()));
     for (int row = 0; row < rows_; ++row) {
         for (int col = 0; col < cols_; ++col) {
@@ -282,7 +282,11 @@ void CostGrid::openLockApproaches(double reachM) {
             for (int dr = -reach; dr <= reach; ++dr) {
                 for (int dc = -reach; dc <= reach; ++dc) {
                     const Cell c{col + dc, row + dr};
-                    if (!inBounds(c) || !shoalDeep_[index(c)] || !blocked(c) || isHazardShut(c)) continue;
+                    if (!inBounds(c) || !blocked(c)) continue;
+                    const bool shoal = !shoalDeep_.empty() && shoalDeep_[index(c)] && !isHazardShut(c);
+                    const bool wall = !wallCell_.empty() && wallCell_[index(c)];
+                    if (!shoal && !wall) continue;
+                    clearHazardShut(c);
                     setCost(c, 5.0f);
                 }
             }

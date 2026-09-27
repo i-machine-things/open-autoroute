@@ -50,6 +50,12 @@ public:
         if (shoalDeep_.empty()) { if (!on) return; shoalDeep_.assign(cost_.size(), 0); }
         shoalDeep_[index(c)] = on ? 1 : 0;
     }
+    /// Shoreline construction (guide walls, piers) over water. Normally a wall; within reach of a lock chamber the guide walls of the
+    /// approach are one or two cells apart at chart resolution and sealed the channel, so openLockApproaches lets them through too.
+    void setWall(Cell c, bool on) {
+        if (wallCell_.empty()) { if (!on) return; wallCell_.assign(cost_.size(), 0); }
+        wallCell_[index(c)] = on ? 1 : 0;
+    }
     void openLockApproaches(double reachM);
     void clearHazardShut(Cell c) {
         if (!hazardShut_.empty()) hazardShut_[index(c)] = 0;
@@ -186,6 +192,7 @@ private:
     double cellSizeDeg_;
     double cellSizeLonDeg_;
     std::vector<float> cost_;
+    std::vector<uint8_t> wallCell_;   // empty until a shoreline construction cell over water is set
     std::vector<uint8_t> lockCell_;   // empty until a lock chamber cell is set
     std::vector<uint8_t> shoalDeep_;  // empty until a shoal-to-the-bank depth area with deep water inside is set
     std::vector<uint8_t> hazardShut_;  // empty until a hazard blocks a cell

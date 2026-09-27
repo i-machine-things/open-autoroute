@@ -1208,8 +1208,11 @@ static void testLockApproach() {
     basin.geometry = Geometry::Area;
     basin.parts.push_back({{{mid.lat + 0.0002, mid.lon - 0.0006}, {mid.lat + 0.0002, mid.lon + 0.0006}, {mid.lat - 0.0002, mid.lon + 0.0006}, {mid.lat - 0.0002, mid.lon - 0.0006}}, true});
     d.features.push_back(basin);
+    d.features.push_back(lineFeature("SLCONS", {g.centre({9, 2}), g.centre({12, 2})}));       // a guide wall over water, in reach
+    d.features.push_back(lineFeature("SLCONS", {g.centre({24, 5}), g.centre({26, 5})}));      // a wall far from the lock
     StampOptions o;
     stampChart(d, o, g);
+    CHECK(g.blocked({10, 2}) && g.blocked({25, 5}));   // walls are walls until the approach pass
     CHECK(g.blocked({8, 5}));                 // before the pass: a 0 m depth area is shut
     g.openLockApproaches(350.0);              // about 3 cells of 111 m
     CHECK(!g.blocked({10, 5}) && !g.blocked({8, 5}) && g.cost({8, 5}) == 5.0f);   // opened, and dearer
@@ -1217,6 +1220,8 @@ static void testLockApproach() {
     CHECK(g.blocked({9, 6}));                 // land stays land, though it is within reach and sits in a depth area deep inside
     CHECK(g.blocked({16, 5}));                // a shallow area stays shut
     CHECK(g.blocked({24, 5}));                // and so does the same kind of area far from any lock
+    CHECK(!g.blocked({10, 2}));               // the guide wall over water in the lock's reach lets the approach through
+    CHECK(g.blocked({25, 5}));                // a wall far from any lock stays a wall
 }
 
 static void testHazardPenalties() {

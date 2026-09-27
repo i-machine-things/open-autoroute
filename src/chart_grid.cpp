@@ -222,9 +222,9 @@ AreaText readAreaText(const std::string& inform) {
 // the harbour charts walled off the strait, and its generalised areas made routes in Hawaii and the San Juans much longer.)
 void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const CostGrid& grid, std::vector<uint8_t>& shut,
                         std::vector<float>& /*penaltyUnused*/, std::vector<uint8_t>& shutLocal, std::vector<float>& penalty, NoteSink& sink,
-                        const std::vector<uint8_t>& lockNear) {
+                        const std::vector<uint8_t>& lockNear, std::vector<uint8_t>& wall) {
     // Fixed things standing in the water, and areas nobody should enter, that the depth areas call open water.
-    static const char* kBlockAlways[] = {"FSHFAC", "MARCUL", "PRDARE", "OSPARE", "HULKES", "SLCONS", "PONTON", "PILPNT",
+    static const char* kBlockAlways[] = {"FSHFAC", "MARCUL", "PRDARE", "OSPARE", "HULKES", "PONTON", "PILPNT",
                                          "MORFAC", "FNCLNE", "DYKCON", "CAUSWY", "CONVYR", "PYLONS", "FLODOC", "DRYDOC", "DAMCON",
                                          "GRIDRN", "OILBAR", "RAPIDS", "WATFAL"};
     std::vector<uint8_t> scratch;
@@ -233,6 +233,9 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
         if (std::find(opt.skipClasses.begin(), opt.skipClasses.end(), cls) != opt.skipClasses.end()) continue;  // developer switch
         if (cls == "UNSARE") {
             shutGeometry(f, grid, shutLocal, scratch);
+        } else if (cls == "SLCONS") {
+            shutGeometry(f, grid, shut, scratch);
+            shutGeometry(f, grid, wall, scratch);
         } else if (cls == "GATCON") {
             // A gate at the end of a lock chamber opens for a vessel that is locked through; any other gate (a flood gate, a barrier) is a wall.
             std::vector<uint8_t> own(shut.size(), 0);
@@ -457,7 +460,7 @@ void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& g
 
     // ---- Hazard objects (see StampOptions / stampChart docs). `shut` cells are blocked whatever the depth areas say; `penalty` is a cost
     // multiplier (never compounded across charts: the largest wins).
-    std::vector<uint8_t> shut(state.size(), 0), shutLocal(state.size(), 0);
+    std::vector<uint8_t> shut(state.size(), 0), shutLocal(state.size(), 0), wall(state.size(), 0);
     std::vector<float> penaltyUnused, penalty(state.size(), 1.0f);
     NoteSink sink;
     sink.layer = options.areas;
@@ -465,7 +468,7 @@ void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& g
         sink.at.assign(state.size(), -1);
         if (sink.layer->id.size() != state.size()) sink.layer->id.assign(state.size(), -1);
     }
-    if (options.hazardObjects) applyHazardObjects(chart, options, grid, shut, penaltyUnused, shutLocal, penalty, sink, lockNear);
+    if (options.hazardObjects) applyHazardObjects(chart, options, grid, shut, penaltyUnused, shutLocal, penalty, sink, lockNear, wall);
     if (options.hazardObjects && sink.layer) {
         for (size_t i = 0; i < lock.size(); ++i) if (lock[i]) {
             penalty[i] = std::max(penalty[i], 5.0f);
@@ -480,6 +483,7 @@ void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& g
             const uint8_t s = state[i];
             if (s != kUnknown) grid.setShoalDeep(cell, deepInside[i] && !land[i] && !shut[i] && !shutLocal[i]);  // for openLockApproaches once every chart is stamped
             if (lock[i]) grid.setLock(cell);
+            if (s != kUnknown) grid.setWall(cell, wall[i] && (s == kOpen || (deepInside[i] && !land[i])));
             if (lock[i]) {  // the lock chamber stays open: its walls and gates are what make it a lock
                 shut[i] = 0;
                 shutLocal[i] = 0;
