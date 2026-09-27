@@ -4,6 +4,7 @@
 // a caller: read the charts, build the cost grid, search, smooth, and report what the route crosses.
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -35,7 +36,7 @@ struct PlanRequest {
     bool applyTss = true;
 
     // Developer switches, used to compare runs; not for a user interface.
-    bool useMarks = true, useChannels = true, useHazards = true;
+    bool useMarks = true, useChannels = true, useHazards = true, useCatalogue = true;   // useCatalogue=false opens every cell, to compare speed
     std::vector<std::string> skipClasses;
 };
 
@@ -76,6 +77,15 @@ struct PlanResult {
     std::string summaryLine;        // one machine-readable line ("SUMMARY found=1 ..." or "SUMMARY found=0 reason=..."), for scripts
     std::shared_ptr<CostGrid> grid; // the router's view of the water, for drawing a picture
 };
+
+/// The extent of one ENC cell, in degrees, as listed in the catalogue (CATALOG.031) that ships with NOAA's ENC_ROOT.
+struct CellExtent {
+    double south = 0, west = 0, north = 0, east = 0;
+};
+
+/// Read the cell extents from the bytes of a CATALOG.031 file, keyed by cell name (e.g. "US5WA3CJ"). Lets the planner skip the thousands
+/// of cells a route does not touch without opening them. Entries it cannot read are left out; an empty map means "no catalogue".
+std::map<std::string, CellExtent> parseEncCatalog(const std::string& bytes);
 
 /// A cell size in metres for a route between two points: `preferredM` when the grid stays within `maxCells`, otherwise the smallest
 /// multiple of 10 m that does. A front end uses this so a long passage never asks for more memory than the machine has (the planner

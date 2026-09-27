@@ -46,6 +46,16 @@ struct AreaLayer {
     std::vector<int32_t> id;
 };
 
+/// Working arrays for stampChart. A route can be stamped from a hundred charts, and each stamp needs a dozen grid-sized arrays: reusing
+/// one StampScratch keeps them allocated between charts and only the part of the grid a chart touches is cleared again afterwards. The
+/// contents mean nothing between calls; it only has to belong to one grid at a time. Optional (stampChart makes its own without one).
+struct StampScratch {
+    size_t n = 0;  // cells in the grid these arrays were made for
+    std::vector<uint8_t> state, covered, land, zone, caution, channel, shut, shutLocal, lock, lockNear;
+    std::vector<float> penalty;
+    std::vector<int32_t> sinkAt;
+};
+
 /// Everything stampChart needs to know about the vessel and the rules to apply.
 struct StampOptions {
     double minDepthM = 2.5;     // draft plus clearance
@@ -56,6 +66,7 @@ struct StampOptions {
     bool hazardObjects = true;  // the chart-object hazard rules below (developer switch, for comparing runs)
     std::vector<std::string> skipClasses;  // developer switch: hazard classes to ignore, to find which rule blocks a route
     AreaLayer* areas = nullptr;  // if set, records the costed restricted areas per cell (for the crossed-areas report)
+    StampScratch* scratch = nullptr;  // reuse working arrays between charts (see StampScratch)
 };
 
 /// stampChart plus the hazard rules for chart objects beyond depth and land, each following the notes in .claude/CODING_NOTES.md and

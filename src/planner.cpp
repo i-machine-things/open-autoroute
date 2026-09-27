@@ -5,7 +5,10 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <map>
 #include <string>
 #include <utility>
@@ -73,6 +76,41 @@ void emitTo(const std::function<void(const std::string&)>& hook, const char* fmt
 }
 
 }  // namespace
+
+std::map<std::string, CellExtent> parseEncCatalog(const std::string& bytes) {
+    // ISO 8211 records: each CATD field is "CD" + a 10-digit record id, then fields ended by 0x1F, the whole field ended by 0x1E.
+    // For a cell (.000) the fields are: file, long file name, volume, "BIN" + south, west, north, east, checksum, comment.
+    std::map<std::string, CellExtent> out;
+    size_t pos = 0;
+    while (pos < bytes.size()) {
+        size_t end = bytes.find('\x1e', pos);
+        if (end == std::string::npos) end = bytes.size();
+        const std::string rec = bytes.substr(pos, end - pos);
+        pos = end + 1;
+        if (rec.size() < 13 || rec[0] != 'C' || rec[1] != 'D') continue;
+        std::vector<std::string> parts;
+        for (size_t p = 12; p <= rec.size();) {
+            const size_t q = rec.find('\x1f', p);
+            parts.push_back(rec.substr(p, q == std::string::npos ? std::string::npos : q - p));
+            if (q == std::string::npos) break;
+            p = q + 1;
+        }
+        if (parts.size() < 7 || parts[3].size() < 4 || parts[3].compare(0, 3, "BIN") != 0) continue;
+        std::string file = parts[0];
+        const size_t slash = file.find_last_of("\\/");
+        if (slash != std::string::npos) file = file.substr(slash + 1);
+        if (file.size() < 5 || file.compare(file.size() - 4, 4, ".000") != 0) continue;
+        CellExtent e;
+        char* endp = nullptr;
+        e.south = std::strtod(parts[3].c_str() + 3, &endp);
+        e.west = std::strtod(parts[4].c_str(), nullptr);
+        e.north = std::strtod(parts[5].c_str(), nullptr);
+        e.east = std::strtod(parts[6].c_str(), nullptr);
+        if (e.north < e.south) continue;
+        out[file.substr(0, file.size() - 4)] = e;
+    }
+    return out;
+}
 
 double suggestedCellM(LatLon from, LatLon to, double preferredM, double maxCells) {
     // The same box the planner uses: the endpoints plus a margin of 0.03 degrees or a quarter of the span.
@@ -145,8 +183,24 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
 
     // Load overlapping cells; stamp coarse-to-fine by the usage band in the cell name (US5xxxxx = harbour scale).
     std::vector<std::pair<std::string, fs::path>> cells;
+    // NOAA's ENC_ROOT lists every cell's extent in CATALOG.031. With it, the cells a route cannot touch are skipped without being opened
+    // (a full set is thousands of cells, and opening them all is what takes minutes on a small machine). A generous margin means nothing
+    // the exact check below would have kept is lost; without a catalogue every cell is opened, as before.
+    std::map<std::string, CellExtent> catalogue;
+    {
+        std::ifstream cat(fs::path(encDir) / "CATALOG.031", std::ios::binary);
+        if (cat && req.useCatalogue) catalogue = parseEncCatalog(std::string((std::istreambuf_iterator<char>(cat)), std::istreambuf_iterator<char>()));
+    }
+    constexpr double kCatalogueMarginDeg = 0.1;
     for (const auto& e : fs::recursive_directory_iterator(encDir)) {
-        if (e.is_regular_file() && e.path().extension() == ".000") cells.emplace_back(e.path().stem().string(), e.path());
+        if (!e.is_regular_file() || e.path().extension() != ".000") continue;
+        const auto known = catalogue.find(e.path().stem().string());
+        if (known != catalogue.end()) {
+            const CellExtent& x = known->second;
+            if (x.north < box.minLat - kCatalogueMarginDeg || x.south > box.maxLat + kCatalogueMarginDeg ||
+                x.east < box.minLon - kCatalogueMarginDeg || x.west > box.maxLon + kCatalogueMarginDeg) continue;
+        }
+        cells.emplace_back(e.path().stem().string(), e.path());
     }
     std::sort(cells.begin(), cells.end(), [](const auto& a, const auto& b) {
         const char ba = a.first.size() > 2 ? a.first[2] : '0', bb = b.first.size() > 2 ? b.first[2] : '0';
@@ -178,6 +232,7 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     };
 
     AreaLayer areaLayer;  // restricted and dangerous areas costed rather than blocked, to report which ones the route crosses
+    StampScratch scratch;   // working arrays shared by every chart of this plan
     size_t cellIndex = 0;
     for (const auto& [name, path] : cells) {
         if (!report("Reading charts", static_cast<double>(cellIndex++) / std::max<size_t>(1, cells.size()), 0.0, 0.40)) return failed("cancelled");
@@ -199,6 +254,7 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
         so.hazardObjects = useHazards;
         so.skipClasses = skipClasses;
         so.areas = &areaLayer;
+        so.scratch = &scratch;
         stampChart(d, so, grid);
         if (useMarks) collectLateralMarks(d, marks);
         emitTo(hooks.out, "  chart %s\n", name.c_str());

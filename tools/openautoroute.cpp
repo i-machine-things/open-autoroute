@@ -14,6 +14,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -138,10 +139,10 @@ int main(int argc, char** argv) {
     std::string encDir, evalPath, outPath = "route.gpx", routeName, startName = "START", endName = "END", picturePath;
     LatLon from{}, to{}, mapAt{};
     int mapRadius = 0;
-    bool trace = false;
+    bool trace = false, timing = false;
     bool haveFrom = false, haveTo = false, applyTss = true, underSail = false;
     double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0, lengthM = 12.0, laneUse = -1.0, simplify = 0.05, laneMarginM = 1500.0, laneMarginWeight = 12.0, caution = -1.0, minLegM = 460.0;
-    bool summary = false, useMarks = true, useChannels = true, useHazards = true;
+    bool summary = false, useMarks = true, useChannels = true, useHazards = true, useCatalogue = true;
     double airDraftArg = -1.0;
     std::vector<std::string> skipClasses;  // dev switches (--no-marks, --no-boundaries) exist only to compare runs
     for (int i = 1; i < argc; ++i) {
@@ -176,6 +177,8 @@ int main(int argc, char** argv) {
         }
         else if (a == "--no-hazards") useHazards = false;  // developer switch: skip the chart-object hazard rules
         else if (a == "--no-boundaries") useChannels = false;  // developer switch: ignore charted channel limits
+        else if (a == "--timing") timing = true;  // developer: print when each phase starts
+        else if (a == "--no-catalogue") useCatalogue = false;  // developer switch: open every cell instead of using CATALOG.031 (to compare speed)
         else if (a == "--no-marks") useMarks = false;  // ignore red/green lateral marks (for comparison)
         else if (a == "--summary") summary = true;  // one machine-readable line at the end, for benchmark scripts
         else if (a == "--simplify" && hasVal) simplify = std::atof(argv[++i]);
@@ -215,6 +218,7 @@ int main(int argc, char** argv) {
     req.useMarks = useMarks;
     req.useChannels = useChannels;
     req.useHazards = useHazards;
+    req.useCatalogue = useCatalogue;
     req.skipClasses = skipClasses;
     req.routeName = routeName;
     req.startName = startName;
@@ -235,6 +239,17 @@ int main(int argc, char** argv) {
     PlanHooks hooks;
     hooks.out = [](const std::string& s) { std::fputs(s.c_str(), stdout); };
     hooks.err = [](const std::string& s) { std::fputs(s.c_str(), stderr); };
+    if (timing) {
+        const auto t0 = std::chrono::steady_clock::now();
+        auto lastPhase = std::make_shared<std::string>();
+        hooks.progress = [t0, lastPhase](const PlanProgress& p) {
+            if (*lastPhase != p.phase) {
+                *lastPhase = p.phase;
+                std::fprintf(stderr, "[%6.1f s] %s\n", std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count(), p.phase);
+            }
+            return true;
+        };
+    }
     if (mapRadius > 0) {
         // Debug picture of the grid around --map, with the raw A* path and the smoothed route drawn over it. Also used when no
         // route is found, which is exactly when the grid is what needs looking at.

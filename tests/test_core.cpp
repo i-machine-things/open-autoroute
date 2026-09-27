@@ -1244,6 +1244,91 @@ static void testSuggestedCellSize() {
     CHECK(width * height / ((big - 10.0) * (big - 10.0)) > 1e6);                       // and it is the smallest step that does
 }
 
+// The catalogue that ships with NOAA's ENC_ROOT gives each cell's extent, so a route need not open cells it cannot touch.
+static void testEncCatalog() {
+    const std::string us = "\x1f";
+    const std::string rec1 = "CD0000000002US1EEZ1M\\US1EEZ1A.TXT" + us + us + "V01X01" + us + "TXT" + us + us + us + us + us + us;   // a text file: ignored
+    const std::string rec2 = "CD0000000003US5WA3CJ\\US5WA3CJ.000" + us + "Columbia River" + us + "V01X01" + us + "BIN45.600000" + us + "-121.950000" + us +
+                             "45.680000" + us + "-121.880000" + us + "ABCD" + us + us;
+    const std::string rec3 = "CD0000000004US2PACWY\\US2PACWY.000" + us + us + "V01X01" + us + "BIN43.2" + us + "-124.7" + us + "48.0" + us + "-120.5" + us + us + us;
+    const std::string leader = "00119 D     00053   550400010000600000CATD0006000006";
+    const std::string bytes = leader + "\x1e" + rec1 + "\x1e" + leader + "\x1e" + rec2 + "\x1e" + rec3 + "\x1e";
+    const auto cat = parseEncCatalog(bytes);
+    CHECK(cat.size() == 2);
+    CHECK(cat.count("US5WA3CJ") == 1 && cat.count("US1EEZ1A") == 0);
+    const CellExtent& e = cat.at("US5WA3CJ");
+    CHECK(std::fabs(e.south - 45.6) < 1e-9 && std::fabs(e.west + 121.95) < 1e-9 && std::fabs(e.north - 45.68) < 1e-9 && std::fabs(e.east + 121.88) < 1e-9);
+    CHECK(std::fabs(cat.at("US2PACWY").north - 48.0) < 1e-9);
+    CHECK(parseEncCatalog("").empty());
+    CHECK(parseEncCatalog("not a catalogue at all").empty());
+}
+
+// Stamping several charts with one shared scratch, which only clears what each chart touched, gives exactly the grid that a fresh scratch per
+// chart gives, and a chart that covers only a corner of a big grid still stamps correctly.
+static void testSharedScratchStamping() {
+    auto build = [](bool shared) {
+        CostGrid g = makeGrid(40, 30);
+        g.fill(kBlocked);
+        ChartData coarse, fine1, fine2;
+        coarse.features.push_back(areaFeature("DEPARE", 45.970, 46.0, -124.0, -123.960, 30.0));
+        ChartFeature banned = areaFeature("RESARE", 45.975, 45.985, -123.995, -123.985);
+        banned.restrn = 1u << 7;
+        coarse.features.push_back(banned);
+        fine1.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.990, 1.0));                 // top-left corner only: shoal
+        fine1.features.push_back(pointFeature("WRECKS", {3, 3}, g, 1.0));
+        fine2.features.push_back(areaFeature("DEPARE", 45.975, 45.985, -123.975, -123.965, 30.0));            // lower right patch: deep
+        ChartFeature military = areaFeature("MIPARE", 45.976, 45.984, -123.974, -123.966);
+        fine2.features.push_back(military);
+        StampScratch sc;
+        AreaLayer areas;
+        for (ChartData* d : {&coarse, &fine1, &fine2}) {
+            StampOptions o;
+            o.areas = &areas;
+            if (shared) o.scratch = &sc;
+            stampChart(*d, o, g);
+        }
+        return g;
+    };
+    // The scratch is left exactly as it was found (all zero, penalty 1, notes -1), so the next chart cannot inherit anything from this one.
+    {
+        CostGrid g = makeGrid(40, 30);
+        g.fill(kBlocked);
+        ChartData d;
+        d.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.990, 30.0));
+        d.features.push_back(pointFeature("WRECKS", {3, 3}, g, 1.0));
+        ChartFeature banned = areaFeature("RESARE", 45.992, 45.998, -123.998, -123.992);
+        banned.restrn = 1u << 7;
+        d.features.push_back(banned);
+        ChartFeature mil = areaFeature("MIPARE", 45.990, 45.994, -123.998, -123.992);
+        d.features.push_back(mil);
+        StampScratch sc;
+        AreaLayer areas;
+        StampOptions o;
+        o.areas = &areas;
+        o.scratch = &sc;
+        stampChart(d, o, g);
+        bool clean = sc.n == 40u * 30u;
+        for (auto* v : {&sc.state, &sc.covered, &sc.land, &sc.zone, &sc.caution, &sc.channel, &sc.shut, &sc.shutLocal, &sc.lock, &sc.lockNear}) {
+            for (uint8_t x : *v) clean = clean && x == 0;
+        }
+        for (float x : sc.penalty) clean = clean && x == 1.0f;
+        for (int32_t x : sc.sinkAt) clean = clean && x == -1;
+        CHECK(clean);
+    }
+    CostGrid a = build(true), b = build(false);
+    bool same = true;
+    for (int row = 0; row < 30; ++row) {
+        for (int col = 0; col < 40; ++col) {
+            const float ca = a.cost({col, row}), cb = b.cost({col, row});
+            same = same && (ca == cb || (std::isinf(ca) && std::isinf(cb)));
+        }
+    }
+    CHECK(same);
+    CHECK(a.blocked({3, 3}) && a.blocked({5, 2}));           // the wreck and the shoal corner
+    CHECK(!a.blocked({32, 20}) && a.cost({32, 20}) == 30.0f);  // the deep patch under a military area
+    CHECK(!a.blocked({20, 25}));                             // open water the coarse chart supplies, away from both fine charts
+}
+
 static void testHazardPenalties() {
     ChartFeature military = areaFeature("MIPARE", 45.996, 46.0, -124.000, -123.996);   // cols 0-3, rows 0-3: heavily costly, never a wall
     ChartFeature caution = areaFeature("CTNARE", 45.990, 45.994, -124.000, -123.996);   // cols 0-3, rows 6-9
@@ -1571,6 +1656,8 @@ int main() {
     testNavigationLock();
     testSearchProgressAndCancel();
     testSuggestedCellSize();
+    testEncCatalog();
+    testSharedScratchStamping();
     testLockCorridor();
     testThinPolygonsStillBlock();
     testHazardPenalties();

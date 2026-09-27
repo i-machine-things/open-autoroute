@@ -57,8 +57,9 @@ void paintArea(const ChartFeature& f, uint8_t value, const CostGrid& grid, std::
     });
 }
 
-// Mark the cells a polyline passes through as shut (Bresenham between consecutive vertices).
-void paintLine(const ChartFeature& f, const CostGrid& grid, std::vector<uint8_t>& state) {
+// Visit the cells a polyline passes through (Bresenham between consecutive vertices), inside the grid only.
+template <typename Fn>
+void forEachCellOnLine(const ChartFeature& f, const CostGrid& grid, Fn&& visit) {
     for (const Ring& r : f.parts) {
         for (size_t i = 1; i < r.points.size(); ++i) {
             const Cell a = grid.cellAt(r.points[i - 1]), b = grid.cellAt(r.points[i]);
@@ -66,10 +67,10 @@ void paintLine(const ChartFeature& f, const CostGrid& grid, std::vector<uint8_t>
             const int dx = std::abs(b.col - a.col), dy = std::abs(b.row - a.row);
             const int sx = a.col < b.col ? 1 : -1, sy = a.row < b.row ? 1 : -1;
             int err = dx - dy;
-            // A wildly long segment far outside the grid would only waste time, so clip by the grid's own size.
+            // A wildly long segment far outside the grid would only waste time, so it is skipped.
             if (std::max(dx, dy) > 4 * (grid.cols() + grid.rows())) continue;
             while (true) {
-                if (grid.inBounds({x, y})) state[static_cast<size_t>(y) * grid.cols() + x] = kShut;
+                if (grid.inBounds({x, y})) visit(y, x);
                 if (x == b.col && y == b.row) break;
                 const int e2 = 2 * err;
                 if (e2 > -dy) { err -= dy; x += sx; }
@@ -77,6 +78,11 @@ void paintLine(const ChartFeature& f, const CostGrid& grid, std::vector<uint8_t>
             }
         }
     }
+}
+
+// Mark the cells a polyline passes through as shut.
+void paintLine(const ChartFeature& f, const CostGrid& grid, std::vector<uint8_t>& state) {
+    forEachCellOnLine(f, grid, [&](int row, int col) { state[static_cast<size_t>(row) * grid.cols() + col] = kShut; });
 }
 
 // A polygon narrower than about a cell (a mole, a spit, a drying ledge) can slip between the cell centres and vanish. Measured as
@@ -137,25 +143,31 @@ bool depthUnsafe(const ChartFeature& f, double minDepthM) {
     return std::isnan(f.valsou) || f.valsou < minDepthM;  // unknown depth is unsafe
 }
 
-// Block a feature's geometry: cells inside an area, along a line, or at a point.
-void shutGeometry(const ChartFeature& f, const CostGrid& grid, std::vector<uint8_t>& mask, std::vector<uint8_t>& scratch) {
-    (void)scratch;
+// Visit the cells of a feature: inside an area (and along its outline, so a polygon thinner than a cell is never invisible), along a line,
+// or at a point.
+template <typename Fn>
+void forEachCellOfFeature(const ChartFeature& f, const CostGrid& grid, Fn&& visit) {
     if (f.geometry == Geometry::Area) {
-        forEachCellInArea(f, grid, [&](int row, int col) { mask[static_cast<size_t>(row) * grid.cols() + col] = 1; });
-        // A polygon thinner than a cell can miss every cell centre; also shut the cells along its outline so it is never invisible.
-        paintLine(f, grid, mask);
+        forEachCellInArea(f, grid, visit);
+        forEachCellOnLine(f, grid, visit);
     } else if (f.geometry == Geometry::Line) {
-        paintLine(f, grid, mask);
+        forEachCellOnLine(f, grid, visit);
     } else if (!f.parts.empty() && !f.parts[0].points.empty()) {
         const Cell c = grid.cellAt(f.parts[0].points[0]);
-        if (grid.inBounds(c)) mask[static_cast<size_t>(c.row) * grid.cols() + c.col] = 1;
+        if (grid.inBounds(c)) visit(c.row, c.col);
     }
+}
+
+// Block a feature's geometry.
+void shutGeometry(const ChartFeature& f, const CostGrid& grid, std::vector<uint8_t>& mask, std::vector<uint8_t>& scratch) {
+    (void)scratch;
+    forEachCellOfFeature(f, grid, [&](int row, int col) { mask[static_cast<size_t>(row) * grid.cols() + col] = 1; });
 }
 
 // Where the costed areas are recorded for the report: which note covers each cell of this chart, and the notes themselves.
 struct NoteSink {
     AreaLayer* layer = nullptr;
-    std::vector<int32_t> at;  // this chart's dearest note per cell
+    std::vector<int32_t>* at = nullptr;  // this chart's dearest note per cell
 };
 
 // Index of the note with this kind, wording and factor, adding it if it is new (the same area appears on charts of several scales).
@@ -173,16 +185,14 @@ int32_t noteIndex(AreaLayer& layer, const std::string& kind, const std::string& 
 void raise(std::vector<float>& penalty, const CostGrid& grid, const ChartFeature& f, float factor, NoteSink* sink = nullptr,
            const char* kind = "") {
     if (f.geometry == Geometry::Line) {  // a line (an overhead cable) makes the cells it crosses dearer
-        std::vector<uint8_t> cells(penalty.size(), 0);
-        paintLine(f, grid, cells);
         const int32_t note = (sink && sink->layer) ? noteIndex(*sink->layer, kind, f.inform, factor) : -1;
-        for (size_t i = 0; i < cells.size(); ++i) {
-            if (!cells[i]) continue;
+        forEachCellOnLine(f, grid, [&](int row, int col) {
+            const size_t i = static_cast<size_t>(row) * grid.cols() + col;
             if (factor > penalty[i]) {
                 penalty[i] = factor;
-                if (note >= 0) sink->at[i] = note;
+                if (note >= 0) (*sink->at)[i] = note;
             }
-        }
+        });
         return;
     }
     if (f.geometry != Geometry::Area) return;
@@ -191,9 +201,9 @@ void raise(std::vector<float>& penalty, const CostGrid& grid, const ChartFeature
         const size_t i = static_cast<size_t>(row) * grid.cols() + col;
         if (factor > penalty[i]) {
             penalty[i] = factor;
-            if (note >= 0) sink->at[i] = note;
-        } else if (note >= 0 && factor == penalty[i] && sink->at[i] < 0) {
-            sink->at[i] = note;
+            if (note >= 0) (*sink->at)[i] = note;
+        } else if (note >= 0 && factor == penalty[i] && (*sink->at)[i] < 0) {
+            (*sink->at)[i] = note;
         }
     });
 }
@@ -264,11 +274,9 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
             shutGeometry(f, grid, shutLocal, scratch);
         } else if (cls == "GATCON") {
             // A gate at the end of a lock chamber opens for a vessel that is locked through; any other gate (a flood gate, a barrier) is a wall.
-            std::vector<uint8_t> own(shut.size(), 0);
-            shutGeometry(f, grid, own, scratch);
             bool atLock = false;
-            for (size_t i = 0; i < own.size() && !atLock; ++i) atLock = own[i] && lockNear[i];
-            if (!atLock) for (size_t i = 0; i < own.size(); ++i) shut[i] |= own[i];
+            forEachCellOfFeature(f, grid, [&](int row, int col) { atLock = atLock || lockNear[static_cast<size_t>(row) * grid.cols() + col]; });
+            if (!atLock) shutGeometry(f, grid, shut, scratch);
         } else if (contains(kBlockAlways, sizeof kBlockAlways / sizeof *kBlockAlways, cls)) {
             shutGeometry(f, grid, shut, scratch);
         } else if (cls == "OBSTRN" || cls == "WRECKS" || cls == "UWTROC") {
@@ -386,9 +394,7 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
             // A gate walkway or service bridge at the end of a lock chamber (charted as a bridge with no clearance) is part of the lock.
             bool atLock = false;
             if (std::isnan(clearance) && cls == "BRIDGE") {
-                std::vector<uint8_t> own(shut.size(), 0);
-                shutGeometry(f, grid, own, scratch);
-                for (size_t i = 0; i < own.size() && !atLock; ++i) atLock = own[i] && lockNear[i];
+                forEachCellOfFeature(f, grid, [&](int row, int col) { atLock = atLock || lockNear[static_cast<size_t>(row) * grid.cols() + col]; });
             }
             if (atLock) continue;
             if (std::isnan(clearance) && cls == "CBLOHD") raise(penalty, grid, f, 10.0f, &sink, "overhead cable, clearance not charted");
@@ -403,9 +409,48 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
 void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& grid) {
     const double minDepthM = options.minDepthM, cautionFactor = options.cautionFactor;
     const bool applyTss = options.applyTss;
-    std::vector<uint8_t> state(static_cast<size_t>(grid.cols()) * grid.rows(), kUnknown);
-    std::vector<uint8_t> covered(state.size(), 0);
-    std::vector<uint8_t> land(state.size(), 0);  // the covering chart's land, for lock corridors
+    const int cols = grid.cols(), rows = grid.rows();
+    const size_t cellCount = static_cast<size_t>(cols) * rows;
+
+    // The part of the grid this chart can touch: its features' extent plus room for the 250 m berths round point objects. Everything below
+    // works inside it, since a chart is usually a small patch of a long route's grid.
+    const int margin = static_cast<int>(std::ceil(400.0 / grid.cellSizeM())) + 2;
+    int r0 = rows, r1 = -1, c0 = cols, c1 = -1;
+    for (const ChartFeature& f : chart.features) {
+        for (const Ring& ring : f.parts) {
+            for (const LatLon& pt : ring.points) {
+                const Cell c = grid.cellAt(pt);
+                r0 = std::min(r0, c.row); r1 = std::max(r1, c.row);
+                c0 = std::min(c0, c.col); c1 = std::max(c1, c.col);
+            }
+        }
+    }
+    r0 = std::max(0, r0 - margin); r1 = std::min(rows - 1, r1 + margin);
+    c0 = std::max(0, c0 - margin); c1 = std::min(cols - 1, c1 + margin);
+    if (r1 < r0 || c1 < c0) return;   // nothing of this chart lies on the grid
+
+    // Working arrays: reused between charts when the caller gives a scratch, and always left as they were found (all zero, penalty 1,
+    // notes -1) by clearing the rows this chart used.
+    StampScratch localScratch;
+    StampScratch& sc = options.scratch ? *options.scratch : localScratch;
+    if (sc.n != cellCount) {
+        sc.n = cellCount;
+        for (auto* v : {&sc.state, &sc.covered, &sc.land, &sc.zone, &sc.caution, &sc.channel, &sc.shut, &sc.shutLocal, &sc.lock, &sc.lockNear}) v->assign(cellCount, 0);
+        sc.penalty.assign(cellCount, 1.0f);
+        sc.sinkAt.assign(cellCount, -1);
+    }
+    std::vector<uint8_t>& state = sc.state;
+    std::vector<uint8_t>& covered = sc.covered;
+    std::vector<uint8_t>& land = sc.land;  // the covering chart's land, for lock corridors
+    std::vector<uint8_t>& zone = sc.zone;
+    std::vector<uint8_t>& caution = sc.caution;
+    std::vector<uint8_t>& channel = sc.channel;
+    std::vector<uint8_t>& shut = sc.shut;
+    std::vector<uint8_t>& shutLocal = sc.shutLocal;
+    std::vector<uint8_t>& lock = sc.lock;
+    std::vector<uint8_t>& lockNear = sc.lockNear;
+    std::vector<float>& penalty = sc.penalty;
+    const auto idx = [cols](int row, int col) { return static_cast<size_t>(row) * cols + col; };
 
     for (const ChartFeature& f : chart.features) {
         if (f.geometry != Geometry::Area) continue;
@@ -414,19 +459,18 @@ void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& g
             paintArea(f, deepEnough ? kOpen : kShut, grid, state);
             if (!deepEnough && isThinPolygon(f, grid)) paintLine(f, grid, state);  // a thin shoal or bar must not vanish between cell centres
         } else if (f.objectClass == "LNDARE") {
-            forEachCellInArea(f, grid, [&](int row, int col) { land[static_cast<size_t>(row) * grid.cols() + col] = 1; });
+            forEachCellInArea(f, grid, [&](int row, int col) { land[idx(row, col)] = 1; });
             paintArea(f, kShut, grid, state);
             if (isThinPolygon(f, grid)) paintLine(f, grid, state);  // a mole or spit narrower than a cell
         }
     }
-    covered = state;  // point hazards below must not extend the chart's coverage
+    std::copy(state.begin() + idx(r0, 0), state.begin() + idx(r1 + 1, 0), covered.begin() + idx(r0, 0));  // point hazards below must not extend the chart's coverage
 
     // COLREGs Rule 10 lane parts record their flow direction so the router can enforce it per move. Painted only onto the grid,
     // never open or shut water. Zones and lines are marked after the water verdict below, since a zone cell must stay open.
-    std::vector<uint8_t> zone(state.size(), 0), caution(state.size(), 0), channel(state.size(), 0);
     for (const ChartFeature& f : chart.features) {
         if ((f.objectClass == "FAIRWY" || f.objectClass == "DRGARE") && f.geometry == Geometry::Area) {
-            forEachCellInArea(f, grid, [&](int row, int col) { channel[static_cast<size_t>(row) * grid.cols() + col] = 1; });
+            forEachCellInArea(f, grid, [&](int row, int col) { channel[idx(row, col)] = 1; });
         }
     }
     if (applyTss) {
@@ -436,11 +480,11 @@ void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& g
         }
         for (const ChartFeature& f : chart.features) {
             if (f.objectClass == "TSEZNE" && f.geometry == Geometry::Area) {
-                forEachCellInArea(f, grid, [&](int row, int col) { zone[static_cast<size_t>(row) * grid.cols() + col] = 1; });
+                forEachCellInArea(f, grid, [&](int row, int col) { zone[idx(row, col)] = 1; });
             } else if (f.objectClass == "TSELNE" && f.geometry == Geometry::Line) {
                 paintLine(f, grid, zone);
             } else if (f.objectClass == "PRCARE" && f.geometry == Geometry::Area && cautionFactor > 1.0) {
-                forEachCellInArea(f, grid, [&](int row, int col) { caution[static_cast<size_t>(row) * grid.cols() + col] = 1; });
+                forEachCellInArea(f, grid, [&](int row, int col) { caution[idx(row, col)] = 1; });
             }
         }
     }
@@ -452,56 +496,50 @@ void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& g
         const bool unsafe = std::isnan(f.valsou) ? hazard : f.valsou < minDepthM;
         if (!unsafe) continue;
         const Cell c = grid.cellAt(f.parts[0].points[0]);
-        if (grid.inBounds(c) && covered[static_cast<size_t>(c.row) * grid.cols() + c.col]) {
-            state[static_cast<size_t>(c.row) * grid.cols() + c.col] = kShut;
-        }
+        if (grid.inBounds(c) && covered[idx(c.row, c.col)]) state[idx(c.row, c.col)] = kShut;
     }
 
     // Navigation locks: a lock basin (LOKBSN) is water a vessel can be locked through. Its cells, and the outline of a chamber narrower than
     // a cell, are open whatever the walls and gates round them say; the gates at its ends open (see GATCON below). Dearer, since a lockage
     // means waiting for the lockmaster.
-    std::vector<uint8_t> lock(state.size(), 0), lockNear(state.size(), 0);
     if (options.hazardObjects) {
         for (const ChartFeature& f : chart.features) {
             if (f.objectClass != "LOKBSN" || f.geometry != Geometry::Area) continue;
-            forEachCellInArea(f, grid, [&](int row, int col) { lock[static_cast<size_t>(row) * grid.cols() + col] = 1; });
+            forEachCellInArea(f, grid, [&](int row, int col) { lock[idx(row, col)] = 1; });
             paintLine(f, grid, lock);
             addLockCorridor(f, grid);
         }
-        for (int row = 0; row < grid.rows(); ++row) {
-            for (int col = 0; col < grid.cols(); ++col) {
-                if (!lock[static_cast<size_t>(row) * grid.cols() + col]) continue;
+        for (int row = r0; row <= r1; ++row) {
+            for (int col = c0; col <= c1; ++col) {
+                if (!lock[idx(row, col)]) continue;
                 for (int dr = -2; dr <= 2; ++dr) {
                     for (int dc = -2; dc <= 2; ++dc) {
-                        if (grid.inBounds({col + dc, row + dr})) lockNear[static_cast<size_t>(row + dr) * grid.cols() + col + dc] = 1;
+                        if (grid.inBounds({col + dc, row + dr})) lockNear[idx(row + dr, col + dc)] = 1;
                     }
                 }
-                state[static_cast<size_t>(row) * grid.cols() + col] = kOpen;
+                state[idx(row, col)] = kOpen;
             }
         }
     }
 
     // ---- Hazard objects (see StampOptions / stampChart docs). `shut` cells are blocked whatever the depth areas say; `penalty` is a cost
     // multiplier (never compounded across charts: the largest wins).
-    std::vector<uint8_t> shut(state.size(), 0), shutLocal(state.size(), 0);
-    std::vector<float> penaltyUnused, penalty(state.size(), 1.0f);
+    std::vector<float> penaltyUnused;
     NoteSink sink;
     sink.layer = options.areas;
-    if (sink.layer) {
-        sink.at.assign(state.size(), -1);
-        if (sink.layer->id.size() != state.size()) sink.layer->id.assign(state.size(), -1);
-    }
+    sink.at = &sc.sinkAt;
+    if (sink.layer && sink.layer->id.size() != cellCount) sink.layer->id.assign(cellCount, -1);
     if (options.hazardObjects) applyHazardObjects(chart, options, grid, shut, penaltyUnused, shutLocal, penalty, sink, lockNear);
     if (options.hazardObjects && sink.layer) {
-        for (size_t i = 0; i < lock.size(); ++i) if (lock[i]) {
+        for (size_t i = idx(r0, 0); i < idx(r1 + 1, 0); ++i) if (lock[i]) {
             penalty[i] = std::max(penalty[i], 5.0f);
-            sink.at[i] = noteIndex(*sink.layer, "navigation lock (call the lockmaster, expect a wait)", "", 5.0f);
+            sc.sinkAt[i] = noteIndex(*sink.layer, "navigation lock (call the lockmaster, expect a wait)", "", 5.0f);
         }
     }
 
-    for (int row = 0; row < grid.rows(); ++row) {
-        for (int col = 0; col < grid.cols(); ++col) {
-            const size_t i = static_cast<size_t>(row) * grid.cols() + col;
+    for (int row = r0; row <= r1; ++row) {
+        for (int col = c0; col <= c1; ++col) {
+            const size_t i = idx(row, col);
             const Cell cell{col, row};
             const uint8_t s = state[i];
             if (s != kUnknown) grid.setLand(cell, land[i] != 0);  // for openLockCorridors once every chart is stamped
@@ -528,10 +566,16 @@ void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& g
             if (sink.layer) {  // mirrors the cost: a chart that covers the cell replaces what an older one said about its areas
                 int32_t& cur = sink.layer->id[i];
                 if (s != kUnknown || shutLocal[i]) cur = -1;
-                if (sink.at[i] >= 0 && (cur < 0 || sink.layer->notes[cur].factor < sink.layer->notes[sink.at[i]].factor)) cur = sink.at[i];
+                if (sc.sinkAt[i] >= 0 && (cur < 0 || sink.layer->notes[cur].factor < sink.layer->notes[sc.sinkAt[i]].factor)) cur = sc.sinkAt[i];
             }
         }
     }
+
+    // Leave the working arrays clean for the next chart.
+    const size_t from = idx(r0, 0), to = idx(r1 + 1, 0);
+    for (auto* v : {&state, &covered, &land, &zone, &caution, &channel, &shut, &shutLocal, &lock, &lockNear}) std::fill(v->begin() + from, v->begin() + to, static_cast<uint8_t>(0));
+    std::fill(penalty.begin() + from, penalty.begin() + to, 1.0f);
+    std::fill(sc.sinkAt.begin() + from, sc.sinkAt.begin() + to, -1);
 }
 
 void collectLateralMarks(const ChartData& chart, std::vector<LateralMark>& out) {
