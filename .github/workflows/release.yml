@@ -1,0 +1,147 @@
+# Tag and release, following ROADMAP.md. Versions: a milestone met is a minor bump (v0.1.0, v0.2.0, ...); everything else is a patch of the
+# current milestone (v0.1.0 -> v0.1.1). Push a tag vX.Y.Z from master (after the human go/no-go in Rule 6) and this workflow:
+#   1. checks the tag is either a roadmap milestone (vX.Y.0, released in order) or the next patch of a milestone already released,
+#      and that its commit is on master;
+#   2. runs the whole CI workflow on the tagged commit (a release is never built from a red commit);
+#   3. builds the command-line tool and the OpenCPN plugin package and checksums them;
+#   4. publishes a GitHub release whose notes are the roadmap milestone plus the changes since the previous tag.
+# Versions below 1.0 are published as pre-releases. To rehearse without a tag or a release, run this workflow by hand (Actions >
+# Release > Run workflow) with a tag name: it does everything except publish and prints the notes in the job summary.
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag name to rehearse, e.g. v0.1.0 (nothing is published and no tag is needed)'
+        required: true
+        default: 'v0.1.0'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Tag is a roadmap milestone on master
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.t.outputs.tag }}
+      dry: ${{ steps.t.outputs.dry }}
+      prerelease: ${{ steps.t.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: t
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$EVENT" = workflow_dispatch ]; then tag="$INPUT_TAG"; dry=true; else tag="$REF_NAME"; dry=false; fi
+          [[ "$tag" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || { echo "::error::'$tag' is not a vX.Y.Z tag"; exit 1; }
+          major=${BASH_REMATCH[1]}; minor=${BASH_REMATCH[2]}
+          if [ "$major" -eq 0 ] && [ "$minor" -ge 6 ]; then key='v0.6.0+'; else key="v$major.$minor.0"; fi
+          patch=${BASH_REMATCH[3]}
+          grep -q "^### \`$key\`" ROADMAP.md || { echo "::error::ROADMAP.md has no milestone '$key' for tag $tag"; exit 1; }
+          have() { git rev-parse -q --verify "refs/tags/$1" >/dev/null; }
+          if [ "$patch" -eq 0 ]; then
+            # A milestone: the previous milestone must already be released (milestones go in order). Whether THIS milestone is met is the
+            # human's call and is not something a workflow can judge.
+            if [ "$major" -eq 0 ] && [ "$minor" -ge 2 ] && [ "$minor" -le 5 ] && ! have "v$major.$((minor - 1)).0"; then
+              echo "::error::$tag is a milestone release but v$major.$((minor - 1)).0 has not been released"; exit 1
+            fi
+          else
+            # A patch: its milestone must be released, and the previous patch (if any) must exist, so patches count up one at a time.
+            have "v$major.$minor.0" || { echo "::error::$tag is a patch but v$major.$minor.0 has not been released"; exit 1; }
+            [ "$patch" -eq 1 ] || have "v$major.$minor.$((patch - 1))" || { echo "::error::$tag skips a patch: v$major.$minor.$((patch - 1)) does not exist"; exit 1; }
+          fi
+          if [ "$dry" = false ]; then
+            git fetch --no-tags origin master
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/master || { echo "::error::$tag is not on master (only tag from master)"; exit 1; }
+          fi
+          prerelease=false; [ "$major" -eq 0 ] && prerelease=true
+          { echo "tag=$tag"; echo "dry=$dry"; echo "prerelease=$prerelease"; } >> "$GITHUB_OUTPUT"
+
+  checks:
+    name: CI on the tagged commit
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build release artifacts
+    needs: [validate, checks]
+    runs-on: ubuntu-24.04
+    env:
+      TAG: ${{ needs.validate.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: OpenCPN plugin API header (the release the plugin targets)
+        uses: actions/checkout@v4
+        with:
+          repository: OpenCPN/OpenCPN
+          ref: refs/tags/upstream/5.14.2+dfsg
+          path: ocpn
+          sparse-checkout: include
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libwxgtk3.2-dev libgl-dev libglu1-mesa-dev
+      - name: Build the command-line tool and the plugin
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOAR_BUILD_PLUGIN=ON -DOCPN_INCLUDE_DIR="$PWD/ocpn/include" \
+                -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
+          cmake --build build -j"$(nproc)"
+      - name: Package
+        run: |
+          mkdir -p dist stage/openautoroute-$TAG-linux-x86_64
+          strip build/openautoroute
+          cp build/openautoroute README.md LICENSE stage/openautoroute-$TAG-linux-x86_64/
+          tar -C stage -czf dist/openautoroute-$TAG-linux-x86_64.tar.gz openautoroute-$TAG-linux-x86_64
+          # The plugin package is what OpenCPN's Options > Plugins > "Import plugin..." takes. It is built on Ubuntu 24.04 with wxWidgets 3.2;
+          # on another system, build it from source (see the README).
+          VERSION="${TAG#v}" TARGET=ubuntu-x86_64 TARGET_VERSION=24.04 plugin/package.sh build/plugin/libopenautoroute_pi.so dist
+          (cd dist && sha256sum * > SHA256SUMS)
+          ls -l dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist/*
+          if-no-files-found: error
+
+  rehearsal:
+    name: Rehearsal (nothing is published)
+    needs: [validate, build]
+    if: needs.validate.outputs.dry == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: The release notes that would be published
+        run: scripts/release_notes.sh "${{ needs.validate.outputs.tag }}" HEAD | tee -a "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish the GitHub release
+    needs: [validate, build]
+    if: needs.validate.outputs.dry == 'false'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.validate.outputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist
+      - name: Release notes
+        run: scripts/release_notes.sh "$TAG" > notes.md
+      - name: Create the release
+        run: |
+          flags=(); [ "${{ needs.validate.outputs.prerelease }}" = true ] && flags+=(--prerelease)
+          gh release create "$TAG" dist/* --verify-tag --title "open-autoroute $TAG" --notes-file notes.md "${flags[@]}"

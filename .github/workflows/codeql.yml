@@ -1,0 +1,32 @@
+# Security scan: GitHub's CodeQL over the C++ code, on every PR, every push to master, and weekly.
+name: CodeQL
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (C++)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: c-cpp
+          build-mode: manual
+      - name: Build (core, tool and tests; the plugin needs OpenCPN's headers and is covered by CI)
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j"$(nproc)"
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:c-cpp
