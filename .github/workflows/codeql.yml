@@ -16,6 +16,8 @@ permissions:
 jobs:
   analyze:
     name: Analyze (C++)
+    # A pull request from a fork gets a read-only token and cannot upload results, so the scan would fail red for outside contributors.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4

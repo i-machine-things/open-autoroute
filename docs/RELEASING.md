@@ -20,14 +20,17 @@ The 29-route benchmark needs the full NOAA chart set (over 2 GB), so it is not i
 
 ## Cutting a release
 
-1. Master is green (CI and CodeQL), and the benchmark comparison has been checked for anything that got worse.
+1. Master is green (CI and CodeQL: the release workflow re-runs CI on the tagged commit but does not check CodeQL), and the benchmark comparison has been checked for anything that got worse.
 2. Give the human the plain-language summary and the management checklist, and wait for an explicit go (Rule 6).
 3. From master: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
 The workflow refuses the tag unless it is a milestone in `ROADMAP.md` (`vX.Y.0`, and the previous milestone is already released) or the
-next patch of a milestone that is already released, and its commit is on master. Versions below 1.0 are published as pre-releases.
-The release has the command-line tool (Linux x86_64) and the OpenCPN plugin package, with checksums, and notes made from the roadmap
-milestone (or, for a patch, the milestone it patches) plus the changes since the previous tag.
+next patch of a milestone that is already released and still current (once `vX.(Y+1).0` is out, `vX.Y` is closed: no backports), and its
+commit is on master. Leading zeros (`v0.1.01`) are refused. Versions below 1.0 are published as pre-releases.
+The release has the command-line tool and the OpenCPN plugin package, with checksums, and notes made from the roadmap milestone (or, for
+a patch, the milestone it patches) plus the changes since the previous release. Both are built on Ubuntu 24.04, so they need glibc 2.39 or
+newer (the tool links libstdc++ statically; the plugin also needs wxWidgets 3.2). On an older system, build from source. The tool reports
+its version with `openautoroute --version`.
 
 `scripts/next_version.sh` prints the last release, what the next patch would be and the next milestone. It only prints.
 
@@ -38,5 +41,10 @@ prints the release notes in the job summary. Rehearse before the first real tag.
 
 ## Plugin package
 
-The plugin package is built on Ubuntu 24.04 with wxWidgets 3.2 against OpenCPN's plugin header for release 5.14. On another system,
-build it from source (see the README).
+The plugin package is built on Ubuntu 24.04 with wxWidgets 3.2 against OpenCPN's plugin header for release 5.14 (pinned by commit in the
+workflows). On another system, build it from source (see the README).
+
+## Branch protection
+
+Nothing enforces "merge only when green" except discipline: `master` has no branch protection or ruleset. Requiring the `CI` and `CodeQL`
+checks is a repository setting the owner can turn on.

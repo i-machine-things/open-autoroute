@@ -157,7 +157,14 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         const bool hasVal = i + 1 < argc;
-        if (a == "--enc" && hasVal) encDir = argv[++i];
+        if (a == "--version") {
+#ifndef OAR_VERSION
+#define OAR_VERSION "dev"
+#endif
+            std::printf("open-autoroute %s (a planning aid, not for navigation; use at your own risk)\n", OAR_VERSION);
+            return 0;
+        }
+        else if (a == "--enc" && hasVal) encDir = argv[++i];
         else if (a == "--from" && hasVal) haveFrom = parseLatLon(argv[++i], from);
         else if (a == "--to" && hasVal) haveTo = parseLatLon(argv[++i], to);
         else if (a == "--eval" && hasVal) evalPath = argv[++i];

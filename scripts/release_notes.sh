@@ -5,11 +5,14 @@
 set -euo pipefail
 tag=${1:?usage: release_notes.sh vX.Y.Z [REF]}
 ref=${2:-$tag}
-[[ "$tag" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || { echo "not a vX.Y.Z tag: $tag" >&2; exit 2; }
+[[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo "not a vX.Y.Z tag: $tag" >&2; exit 2; }
 major=${BASH_REMATCH[1]}; minor=${BASH_REMATCH[2]}; patch=${BASH_REMATCH[3]}
 # ROADMAP.md lists one milestone per minor version, and a final "v0.6.0+" entry for everything after.
 if [ "$major" -eq 0 ] && [ "$minor" -ge 6 ]; then key='v0.6.0+'; else key="v$major.$minor.0"; fi
-prev=$(git describe --tags --match 'v[0-9]*' --abbrev=0 "$ref^" 2>/dev/null || git rev-list --max-parents=0 "$ref" | tail -1)
+# The previous release is the next-lower version by version order (not the nearest tag by commit distance, which is wrong for a patch
+# tagged out of order). The tag is put in the list even when it does not exist yet (a rehearsal), so it lands at its sorted position.
+strict='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+prev=$( { git tag -l 'v[0-9]*' | grep -E "$strict" | grep -vx "$tag" || true; printf '%s\n' "$tag"; } | sort -V | awk -v t="$tag" '$0 == t { print p; exit } { p = $0 }' )
 
 echo "# open-autoroute $tag"
 echo
@@ -26,8 +29,13 @@ else
     on { print }' ROADMAP.md | sed '/./,$!d'
 fi
 echo
-echo "## Changes since ${prev:0:12}"
-subjects=$(git log --no-merges --format='%s (%h)' "$prev..$ref")
+if [ -n "$prev" ]; then
+  echo "## Changes since $prev"
+  subjects=$(git log --no-merges --format='%s (%h)' "$prev..$ref")
+else
+  echo "## Changes (this is the first release)"
+  subjects=$(git log --no-merges --format='%s (%h)' "$ref")   # the whole history, root commit included
+fi
 section() { # title, regex
   local lines; lines=$(grep -E "$2" <<<"$subjects" || true)
   if [ -n "$lines" ]; then echo; echo "### $1"; echo; while IFS= read -r l; do echo "- $l"; done <<<"$lines"; fi

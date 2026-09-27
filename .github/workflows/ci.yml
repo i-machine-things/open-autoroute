@@ -14,12 +14,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # A newer push to a PR cancels the older run; every push to master keeps its own run (its group includes the commit).
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
-    name: Lint (warnings are errors, shell scripts, workflow syntax)
+    name: Lint (warnings are errors, shell scripts, workflow YAML)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +50,7 @@ jobs:
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
           cmake --build build -j"$(nproc)"
           ctest --test-dir build --output-on-failure
+          build/openautoroute --version
       - name: The plain-make build (no CMake) works too
         run: make -B test CXX=${{ matrix.cxx }}
 
@@ -71,7 +73,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: OpenCPN/OpenCPN
-          ref: refs/tags/upstream/5.14.2+dfsg
+          ref: 0cd62032bc17ff004ce47f6b5dbdcccf88348400   # OpenCPN tag upstream/5.14.2+dfsg, pinned by commit (tags can move)
           path: ocpn
           sparse-checkout: include
       - name: Dependencies

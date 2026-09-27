@@ -91,7 +91,7 @@ Before pushing any commit that touches core logic:
 
 Do not push if there are unhandled exceptions or broken/empty outputs.
 
-CI runs on every PR (`.github/workflows/ci.yml`: lint, tests on gcc and clang, sanitizers, the plugin build; `codeql.yml`: security scan). A PR is only mergeable with all of them green. The 29-route benchmark needs the full NOAA chart set and stays manual: run `benchmarks/run.sh` and `benchmarks/compare.sh` for any routing change.
+CI runs on every PR (`.github/workflows/ci.yml`: lint, tests on gcc and clang, sanitizers, the plugin build; `codeql.yml`: security scan). Merge a PR only with all of them green: that is a process rule, since branch protection is not enabled on `master`, so nothing but discipline enforces it. The 29-route benchmark needs the full NOAA chart set and stays manual: run `benchmarks/run.sh` and `benchmarks/compare.sh` for any routing change.
 
 Project-specific: configure and build with `cmake -S . -B build && cmake --build build -j2`, then run `ctest --test-dir build --output-on-failure`. Validate routing changes against the benchmark regions in `ROADMAP.md` once real ENC data is wired in.
 
@@ -104,7 +104,7 @@ open-autoroute does **not** use the template's "N `feat:` commits recommends a b
 - Until the first release (`v0.1.0`) there are no version numbers at all: dev builds and packages are unversioned.
 - Do not recommend a bump from commit counts, and do not tag automatically. `scripts/next_version.sh` only prints what the next patch and the next milestone would be.
 
-Tags are `vMAJOR.MINOR.PATCH`, pushed from `master` only. Pushing a `v*` tag runs the release workflow (`.github/workflows/release.yml`), which refuses a tag that is not a roadmap milestone (`vX.Y.0`) or a patch of a milestone that has already been released, and never builds from a commit where CI is red. See `docs/RELEASING.md`.
+Tags are `vMAJOR.MINOR.PATCH`, pushed from `master` only. Pushing a `v*` tag runs the release workflow (`.github/workflows/release.yml`), which refuses a tag that is not a roadmap milestone (`vX.Y.0`, released in order) or the next patch of the current, already released milestone, and does not build a release unless the CI workflow passes on the tagged commit (CodeQL is not part of that gate; check it yourself). See `docs/RELEASING.md`.
 
 Before tagging, complete the management review sign-off (Rule 6). Do not tag on the user's silence: get an explicit go/no-go.
 

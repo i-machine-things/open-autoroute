@@ -41,7 +41,7 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           if [ "$EVENT" = workflow_dispatch ]; then tag="$INPUT_TAG"; dry=true; else tag="$REF_NAME"; dry=false; fi
-          [[ "$tag" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || { echo "::error::'$tag' is not a vX.Y.Z tag"; exit 1; }
+          [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo "::error::'$tag' is not a vX.Y.Z tag"; exit 1; }
           major=${BASH_REMATCH[1]}; minor=${BASH_REMATCH[2]}
           if [ "$major" -eq 0 ] && [ "$minor" -ge 6 ]; then key='v0.6.0+'; else key="v$major.$minor.0"; fi
           patch=${BASH_REMATCH[3]}
@@ -50,12 +50,14 @@ jobs:
           if [ "$patch" -eq 0 ]; then
             # A milestone: the previous milestone must already be released (milestones go in order). Whether THIS milestone is met is the
             # human's call and is not something a workflow can judge.
-            if [ "$major" -eq 0 ] && [ "$minor" -ge 2 ] && [ "$minor" -le 5 ] && ! have "v$major.$((minor - 1)).0"; then
+            if [ "$minor" -ge 2 ] && ! have "v$major.$((minor - 1)).0"; then
               echo "::error::$tag is a milestone release but v$major.$((minor - 1)).0 has not been released"; exit 1
             fi
           else
             # A patch: its milestone must be released, and the previous patch (if any) must exist, so patches count up one at a time.
             have "v$major.$minor.0" || { echo "::error::$tag is a patch but v$major.$minor.0 has not been released"; exit 1; }
+            # Patches go on the current milestone only: once the next milestone is released, the old one is closed (no backports).
+            if have "v$major.$((minor + 1)).0"; then echo "::error::$tag patches a closed milestone: v$major.$((minor + 1)).0 is already released"; exit 1; fi
             [ "$patch" -eq 1 ] || have "v$major.$minor.$((patch - 1))" || { echo "::error::$tag skips a patch: v$major.$minor.$((patch - 1)) does not exist"; exit 1; }
           fi
           if [ "$dry" = false ]; then
@@ -82,7 +84,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: OpenCPN/OpenCPN
-          ref: refs/tags/upstream/5.14.2+dfsg
+          ref: 0cd62032bc17ff004ce47f6b5dbdcccf88348400   # OpenCPN tag upstream/5.14.2+dfsg, pinned by commit (tags can move)
           path: ocpn
           sparse-checkout: include
       - name: Dependencies
@@ -90,7 +92,7 @@ jobs:
       - name: Build the command-line tool and the plugin
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOAR_BUILD_PLUGIN=ON -DOCPN_INCLUDE_DIR="$PWD/ocpn/include" \
-                -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
+                -DOAR_VERSION="${TAG#v}" -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
           cmake --build build -j"$(nproc)"
       - name: Package
         run: |
