@@ -63,6 +63,7 @@ Options you are likely to want:
 | `--air-draft-m` | Height of the vessel above the water, in metres, checked against bridges and overhead cables (default: estimated from the length) |
 | `--cell-m` | Grid size in metres (default 30); smaller is finer and slower |
 | `--min-leg-m` | Preferred minimum distance between waypoints (default 460 m) |
+| `--via LAT,LON` | A point the route must pass through; repeat it for more, in order |
 | `--eval route.gpx` | Score an existing route instead of planning one |
 | `--map LAT,LON,CELLS` | Print an ASCII picture of the grid and route around a point, for debugging |
 

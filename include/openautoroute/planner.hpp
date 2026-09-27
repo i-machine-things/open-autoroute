@@ -19,6 +19,7 @@ namespace oar {
 struct PlanRequest {
     std::vector<std::string> encDirs;   // folders searched recursively for ENC base cells (.000); a front end passes the chart folders it already knows
     LatLon from{}, to{};
+    std::vector<LatLon> via;            // points the route must pass through, in order, between from and to (a drawn route's turns)
     std::vector<LatLon> evalRoute;      // if two or more points: score this route instead of planning one (from/to are taken from it)
     double draftM = 1.5, clearanceM = 1.0;
     double lengthM = 12.0;
@@ -74,6 +75,9 @@ struct PlanResult {
     double nm = 0.0, straightNm = 0.0;
     int chartsUsed = 0;
     double snapStartM = 0.0, snapEndM = 0.0;  // how far the endpoints were moved to reach safe water
+    std::vector<double> snapViaM;             // the same for each via point, in order
+    std::vector<size_t> pointIndex;           // where from, each via point and to are in `route` (planning only)
+    int failedLeg = -1;                       // on "no_route" with via points: the leg with no route (leg i leaves point i; from is 0)
     std::vector<AreaCrossing> areasCrossed;   // dearest first
     std::string summaryLine;        // one machine-readable line ("SUMMARY found=1 ..." or "SUMMARY found=0 reason=..."), for scripts
     std::shared_ptr<CostGrid> grid; // the router's view of the water, for drawing a picture
@@ -98,6 +102,8 @@ std::vector<std::pair<std::string, std::string>> findEncCells(const std::string&
 /// multiple of 10 m that does. A front end uses this so a long passage never asks for more memory than the machine has (the planner
 /// itself refuses a grid over 25 million cells).
 double suggestedCellM(LatLon from, LatLon to, double preferredM = 30.0, double maxCells = 6e6);
+/// The same for a route through several points (start, via points, end).
+double suggestedCellM(const std::vector<LatLon>& points, double preferredM = 30.0, double maxCells = 6e6);
 
 /// Plan (or, with `evalRoute`, score) a route. Never throws for chart or routing problems; those come back in `status` and `failReason`.
 PlanResult planRoute(const PlanRequest& request, const PlanHooks& hooks = {});

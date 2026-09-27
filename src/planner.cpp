@@ -151,10 +151,17 @@ std::vector<std::pair<std::string, std::string>> findEncCells(const std::string&
 }
 
 double suggestedCellM(LatLon from, LatLon to, double preferredM, double maxCells) {
-    // The same box the planner uses: the endpoints plus a margin of 0.03 degrees or a quarter of the span.
-    const double dLat = std::fabs(to.lat - from.lat), dLon = std::fabs(to.lon - from.lon);
+    return suggestedCellM(std::vector<LatLon>{from, to}, preferredM, maxCells);
+}
+
+double suggestedCellM(const std::vector<LatLon>& points, double preferredM, double maxCells) {
+    // The same box the planner uses: the points plus a margin of 0.03 degrees or a quarter of the span.
+    if (points.empty()) return preferredM;
+    Bounds ends;
+    for (LatLon p : points) ends.add(p);
+    const double dLat = ends.maxLat - ends.minLat, dLon = ends.maxLon - ends.minLon;
     const double margin = std::max(0.03, 0.25 * std::max(dLat, dLon));
-    const double midLat = (from.lat + to.lat) / 2.0;
+    const double midLat = (ends.minLat + ends.maxLat) / 2.0;
     const double heightM = (dLat + 2.0 * margin) * 111320.0;
     const double widthM = (dLon + 2.0 * margin) * 111320.0 * std::cos(deg2rad(midLat));
     const double needed = std::sqrt(std::max(widthM * heightM, 1.0) / std::max(maxCells, 1.0));
@@ -167,6 +174,7 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     const bool evaluating = req.evalRoute.size() >= 2;
     const std::vector<LatLon>& given = req.evalRoute;
     LatLon from = req.from, to = req.to;
+    const std::vector<LatLon> via = evaluating ? std::vector<LatLon>{} : req.via;   // a scored route is taken as it is
     if (evaluating) {
         from = given.front();
         to = given.back();
@@ -183,7 +191,10 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     const auto finite = [](double v) { return std::isfinite(v); };
     if (encDirs.empty() || !finite(cellM) || cellM <= 0.0 || !finite(draft) || draft < 0.0 || !finite(clearance) || clearance < 0.0 ||
         !finite(lengthM) || lengthM <= 0.0 || !finite(from.lat) || !finite(from.lon) || !finite(to.lat) || !finite(to.lon) ||
-        std::fabs(from.lat) > 90.0 || std::fabs(to.lat) > 90.0 || std::fabs(from.lon) > 180.0 || std::fabs(to.lon) > 180.0) {
+        std::fabs(from.lat) > 90.0 || std::fabs(to.lat) > 90.0 || std::fabs(from.lon) > 180.0 || std::fabs(to.lon) > 180.0 ||
+        std::any_of(via.begin(), via.end(), [&](LatLon p) {
+            return !finite(p.lat) || !finite(p.lon) || std::fabs(p.lat) > 90.0 || std::fabs(p.lon) > 180.0;
+        })) {
         emitTo(hooks.err, "the request needs a chart folder, real positions, a positive vessel length and cell size, and finite non-negative draft and clearance\n");
         result.status = 2;
         result.failReason = "bad_request";
@@ -206,6 +217,7 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     ends.add(from);
     ends.add(to);
     for (LatLon p : given) ends.add(p);
+    for (LatLon p : via) ends.add(p);
     const double marginDeg = std::max(0.03, 0.25 * std::max(ends.maxLat - ends.minLat, ends.maxLon - ends.minLon));
     Bounds box;
     box.add({ends.minLat - marginDeg, ends.minLon - marginDeg});
@@ -326,27 +338,45 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     if (evaluating) {
         route = given;  // score as-is: no snapping, no rerouting
     } else {
-        Cell s = grid.cellAt(from), g = grid.cellAt(to);
-        if (!grid.inBounds(s) || !grid.inBounds(g)) {
-            emitTo(hooks.err, "start or end is outside the charted area\n");
-            return failed("endpoint_outside_grid");
+        // Every point the route must pass (start, via points, end) is moved to the nearest safe water, all in one body of water.
+        std::vector<LatLon> pts{from};
+        pts.insert(pts.end(), via.begin(), via.end());
+        pts.push_back(to);
+        const size_t last = pts.size() - 1;
+        const auto pointName = [&](size_t i) {
+            return i == 0 ? std::string("start") : i == last ? std::string("end") : "via point " + std::to_string(i);
+        };
+        std::vector<Cell> ptCells;
+        for (size_t i = 0; i < pts.size(); ++i) {
+            ptCells.push_back(grid.cellAt(pts[i]));
+            if (!grid.inBounds(ptCells.back())) {
+                emitTo(hooks.err, "%s is outside the charted area\n", pointName(i).c_str());
+                return failed("endpoint_outside_grid");
+            }
         }
         const WaterBodies bodies = findWaterBodies(grid);
-        const auto sc = nearestPerBody(grid, bodies, s, 40), gc = nearestPerBody(grid, bodies, g, 40);
-        if (sc.empty() || gc.empty()) {
-            emitTo(hooks.err, "%s is not near charted water deep enough for %.1f m draft + %.1f m clearance\n",
-                         sc.empty() ? "start" : "end", draft, clearance);
-            if (hooks.debugGrid) hooks.debugGrid(grid, rawPath, route);
-            return failed("endpoint_not_in_safe_water");
+        std::vector<std::map<int, Snap>> near;
+        for (size_t i = 0; i < pts.size(); ++i) {
+            near.push_back(nearestPerBody(grid, bodies, ptCells[i], 40));
+            if (near.back().empty()) {
+                emitTo(hooks.err, "%s is not near charted water deep enough for %.1f m draft + %.1f m clearance\n",
+                       pointName(i).c_str(), draft, clearance);
+                if (hooks.debugGrid) hooks.debugGrid(grid, rawPath, route);
+                return failed("endpoint_not_in_safe_water");
+            }
         }
-        // Prefer a water body both endpoints can reach, closest overall, and never a tiny pocket when a real one is available.
+        // Prefer a water body every point can reach, closest overall, and never a tiny pocket when a real one is available.
         int chosen = -1;
         double bestScore = 1e30;
-        for (const auto& [body, ss] : sc) {
-            const auto it = gc.find(body);
-            if (it == gc.end()) continue;
-            const double score = ss.distCells + it->second.distCells + (bodies.size[body] < 500 ? 1e6 : 0.0);
-            if (score < bestScore) { bestScore = score; chosen = body; }
+        for (const auto& [body, first] : near.front()) {
+            double score = bodies.size[body] < 500 ? 1e6 : 0.0;
+            bool everywhere = true;
+            for (const auto& m : near) {
+                const auto it = m.find(body);
+                if (it == m.end()) { everywhere = false; break; }
+                score += it->second.distCells;
+            }
+            if (everywhere && score < bestScore) { bestScore = score; chosen = body; }
         }
         if (chosen < 0) {
             auto biggest = [&](const std::map<int, Snap>& m) {
@@ -354,25 +384,39 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
                 for (const auto& kv : m) n = std::max(n, bodies.size[kv.first]);
                 return n;
             };
-            emitTo(hooks.err, "start and end are in different bodies of water: nearest to the start is %zu cells, to the end %zu\n",
-                         biggest(sc), biggest(gc));
+            if (pts.size() == 2) {
+                emitTo(hooks.err, "start and end are in different bodies of water: nearest to the start is %zu cells, to the end %zu\n",
+                       biggest(near.front()), biggest(near.back()));
+            } else {
+                emitTo(hooks.err, "the start, via points and end are not all in one body of water\n");
+            }
             if (hooks.debugGrid) hooks.debugGrid(grid, rawPath, route);
             return failed("disconnected_water");
         }
-        const Cell s2 = sc.at(chosen).cell, g2 = gc.at(chosen).cell;
-        snapStartM = haversineM(from, grid.centre(s2));
-        snapEndM = haversineM(to, grid.centre(g2));
-        if (!(s == s2)) emitTo(hooks.out, "start moved to nearest safe water (%.0f m)\n", snapStartM);
-        if (!(g == g2)) emitTo(hooks.out, "end moved to nearest safe water (%.0f m)\n", snapEndM);
+        std::vector<LatLon> snapped;
+        for (size_t i = 0; i < pts.size(); ++i) {
+            const Cell c = near[i].at(chosen).cell;
+            const double moved = haversineM(pts[i], grid.centre(c));
+            snapped.push_back(grid.centre(c));
+            if (i == 0) snapStartM = moved;
+            else if (i == last) snapEndM = moved;
+            else result.snapViaM.push_back(moved);
+            if (!(c == ptCells[i])) emitTo(hooks.out, "%s moved to nearest safe water (%.0f m)\n", pointName(i).c_str(), moved);
+        }
 
         std::function<bool(double)> searchProgress = [&](double f) { return report("Searching", f, 0.50, 0.95); };
-        route = findRoute(grid, grid.centre(s2), grid.centre(g2), simplify, &rawPath, minLegM, &searchProgress);
+        int failedLeg = -1;
+        route = findRouteThrough(grid, snapped, simplify, &rawPath, minLegM, &searchProgress, &result.pointIndex, &failedLeg);
         if (route.empty() && cancelled) return failed("cancelled");
         if (route.empty()) {
+            result.failedLeg = failedLeg;
+            if (pts.size() > 2 && failedLeg >= 0) {
+                emitTo(hooks.err, "no route found from the %s to the %s\n", pointName(static_cast<size_t>(failedLeg)).c_str(),
+                       pointName(static_cast<size_t>(failedLeg) + 1).c_str());
+            }
             emitTo(hooks.err, "no route found: the charts show no continuous water at least %.1f m deep between the points\n",
                          minDepth);
-            emitTo(hooks.err, "  search ran inside one body of %zu cells; start cell %d,%d (blocked=%d cost=%g) goal cell %d,%d (blocked=%d cost=%g)\n",
-                         bodies.size[chosen], s2.col, s2.row, grid.blocked(s2) ? 1 : 0, grid.cost(s2), g2.col, g2.row, grid.blocked(g2) ? 1 : 0, grid.cost(g2));
+            emitTo(hooks.err, "  search ran inside one body of %zu cells\n", bodies.size[chosen]);
             if (hooks.debugGrid) hooks.debugGrid(grid, rawPath, route);
             return failed("no_route");
         }
