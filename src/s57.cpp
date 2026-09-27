@@ -15,7 +15,6 @@ namespace {
 // ISO 8211 framing, then the fixed binary layouts S-57 Part 3 defines for the fields we read. Those layouts are
 // hard-coded instead of interpreting each file's data descriptive record: S-57 fixes them, and it keeps this small.
 
-constexpr uint8_t kFieldTerminator = 0x1E;
 constexpr uint8_t kUnitTerminator = 0x1F;
 
 struct Field {

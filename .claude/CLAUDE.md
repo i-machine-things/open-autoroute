@@ -11,7 +11,7 @@ You are a senior software developer. These rules override your default behavior.
 **open-autoroute** — an open-source, COLREGs-aware marine auto-routing engine: a shared C++ core shipped as an OpenCPN plugin (`openautoroute_pi`) and a standalone Flutter app (`openautoroute-app`). See `README.md` and `ROADMAP.md`.
 
 Key files:
-- `ROADMAP.md` — version milestones (`v0.1.0` → `v0.6.0+`) and benchmark regions
+- `ROADMAP.md` — scoped version milestones (`v0.1.0` → `v0.6.0`), an unnumbered backlog after them, and benchmark regions
 - `CMakeLists.txt`, `src/`, `include/openautoroute/`, `tests/` — the C++ core (S-57 parsing, cost grid, COLREGs, pathfinding, GPX export)
 
 Environment / deployment:
@@ -91,61 +91,35 @@ Before pushing any commit that touches core logic:
 
 Do not push if there are unhandled exceptions or broken/empty outputs.
 
-This repo has no CI workflow yet. Once `.github/workflows/ci.yml` exists it runs on every PR (lint, security scan, tests, build); from then on a PR is only mergeable with all of those green. Until then, the local test run above is the gate.
+CI runs on every PR (`.github/workflows/ci.yml`: lint, tests on gcc and clang, sanitizers, the plugin build; `codeql.yml`: security scan). Merge a PR only with all of them green: that is a process rule, since branch protection is not enabled on `master`, so nothing but discipline enforces it. The 29-route benchmark needs the full NOAA chart set and stays manual: run `benchmarks/run.sh` and `benchmarks/compare.sh` for any routing change.
 
 Project-specific: configure and build with `cmake -S . -B build && cmake --build build -j2`, then run `ctest --test-dir build --output-on-failure`. Validate routing changes against the benchmark regions in `ROADMAP.md` once real ENC data is wired in.
 
-## Rule 4: Semantic Versioning
+## Rule 4: Versioning (this project's own rule)
 
-Tag releases using `vMAJOR.MINOR.PATCH`:
-- **MAJOR** — breaking changes (incompatible config format, changed interface assumptions)
-- **MINOR** — new features that do not break existing functionality
-- **PATCH** — bug fixes, typo corrections, minor improvements
+open-autoroute does **not** use the template's "N `feat:` commits recommends a bump" rule. Versions follow the milestones in `ROADMAP.md`, and nothing else:
 
-Pushing a `v*` tag to `master` triggers the release workflow once one exists. Once CI exists, do not tag until all its jobs are green on master.
+- **A milestone release** bumps the minor version: `v0.1.0`, then `v0.2.0`, `v0.3.0`, and so on, one per milestone in `ROADMAP.md`, and only when that milestone is actually met. Whether a milestone is met is the human's decision (Rule 6), never a commit count.
+- **Everything else is a patch.** Any release that is not a milestone bumps the patch number of the current milestone: `v0.1.0` then `v0.1.1`, then `v0.1.2`. Features, fixes and documentation between milestones are all patches.
+- Until the first release (`v0.1.0`) there are no version numbers at all: dev builds and packages are unversioned.
+- Do not recommend a bump from commit counts, and do not tag automatically. `scripts/next_version.sh` only prints what the next patch and the next milestone would be.
 
-Before tagging, complete the management review sign-off (Rule 6). Do not tag on the user's silence — get an explicit go/no-go.
+Tags are `vMAJOR.MINOR.PATCH`, pushed from `master` only. Pushing a `v*` tag runs the release workflow (`.github/workflows/release.yml`), which refuses a tag that is not a roadmap milestone (`vX.Y.0`, released in order) or the next patch of the current, already released milestone, and does not build a release unless the CI workflow passes on the tagged commit (CodeQL is not part of that gate; check it yourself). See `docs/RELEASING.md`.
+
+Before tagging, complete the management review sign-off (Rule 6). Do not tag on the user's silence: get an explicit go/no-go.
 
 **To cut a release:**
 ```bash
-git tag v1.2.3
-git push origin v1.2.3
+git tag v0.1.0
+git push origin v0.1.0
 ```
-
-**Note:** Only tag from `master`.
-
-### Automatic Version Bump Triggers
-
-After every merge to `master`, count commits since the last `v*` tag — `git describe --tags --abbrev=0`
-with no filter can select a non-version tag, and fails outright before a repo's first release (no
-tags exist yet), so match `v*` explicitly and fall back to the repo's root commit:
-
-```bash
-last_tag="$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || git rev-list --max-parents=0 master)"
-git log "$last_tag"..master --oneline
-```
-
-Count by type:
-- Lines starting with `feat:` → feature count
-- Lines starting with `fix:` → fix count
-
-**Thresholds:**
-- **5 or more `feat:` commits** → recommend a MINOR bump
-- **5 or more `fix:` commits** → recommend a PATCH bump
-
-If both thresholds are met simultaneously, recommend MINOR (takes precedence). This is a
-*recommendation*, not an action — Rule 6 requires an explicit human go/no-go before any tag is
-created, and this threshold does not bypass that. Do not tag or push automatically here.
-
-Check this threshold after every merge to master and report the recommendation. Do not wait for the
-user to ask before reporting it — but do wait for their sign-off before acting on it.
 
 ## Rule 5: Pull Request Reviews
 
 When a pull request is open or being prepared:
 
 - Always open PRs via `gh pr create` — never merge directly to `master` without a PR.
-- Before merging, if CI is configured, verify it is green: `gh pr checks <number>`. Until a CI workflow exists, confirm the local test run passed.
+- Before merging, verify CI is green: `gh pr checks <number>`. For a routing change, also confirm the benchmark comparison shows no regression.
 - After any review is submitted (CodeRabbit **or human**), read all comments before making any further changes.
 - For each finding, regardless of source:
   1. If it matches an existing `.claude/CODING_NOTES.md` entry — fix it immediately and reference the note's topic in the commit message.

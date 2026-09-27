@@ -1,0 +1,96 @@
+# CI: lint, tests and build on every PR and every push to master. The release workflow calls this too, so a tag is only released when
+# all of these pass on the tagged commit. The 29-route benchmark needs the full NOAA chart set (2 GB+), so it stays a manual step
+# (benchmarks/run.sh and benchmarks/compare.sh); CI covers what can run without chart data.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer push to a PR cancels the older run; every push to master keeps its own run (its group includes the commit).
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    name: Lint (warnings are errors, shell scripts, workflow YAML)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Core, tool and tests build clean with warnings as errors (gcc and clang)
+        run: |
+          for cxx in g++ clang++; do
+            echo "::group::$cxx"
+            $cxx -std=c++17 -fsyntax-only -Wall -Wextra -Wpedantic -Werror -Iinclude src/*.cpp tools/*.cpp tests/test_core.cpp
+            echo "::endgroup::"
+          done
+      - name: Shell scripts
+        run: shellcheck -S warning benchmarks/*.sh plugin/package.sh scripts/*.sh
+      - name: Workflow files are valid YAML
+        run: python3 -c "import sys, yaml; [yaml.safe_load(open(f)) for f in sys.argv[1:]]" .github/workflows/*.yml
+
+  test:
+    name: Build and test (${{ matrix.cxx }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        cxx: [g++, clang++]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure, build, test with CMake
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+          cmake --build build -j"$(nproc)"
+          ctest --test-dir build --output-on-failure
+          build/openautoroute --version
+      - name: The plain-make build (no CMake) works too
+        run: make -B test CXX=${{ matrix.cxx }}
+
+  sanitizers:
+    name: Tests under AddressSanitizer and UndefinedBehaviorSanitizer
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          g++ -std=c++17 -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer \
+              -Iinclude src/*.cpp tests/test_core.cpp -o build_san
+          ./build_san
+
+  plugin:
+    name: OpenCPN plugin builds against OpenCPN's plugin header and wxWidgets 3.2
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: OpenCPN plugin API header (the release the plugin targets)
+        uses: actions/checkout@v4
+        with:
+          repository: OpenCPN/OpenCPN
+          ref: 0cd62032bc17ff004ce47f6b5dbdcccf88348400   # OpenCPN tag upstream/5.14.2+dfsg, pinned by commit (tags can move)
+          path: ocpn
+          sparse-checkout: include
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libwxgtk3.2-dev libgl-dev libglu1-mesa-dev
+      - name: Build the plugin
+        run: |
+          cmake -S . -B build_pi -DCMAKE_BUILD_TYPE=Release -DOAR_BUILD_PLUGIN=ON -DOCPN_INCLUDE_DIR="$PWD/ocpn/include"
+          cmake --build build_pi -j"$(nproc)" --target openautoroute_pi
+      - name: It exports the two functions OpenCPN looks for
+        run: nm -D --defined-only build_pi/plugin/libopenautoroute_pi.so | grep -E ' T (create_pi|destroy_pi)$' | wc -l | grep -qx 2
+
+  next-version:
+    name: What the next version would be (informational; never tags)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: scripts/next_version.sh HEAD | tee -a "$GITHUB_STEP_SUMMARY"

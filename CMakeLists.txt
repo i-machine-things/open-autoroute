@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(openautoroute VERSION 0.1.0 LANGUAGES CXX)
+project(openautoroute LANGUAGES CXX)   # no version until the first release; a release build passes -DOAR_VERSION
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -30,7 +30,9 @@ add_executable(s57_scan tools/s57_scan.cpp)
 target_link_libraries(s57_scan PRIVATE openautoroute_core)
 
 # Command-line router: ENC cells in, GPX route out (import into OpenCPN to check it).
+set(OAR_VERSION "dev" CACHE STRING "Version reported by openautoroute --version (a release build sets it from the tag)")
 add_executable(openautoroute tools/openautoroute.cpp)
+target_compile_definitions(openautoroute PRIVATE OAR_VERSION="${OAR_VERSION}")
 target_link_libraries(openautoroute PRIVATE openautoroute_core)
 
 # Optional OpenCPN plugin front end (needs OpenCPN's ocpn_plugin.h and wxWidgets 3.2; see plugin/CMakeLists.txt).
