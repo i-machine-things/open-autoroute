@@ -1,6 +1,7 @@
 #include <filesystem>
 #include <fstream>
 #include <cmath>
+#include <limits>
 #include <functional>
 #include <cstdint>
 #include <cstdio>
@@ -1205,13 +1206,24 @@ static void testLockCorridor() {
     d.features.push_back(basin);
     d.features.push_back(lineFeature("SLCONS", {g.centre({9, 2}), g.centre({9, 8})}));         // a guide wall across the approach line
     d.features.push_back(areaFeature("LNDARE", 45.9940, 45.9950, -123.9930, -123.9910));         // a land cell on the line (col 8, row 5)
+    // Hazards on the approach line that must survive the corridor: a shallow wreck (col 10), a bridge charted lower than the mast (col 14, air
+    // draft 5 m), and an unsurveyed area (col 16).
+    d.features.push_back(pointFeature("WRECKS", {10, 5}, g, 1.0));
+    ChartFeature lowBridge = lineFeature("BRIDGE", {g.centre({14, 3}), g.centre({14, 7})});
+    lowBridge.verclr = 3.0;
+    d.features.push_back(lowBridge);
+    d.features.push_back(areaFeature("UNSARE", 45.9945, 45.9955, -123.9845, -123.9835));       // col 15-16, row 5
     StampOptions o;
+    o.airDraftM = 5.0;
     stampChart(d, o, g);
     CHECK(g.blocked({9, 5}) && g.blocked({14, 8}));     // before the pass: the approach is a wall of shoal and pier
     g.openLockCorridors();
     CHECK(!g.blocked({12, 5}));                         // the chamber
     CHECK(!g.blocked({9, 5}) && g.cost({9, 5}) == 5.0f);  // the guide wall and the shoal on the line
-    CHECK(!g.blocked({16, 5}));                         // and the far side (about 4 cells, 350 m, past the end)
+    CHECK(g.blocked({10, 5}));                          // a charted wreck on the line is not an artefact: it stays shut
+    CHECK(g.blocked({14, 5}));                          // nor a bridge charted lower than the mast
+    CHECK(g.blocked({15, 5}) || g.blocked({16, 5}));    // nor an unsurveyed area
+    CHECK(!g.blocked({17, 5}));                         // but the shoal beyond them, still in reach, opens
     CHECK(g.blocked({8, 5}));                           // land stays land, though it lies on the line
     CHECK(g.blocked({12, 4}) && g.blocked({12, 6}) && g.blocked({10, 4}));  // off the line, a cell to either side
     CHECK(g.blocked({22, 5}));                          // beyond reach
@@ -1356,6 +1368,80 @@ static void testFindEncCells() {
     fs::remove_all(root);
 }
 
+// Review findings on land: one bad ring does not drop a whole polygon, a thin part joined to a big polygon still blocks, and land drawn as
+// a point or a line blocks its cells.
+static void testLandRasterisation() {
+    // A big land polygon with a hole ring of only two points (a truncated fragment): the polygon is still painted.
+    {
+        CostGrid g = makeGrid(12, 10);
+        g.fill(kBlocked);
+        ChartData d;
+        d.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.988, 30.0));
+        ChartFeature land = areaFeature("LNDARE", 45.992, 45.998, -123.998, -123.990);
+        land.parts.push_back({{{45.995, -123.995}, {45.994, -123.994}}, true});   // degenerate ring
+        d.features.push_back(land);
+        StampOptions o;
+        stampChart(d, o, g);
+        CHECK(g.blocked({4, 4}));   // inside the polygon
+    }
+    // A mole 11 m wide and 880 m long joined to a big land body: the polygon as a whole is thick (so it is not "thin"), and the mole runs
+    // between the rows of cell centres, so only painting the outline stops it vanishing.
+    {
+        CostGrid g = makeGrid(24, 16);
+        g.fill(kBlocked);
+        ChartData d;
+        d.features.push_back(areaFeature("DEPARE", 45.984, 46.0, -124.0, -123.976, 30.0));
+        ChartFeature land;
+        land.objectClass = "LNDARE";
+        land.geometry = Geometry::Area;
+        land.parts.push_back({{{45.995, -124.0}, {45.995, -123.990}, {45.99005, -123.990}, {45.99005, -123.982}, {45.98995, -123.982}, {45.98995, -123.990},
+                               {45.985, -123.990}, {45.985, -124.0}}, true});
+        d.features.push_back(land);
+        StampOptions o;
+        stampChart(d, o, g);
+        bool moleBlocked = false;
+        for (int col = 11; col <= 16; ++col) moleBlocked = moleBlocked || g.blocked({col, 9}) || g.blocked({col, 10});
+        CHECK(moleBlocked);
+        CHECK(!g.blocked({20, 2}));   // open water elsewhere
+    }
+    // An islet drawn as a point, and a land line, block their cells (hazard rules on).
+    {
+        CostGrid g = makeGrid(12, 10);
+        g.fill(kBlocked);
+        ChartData d;
+        d.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.988, 30.0));
+        d.features.push_back(pointFeature("LNDARE", {6, 5}, g, 0.0));
+        d.features.push_back(lineFeature("LNDARE", {g.centre({2, 2}), g.centre({4, 2})}));
+        StampOptions o;
+        stampChart(d, o, g);
+        CHECK(g.blocked({6, 5}));
+        CHECK(g.blocked({3, 2}));
+        CHECK(!g.blocked({9, 8}));
+    }
+}
+
+// A request with a non-finite number is refused up front (status 2), before any chart is opened.
+static void testPlannerRejectsBadNumbers() {
+    PlanRequest good;
+    good.encDirs = {"/nonexistent/enc"};
+    good.from = {47.6, -122.4};
+    good.to = {48.1, -122.7};
+    PlanHooks quiet;
+    CHECK(planRoute(good, quiet).status != 2);   // (it fails later: no charts there, not a bad request)
+    for (int variant = 0; variant < 6; ++variant) {
+        PlanRequest bad = good;
+        const double nan = std::nan(""), inf = std::numeric_limits<double>::infinity();
+        if (variant == 0) bad.cellM = nan;
+        if (variant == 1) bad.cellM = inf;
+        if (variant == 2) bad.draftM = nan;
+        if (variant == 3) bad.clearanceM = inf;
+        if (variant == 4) bad.from.lat = nan;
+        if (variant == 5) bad.lengthM = 0.0;
+        const PlanResult r = planRoute(bad, quiet);
+        CHECK(r.status == 2 && r.failReason == "bad_request");
+    }
+}
+
 static void testHazardPenalties() {
     ChartFeature military = areaFeature("MIPARE", 45.996, 46.0, -124.000, -123.996);   // cols 0-3, rows 0-3: heavily costly, never a wall
     ChartFeature caution = areaFeature("CTNARE", 45.990, 45.994, -124.000, -123.996);   // cols 0-3, rows 6-9
@@ -1410,10 +1496,24 @@ static void testHazardOverheadClearance() {
     CHECK(stampHazards({bridgeAt(30.0, 5.0)}, 8.0).blocked({5, 4}));
     // Unknown clearance is unsafe, whatever the mast.
     CHECK(stampHazards({bridgeAt(nan, nan)}, 0.0).blocked({5, 4}));
-    // ...but an overhead cable with no charted clearance is a costly crossing, not a wall (see applyHazardObjects).
+    // ...but an overhead cable with no charted clearance counts as infinitely high: free to cross, not a wall (see applyHazardObjects).
     ChartFeature unknownCable = lineFeature("CBLOHD", {{45.9955, -123.9995}, {45.9955, -123.9885}});
     CostGrid cableGrid = stampHazards({unknownCable}, 5.0);
-    CHECK(!cableGrid.blocked({5, 4}) && cableGrid.cost({5, 4}) == 10.0f);
+    CHECK(!cableGrid.blocked({5, 4}) && cableGrid.cost({5, 4}) == 1.0f);
+    {   // and it is still reported, at no cost
+        CostGrid g = makeGrid(12, 10);
+        g.fill(kBlocked);
+        ChartData d;
+        d.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.988, 30.0));
+        d.features.push_back(unknownCable);
+        AreaLayer areas;
+        StampOptions o;
+        o.areas = &areas;
+        stampChart(d, o, g);
+        bool noted = false;
+        for (const AreaNote& n : areas.notes) noted = noted || n.kind.find("overhead cable") == 0;
+        CHECK(noted && areas.id[4 * 12 + 5] >= 0 && g.cost({5, 4}) == 1.0f);
+    }
     ChartFeature unknownPipe = lineFeature("PIPOHD", {{45.9955, -123.9995}, {45.9955, -123.9885}});
     CHECK(stampHazards({unknownPipe}, 5.0).blocked({5, 4}));
     // Overhead cables and pipelines follow the same rule.
@@ -1685,6 +1785,8 @@ int main() {
     testSuggestedCellSize();
     testEncCatalog();
     testFindEncCells();
+    testLandRasterisation();
+    testPlannerRejectsBadNumbers();
     testSharedScratchStamping();
     testLockCorridor();
     testThinPolygonsStillBlock();

@@ -10,8 +10,10 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <iterator>
 #include <map>
 #include <memory>
@@ -39,22 +41,29 @@ bool parseLatLon(const char* s, LatLon& out) {
     return *end == '\0' && std::fabs(out.lat) <= 90.0 && std::fabs(out.lon) <= 180.0;
 }
 
-// Vertices of a GPX route/track (<rtept>, <trkpt> or <wpt>), in file order. A tolerant scan, not a full XML parser:
-// enough for the files chart apps export, and anything without lat/lon attributes is skipped.
+// Vertices of a GPX route or track (<rtept> or <trkpt>), in file order. A tolerant scan, not a full XML parser: enough for the files chart
+// apps export, and anything without lat/lon attributes is skipped. Standalone <wpt> marks (which chart apps export beside the route) are
+// only used when the file has no route or track points, so they never become the start of the route that gets scored.
 std::vector<LatLon> readGpxPoints(const std::string& path) {
     std::ifstream in(path);
     const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    std::vector<LatLon> pts;
-    for (size_t pos = text.find('<'); pos != std::string::npos; pos = text.find('<', pos + 1)) {
-        if (text.compare(pos, 6, "<rtept") != 0 && text.compare(pos, 6, "<trkpt") != 0 && text.compare(pos, 4, "<wpt") != 0) continue;
-        const size_t end = text.find('>', pos);
-        if (end == std::string::npos) break;
-        const std::string tag = text.substr(pos, end - pos);
-        const size_t la = tag.find("lat=\""), lo = tag.find("lon=\"");
-        if (la == std::string::npos || lo == std::string::npos) continue;
-        pts.push_back({std::atof(tag.c_str() + la + 5), std::atof(tag.c_str() + lo + 5)});
-    }
-    return pts;
+    const auto scan = [&](std::initializer_list<const char*> tags) {
+        std::vector<LatLon> pts;
+        for (size_t pos = text.find('<'); pos != std::string::npos; pos = text.find('<', pos + 1)) {
+            bool match = false;
+            for (const char* t : tags) match = match || text.compare(pos, std::strlen(t), t) == 0;
+            if (!match) continue;
+            const size_t end = text.find('>', pos);
+            if (end == std::string::npos) break;
+            const std::string tag = text.substr(pos, end - pos);
+            const size_t la = tag.find("lat=\""), lo = tag.find("lon=\"");
+            if (la == std::string::npos || lo == std::string::npos) continue;
+            pts.push_back({std::atof(tag.c_str() + la + 5), std::atof(tag.c_str() + lo + 5)});
+        }
+        return pts;
+    };
+    std::vector<LatLon> pts = scan({"<rtept", "<trkpt"});
+    return pts.empty() ? scan({"<wpt"}) : pts;
 }
 
 void usage(const char* argv0) {
@@ -231,7 +240,8 @@ int main(int argc, char** argv) {
         }
         haveFrom = haveTo = true;
     }
-    if (encDir.empty() || !haveFrom || !haveTo || cellM <= 0.0 || draft < 0.0 || clearance < 0.0) {
+    if (encDir.empty() || !haveFrom || !haveTo || !std::isfinite(cellM) || cellM <= 0.0 || !std::isfinite(draft) || draft < 0.0 ||
+        !std::isfinite(clearance) || clearance < 0.0) {
         usage(argv[0]);
         return 2;
     }
@@ -320,7 +330,14 @@ int main(int argc, char** argv) {
     }
     if (evalPath.empty()) {
         if (result.grid && !picturePath.empty()) writePicture(picturePath, *result.grid, result.route);
-        std::ofstream(outPath) << routeToGpx(result.route, result.routeName, startName, endName, result.description);
+        std::ofstream gpxOut(outPath);
+        gpxOut << routeToGpx(result.route, result.routeName, startName, endName, result.description);
+        gpxOut.close();
+        if (!gpxOut) {   // a missing folder, a read-only path or a full disk must not look like success
+            std::fprintf(stderr, "cannot write %s\n", outPath.c_str());
+            if (summary) std::printf("SUMMARY found=0 reason=write_failed\n");
+            return 1;
+        }
         std::printf("%zu charts, %zu waypoints, %.1f nm (straight line %.1f nm), wrote %s\n", static_cast<size_t>(result.chartsUsed),
                     result.route.size(), result.nm, result.straightNm, outPath.c_str());
     }

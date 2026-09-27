@@ -56,5 +56,5 @@ A long route (an 85 nm river passage, a full coast) takes seconds to minutes: re
 * **A countdown where it can be estimated:** chart loading and grid building have known totals; the search does not, but distance covered against the straight-line distance gives a usable estimate.
 * **Cancel:** the search must be interruptible without leaving a half-built grid.
 
-To be built alongside the first front end (`v0.5.0`), but the core's entry points should be shaped for a progress callback now.
+Status: built. `planRoute()` (the whole pipeline behind one call) takes hooks for messages, progress by phase (with cancel) and a debug view, and `findRoute` reports how far the search front has got and stops when asked. The OpenCPN plugin uses this for its progress bar and Cancel button. Still to do: a time estimate for the phases that have known totals, and cancelling without leaving a partly built grid in a shared cache, once there is one.
 

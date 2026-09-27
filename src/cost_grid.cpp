@@ -289,6 +289,7 @@ void CostGrid::openLockCorridors() {
                 const double t = len2 > 0.0 ? std::clamp((px * dx + py * dy) / len2, 0.0, 1.0) : 0.0;
                 if (std::hypot(px - t * dx, py - t * dy) > lc.halfWidthM) continue;
                 if (!landCell_.empty() && landCell_[index(c)]) continue;   // land stays land
+                if (isHardHazard(c)) continue;   // a charted wreck, rock, low bridge or cable, unsurveyed or prohibited area stays shut
                 if (!blocked(c)) continue;
                 clearHazardShut(c);
                 setCost(c, 5.0f);

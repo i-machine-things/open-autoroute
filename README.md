@@ -17,7 +17,7 @@ The plan is a C++ core with two front ends, an OpenCPN plugin (`openautoroute_pi
 
 ## What it does not do
 
-Most of the chart is still ignored. It reads about 15 of the 146 object classes in the NOAA data. Obstruction and wreck areas, unsurveyed areas, restricted areas, piers and other structures, and bridge and cable clearances are not read yet, and there is no air draft setting. There is no weather, tide or current. It does not know whether US Inland Rules or the international rules apply where you are, and it assumes the international ones. [docs/S57_OBJECTS.md](docs/S57_OBJECTS.md) lists every chart object class, what it is for and whether it is used.
+It reads about 60 of the 146 object classes in the NOAA data: depth and land, obstructions, wrecks and rocks, unsurveyed areas, restricted, military and security areas, dumping grounds, piers and other structures, buoys and beacons (for channels and danger marks), bridges and overhead cables (checked against an air draft, which you can set with `--air-draft-m` or leave to be estimated from the vessel length), and navigation locks. The rest is still ignored, notably quality-of-data zones, leading lines and recommended tracks, and marks other than lateral and cardinal ones. Depths are at chart datum with no tide, and there is no weather or current. Cell update files (`.001` and later) are not applied. It does not know whether US Inland Rules or the international rules apply where you are, and it assumes the international ones. [docs/S57_OBJECTS.md](docs/S57_OBJECTS.md) lists every chart object class, what it is for and whether it is used.
 
 ## Building
 
@@ -50,6 +50,7 @@ Options you are likely to want:
 | `--draft`, `--clearance` | Depth needed is draft plus clearance, in metres (defaults 1.5 and 1.0) |
 | `--length-m` | Vessel length in metres (default 12); under 20 m stays out of traffic lanes |
 | `--under-sail` | The vessel is sailing, not motoring; treated as small at any length |
+| `--air-draft-m` | Height of the vessel above the water, in metres, checked against bridges and overhead cables (default: estimated from the length) |
 | `--cell-m` | Grid size in metres (default 30); smaller is finer and slower |
 | `--min-leg-m` | Preferred minimum distance between waypoints (default 460 m) |
 | `--eval route.gpx` | Score an existing route instead of planning one |

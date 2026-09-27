@@ -26,7 +26,7 @@ Check these by eye in OpenCPN. Everything below was planned with the code of PR 
 
 ### puget_seattle_port_townsend_small.gpx
 
-Vessel 12 m. **42.5 nm**, 35 waypoints, closest approach to hazards 242 m, 0.0 km in precautionary areas, 2 lane crossing(s), worst 11 degrees off square. Flags: none.
+Vessel 12 m. **42.4 nm**, 35 waypoints, closest approach to hazards 242 m, 0.0 km in precautionary areas, 2 lane crossing(s), worst 11 degrees off square. Flags: none.
 
 **Why look:** The route you approved. Confirm it is still the same: open east water, ONE square crossing near Point No Point, nothing in a precautionary area.
 
@@ -125,9 +125,9 @@ Vessel 12 m. **28.2 nm**, 28 waypoints, closest approach to hazards 150 m, 3.6 k
 
 ### ny_sandy_hook_battery.gpx
 
-Vessel 12 m. **16.6 nm**, 15 waypoints, closest approach to hazards 342 m, 4.6 km in precautionary areas, 0 lane crossing(s), worst 0 degrees off square. Flags: P.
+Vessel 12 m. **16.5 nm**, 15 waypoints, closest approach to hazards 342 m, 4.6 km in precautionary areas, 0 lane crossing(s), worst 0 degrees off square. Flags: P.
 
-**Why look:** 4.5 km in precautionary areas (flagged P).
+**Why look:** 4.6 km in precautionary areas (flagged P).
 
 **Expect:** Lower New York harbour: ship channels and anchorages. Does it pass anything it should not (anchorage areas, restricted areas)?
 

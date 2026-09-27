@@ -48,6 +48,14 @@ public:
         if (landCell_.empty()) { if (!on) return; landCell_.assign(cost_.size(), 0); }
         landCell_[index(c)] = on ? 1 : 0;
     }
+    /// Hazards that a lock corridor must never reopen: charted wrecks, rocks and obstructions that are unsafe, a bridge or cable charted lower
+    /// than the vessel, unsurveyed and prohibited areas, land drawn as points and lines. (A corridor reopens only what is an artefact of
+    /// chart resolution: guide walls, gate walkways, bank depth areas.)
+    void setHardHazard(Cell c, bool on) {
+        if (hardHazard_.empty()) { if (!on) return; hardHazard_.assign(cost_.size(), 0); }
+        hardHazard_[index(c)] = on ? 1 : 0;
+    }
+    bool isHardHazard(Cell c) const { return !hardHazard_.empty() && hardHazard_[index(c)]; }
     void openLockCorridors();
     void clearHazardShut(Cell c) {
         if (!hazardShut_.empty()) hazardShut_[index(c)] = 0;
@@ -186,6 +194,7 @@ private:
     std::vector<float> cost_;
     struct LockCorridor { LatLon a, b; double halfWidthM; };
     std::vector<LockCorridor> corridors_;
+    std::vector<uint8_t> hardHazard_;   // empty until a hazard a lock corridor must keep is set
     std::vector<uint8_t> landCell_;   // empty until a land cell is set (the covering chart's own verdict)
     std::vector<uint8_t> hazardShut_;  // empty until a hazard blocks a cell
     std::vector<float> lane_;  // empty until a lane is set

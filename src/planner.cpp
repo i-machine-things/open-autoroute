@@ -180,8 +180,11 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     std::string routeName = req.routeName;
     const auto startedAt = std::chrono::steady_clock::now();
     double snapStartM = 0.0, snapEndM = 0.0;
-    if (encDirs.empty() || cellM <= 0.0 || draft < 0.0 || clearance < 0.0) {
-        emitTo(hooks.err, "the request needs an ENC folder, a positive cell size and non-negative draft and clearance\n");
+    const auto finite = [](double v) { return std::isfinite(v); };
+    if (encDirs.empty() || !finite(cellM) || cellM <= 0.0 || !finite(draft) || draft < 0.0 || !finite(clearance) || clearance < 0.0 ||
+        !finite(lengthM) || lengthM <= 0.0 || !finite(from.lat) || !finite(from.lon) || !finite(to.lat) || !finite(to.lon) ||
+        std::fabs(from.lat) > 90.0 || std::fabs(to.lat) > 90.0 || std::fabs(from.lon) > 180.0 || std::fabs(to.lon) > 180.0) {
+        emitTo(hooks.err, "the request needs a chart folder, real positions, a positive vessel length and cell size, and finite non-negative draft and clearance\n");
         result.status = 2;
         result.failReason = "bad_request";
         return result;

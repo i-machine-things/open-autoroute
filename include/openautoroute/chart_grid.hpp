@@ -51,7 +51,7 @@ struct AreaLayer {
 /// contents mean nothing between calls; it only has to belong to one grid at a time. Optional (stampChart makes its own without one).
 struct StampScratch {
     size_t n = 0;  // cells in the grid these arrays were made for
-    std::vector<uint8_t> state, covered, land, zone, caution, channel, shut, shutLocal, lock, lockNear;
+    std::vector<uint8_t> state, covered, land, zone, caution, channel, shut, shutLocal, hard, lock, lockNear;
     std::vector<float> penalty;
     std::vector<int32_t> sinkAt;
 };

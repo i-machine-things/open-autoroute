@@ -2,7 +2,7 @@
 
 An inventory of every S-57 object class found in the full NOAA ENC download (7,345 cells), what each one is for, and whether the router reads it. Counts are features across all cells; the same real-world object often appears on several charts of different scale. Names and codes come from the S-57 object catalogue shipped with OpenCPN.
 
-**146 classes are present. The router fully uses 11 and partly uses 3.** Status: **used** = read and acted on, **partly** = read but only some geometry or attributes, **no** = ignored.
+**146 classes are present. The router uses 53 and partly uses 0; 87 are ignored.** Status: **used** = read and acted on, **partly** = read but only some geometry or attributes, **no** = ignored.
 
 ## Why 146 classes
 
@@ -12,16 +12,16 @@ What matters more than the count is the attributes. Each class carries several, 
 
 ## Safety gaps, most important first
 
-These are ignored or only partly used, and matter for safety. The order is by how likely each is to put a boat in danger.
+The hazard, restricted-area, structure, bridge and cable, cardinal and isolated-danger, and lock classes are read and acted on (see the tables below). What is still missing or only partly done, most important first:
 
-1. **OBSTRN, WRECKS**: Only point features are used, but most obstructions are lines and areas (37,820 OBSTRN areas, 1,201 WRECKS areas). Those are ignored today.
-2. **UNSARE**: 4,206 unsurveyed areas. A route must never assume these are safe.
-3. **RESARE, MIPARE, DMPGRD, CTNARE**: Restricted, military, dumping and caution areas (12,525 + 1,014 + 5,869 + 16,465). Entry prohibitions must be read from their attributes.
-4. **SLCONS, PONTON, PILPNT, MORFAC, FNCLNE, FSHFAC, MARCUL, OFSPLF**: Piers, breakwaters, floating docks, piles, moorings, fish traps, marine farms and platforms: fixed obstructions standing in water that the depth data calls open.
-5. **BRIDGE, CBLOHD, PIPOHD**: Vertical clearance. A route under a fixed span lower than the mast is impassable; the router has no air draft.
-6. **BOYCAR, BOYISD, BOYSAW, BOYSPP (and beacon versions)**: Cardinal, isolated-danger, safe-water and special marks are ignored; only lateral marks are read.
-7. **RECTRC, NAVLNE, DAYMAR, LIGHTS**: The recommended tracks, leading lines and shore range marks that define a channel axis: the red and white bars in your screenshot.
-8. **M_QUAL**: Data quality zones: depths in low-quality areas should get extra margin.
+1. **Cell update files (`.001` and later).** Only the base cell is read, so new wrecks and obstructions added by updates are missed.
+2. **SBDARE**: Seabed areas, including rock and coral, are not read; a rocky bottom is not treated as a hazard.
+3. **M_QUAL**: Data quality zones. Depths in low-quality areas should get extra margin.
+4. **Tide and datum.** Depths are at chart datum; there is no tide, current or squat allowance.
+5. **BRIDGE horizontal clearance and beam.** Only vertical clearance against air draft is checked. HORCLR and a beam setting are not used, and an opening bridge is treated as closed.
+6. **BOYSPP, BOYSAW, BCNSPP, LIGHTS on piles.** Special-purpose and safe-water marks are not read, and lateral marks are used to form channels but are not obstacles themselves.
+7. **RECTRC, NAVLNE, DAYMAR, LIGHTS.** Recommended tracks, leading lines and the red and white shore range marks that define a channel axis are not used.
+8. **Inland versus international rules.** The router assumes the international rules everywhere.
 
 ## Hazards and depth
 
@@ -30,47 +30,47 @@ These are ignored or only partly used, and matter for safety. The order is by ho
 | DEPARE (42) | Depth area | Depth area: the water between two depth values (DRVAL1 shallowest, DRVAL2 deepest). | Open only if DRVAL1 >= draft + clearance; unknown depth is blocked. | 564,684 area | 7,295 | **used** |
 | DRGARE (46) | Dredged area | Dredged area: maintained channel or basin (DRVAL1). | Treated like DEPARE; also a marker of a real channel. | 16,350 area | 2,177 | **used** |
 | SOUNDG (129) | Sounding | Individual depth soundings. | A sounding shallower than draft + clearance blocks its cell. | 3,423,568 point | 7,019 | **used** |
-| OBSTRN (86) | Obstruction | Obstruction: anything that endangers a hull (pile fields, fish havens, foul ground, stumps), points, lines and areas, often with VALSOU. | Block if the depth over it is unknown or under draft + clearance. Areas and lines matter as much as points. | 68,369 point, 3,449 line, 37,820 area | 5,323 | **partly** |
-| WRECKS (159) | Wreck | Wreck, with CATWRK (dangerous / non-dangerous) and VALSOU. | Same as OBSTRN, including wreck areas. | 23,456 point, 1,201 area | 3,583 | **partly** |
+| OBSTRN (86) | Obstruction | Obstruction: anything that endangers a hull (pile fields, fish havens, foul ground, stumps), points, lines and areas, often with VALSOU. | Block if the depth over it is unknown or under draft + clearance. Areas and lines matter as much as points. | 68,369 point, 3,449 line, 37,820 area | 5,323 | **used** |
+| WRECKS (159) | Wreck | Wreck, with CATWRK (dangerous / non-dangerous) and VALSOU. | Same as OBSTRN, including wreck areas. | 23,456 point, 1,201 area | 3,583 | **used** |
 | UWTROC (153) | Underwater rock / awash rock | Underwater or awash rock, VALSOU. | Block if awash, unknown or shallow. | 288,620 point | 3,501 | **used** |
-| UNSARE (154) | Unsurveyed area | Unsurveyed area: no depth information at all. | Never assume safe: block. | 4,206 area | 1,072 | **no** |
+| UNSARE (154) | Unsurveyed area | Unsurveyed area: no depth information at all. | Never assume safe: block. | 4,206 area | 1,072 | **used** |
 | DEPCNT (43) | Depth contour | Depth contour line (VALDCO). | Redundant with DEPARE for routing; useful for showing margins. | 602,511 line | 6,838 | **no** |
 | SBDARE (121) | Seabed area | Seabed area (rock, mud, sand...), useful for anchoring and for spotting rock. | Rock (NATSUR) is a hazard flag; otherwise information. | 205,252 point, 5 line, 84,133 area | 5,917 | **no** |
-| WEDKLP (158) | Weed/Kelp | Weed or kelp. | Small craft: mild penalty (fouls propellers). | 29,307 point, 4,622 area | 1,852 | **no** |
+| WEDKLP (158) | Weed/Kelp | Weed or kelp. | Small craft: mild penalty (fouls propellers). | 29,307 point, 4,622 area | 1,852 | **used** |
 | SNDWAV (118) | Sand waves | Sand waves: shifting sea bed. | Treat depth as uncertain: add margin. | 358 point, 476 area | 306 | **no** |
-| WATTUR (156) | Water turbulence | Water turbulence: tide rips, overfalls, eddies. | Penalty for small craft. | 2,902 point, 80 line, 622 area | 967 | **no** |
+| WATTUR (156) | Water turbulence | Water turbulence: tide rips, overfalls, eddies. | Penalty for small craft. | 2,902 point, 80 line, 622 area | 967 | **used** |
 | SLOGRD (127) | Sloping ground | Sloping ground. | Information. | 15,462 point, 149 area | 766 | **no** |
-| RAPIDS (107) | Rapids | Rapids. | Block for a boat. | 113 line, 50 area | 56 | **no** |
-| WATFAL (157) | Waterfall | Waterfall. | Block. | 115 line | 19 | **no** |
+| RAPIDS (107) | Rapids | Rapids. | Block for a boat. | 113 line, 50 area | 56 | **used** |
+| WATFAL (157) | Waterfall | Waterfall. | Block. | 115 line | 19 | **used** |
 | SPRING (130) | Spring | Spring (submarine freshwater). | Information. | 10 point | 9 | **no** |
 
 ## Restricted and regulated areas
 
 | Code | Object | What it is | How a router should treat it | In the charts | Cells | Status |
 |---|---|---|---|---|---|---|
-| RESARE (112) | Restricted area | Restricted area: entry prohibited, no anchoring, no fishing, speed or wake limits, etc. (RESTRN, CATREA). | Block where entry is prohibited; penalise or flag the rest. Needs its attributes. | 12,525 area | 3,940 | **no** |
-| CTNARE (27) | Caution area | Caution area: a hazard or special condition to be aware of. | Penalty; the "caution zone" you flagged. | 4,631 point, 11,834 area | 3,876 | **no** |
-| MIPARE (83) | Military practice area | Military practice area. | Avoid: block or heavy penalty. | 8 point, 1,014 area | 594 | **no** |
-| DMPGRD (48) | Dumping ground | Dumping ground. | Avoid: heavy penalty (unknown depth changes). | 644 point, 5,225 area | 1,575 | **no** |
+| RESARE (112) | Restricted area | Restricted area: entry prohibited, no anchoring, no fishing, speed or wake limits, etc. (RESTRN, CATREA). | Block where entry is prohibited; penalise or flag the rest. Needs its attributes. | 12,525 area | 3,940 | **used** |
+| CTNARE (27) | Caution area | Caution area: a hazard or special condition to be aware of. | Penalty; the "caution zone" you flagged. | 4,631 point, 11,834 area | 3,876 | **used** |
+| MIPARE (83) | Military practice area | Military practice area. | Avoid: block or heavy penalty. | 8 point, 1,014 area | 594 | **used** |
+| DMPGRD (48) | Dumping ground | Dumping ground. | Avoid: heavy penalty (unknown depth changes). | 644 point, 5,225 area | 1,575 | **used** |
 | CBLARE (20) | Cable area | Cable area: submarine cables, no anchoring. | Transit is fine; penalise anchoring only. | 4,843 area | 1,894 | **no** |
 | PIPARE (92) | Pipeline area | Pipeline area: no anchoring. | Transit is fine. | 2,614 area | 971 | **no** |
-| ACHARE (4) | Anchorage area | Anchorage area. | Vessels lie at anchor here: keep a margin. | 323 point, 1,657 area | 933 | **no** |
+| ACHARE (4) | Anchorage area | Anchorage area. | Vessels lie at anchor here: keep a margin. | 323 point, 1,657 area | 933 | **used** |
 | ACHBRT (3) | Anchor berth | Anchor berth. | As ACHARE. | 702 point, 1,064 area | 66 | **no** |
 | FSHGRD (56) | Fishing ground | Fishing ground. | Nets and gear likely: penalty. | 9 area | 6 | **no** |
-| FSHFAC (55) | Fishing facility | Fishing facility: fish traps, weirs, stakes. | Block (fixed gear). | 1,241 point, 345 line, 164 area | 171 | **no** |
+| FSHFAC (55) | Fishing facility | Fishing facility: fish traps, weirs, stakes. | Block (fixed gear). | 1,241 point, 345 line, 164 area | 171 | **used** |
 | FSHZNE (54) | Fishery zone | Fishery zone. | Information. | 62 area | 26 | **no** |
-| MARCUL (82) | Marine farm/culture | Marine farm / aquaculture. | Block with margin. | 782 point, 31 line, 911 area | 451 | **no** |
-| OFSPLF (87) | Offshore platform | Offshore platform. | Block with a safety margin (500 m zones are common). | 11,452 point, 114 area | 1,081 | **no** |
-| PRDARE (97) | Production / storage area | Production or storage area. | Avoid. | 154 point, 364 area | 277 | **no** |
-| OSPARE (88) | Offshore production area | Offshore production area. | Avoid. | 21 area | 12 | **no** |
+| MARCUL (82) | Marine farm/culture | Marine farm / aquaculture. | Block with margin. | 782 point, 31 line, 911 area | 451 | **used** |
+| OFSPLF (87) | Offshore platform | Offshore platform. | Block with a safety margin (500 m zones are common). | 11,452 point, 114 area | 1,081 | **used** |
+| PRDARE (97) | Production / storage area | Production or storage area. | Avoid. | 154 point, 364 area | 277 | **used** |
+| OSPARE (88) | Offshore production area | Offshore production area. | Avoid. | 21 area | 12 | **used** |
 | ISTZNE (68) | Inshore traffic zone | Inshore traffic zone. | Allowed for small craft under Rule 10(d)(i); avoid for ships. | 17 area | 8 | **no** |
 | SWPARE (134) | Swept Area | Swept area: surveyed clear to a depth (DRVAL1). | Can raise confidence in a depth. | 1,889 area | 130 | **no** |
 | ICEARE (66) | Ice area | Ice area. | Information. | 1,725 area | 155 | **no** |
-| SPLARE (120) | Sea-plane landing area | Seaplane landing area. | Keep clear. | 7 point, 21 area | 24 | **no** |
+| SPLARE (120) | Sea-plane landing area | Seaplane landing area. | Keep clear. | 7 point, 21 area | 24 | **used** |
 | CTSARE (25) | Cargo transshipment area | Cargo transshipment area. | Vessels working: keep clear. | 37 area | 26 | **no** |
 | HRBARE (63) | Harbour area (administrative) | Harbour area (administrative). | Information. | 20 area | 16 | **no** |
 | DOCARE (45) | Dock area | Dock area. | Information. | 5 area | 4 | **no** |
-| GRIDRN (62) | Gridiron | Gridiron (for beaching ships). | Structure: block. | 9 area | 5 | **no** |
+| GRIDRN (62) | Gridiron | Gridiron (for beaching ships). | Structure: block. | 9 area | 5 | **used** |
 | LOGPON (80) | Log pond | Log pond. | Obstructed water: block. | 11 point, 112 area | 57 | **no** |
 
 ## Traffic routing
@@ -95,7 +95,7 @@ These are ignored or only partly used, and matter for safety. The order is by ho
 
 | Code | Object | What it is | How a router should treat it | In the charts | Cells | Status |
 |---|---|---|---|---|---|---|
-| FAIRWY (51) | Fairway | Fairway: the navigable channel (its dashed boundary). | Channel limits; charted channel width. | 6,945 area | 2,753 | **partly** |
+| FAIRWY (51) | Fairway | Fairway: the navigable channel (its dashed boundary). | Channel limits; charted channel width. | 6,945 area | 2,753 | **used** |
 | CANALS (23) | Canal | Canal. | Confined water. | 1,279 line, 1,477 area | 502 | **no** |
 | RIVERS (114) | River | River (centre line / area). | Information. | 111,030 line, 10,806 area | 4,714 | **no** |
 
@@ -105,10 +105,10 @@ These are ignored or only partly used, and matter for safety. The order is by ho
 |---|---|---|---|---|---|---|
 | BOYLAT (17) | Buoy, lateral | Lateral buoy: red or green, marks the side of a channel (CATLAM). | Pair into gates: stay between them, starboard side. | 25,316 point | 2,712 | **used** |
 | BCNLAT (7) | Beacon, lateral | Lateral beacon (fixed mark, red or green). | As BOYLAT. | 34,871 point | 2,989 | **used** |
-| BOYCAR (14) | Buoy, cardinal | Cardinal buoy: safe water lies on the named side. | Pass on the named side. | 33 point | 18 | **no** |
-| BCNCAR (5) | Beacon, cardinal | Cardinal beacon. | As BOYCAR. | 4 point | 2 | **no** |
-| BOYISD (16) | Buoy, isolated danger | Isolated danger buoy: a hazard directly beneath. | Keep well clear. | 108 point | 71 | **no** |
-| BCNISD (6) | Beacon, isolated danger | Isolated danger beacon. | Keep well clear. | 4 point | 3 | **no** |
+| BOYCAR (14) | Buoy, cardinal | Cardinal buoy: safe water lies on the named side. | Pass on the named side. | 33 point | 18 | **used** |
+| BCNCAR (5) | Beacon, cardinal | Cardinal beacon. | As BOYCAR. | 4 point | 2 | **used** |
+| BOYISD (16) | Buoy, isolated danger | Isolated danger buoy: a hazard directly beneath. | Keep well clear. | 108 point | 71 | **used** |
+| BCNISD (6) | Beacon, isolated danger | Isolated danger beacon. | Keep well clear. | 4 point | 3 | **used** |
 | BOYSAW (18) | Buoy, safe water | Safe water buoy: mid-channel or landfall. | Pass close on either side. | 666 point | 425 | **no** |
 | BCNSAW (8) | Beacon, safe water | Safe water beacon. | As BOYSAW. | 18 point | 16 | **no** |
 | BOYSPP (19) | Buoy, special purpose/general | Special purpose buoy (anchorage, restricted area, cable, race course...). | Read its purpose; often marks a restriction. | 6,807 point | 1,583 | **no** |
@@ -126,24 +126,24 @@ These are ignored or only partly used, and matter for safety. The order is by ho
 
 | Code | Object | What it is | How a router should treat it | In the charts | Cells | Status |
 |---|---|---|---|---|---|---|
-| SLCONS (122) | Shoreline Construction | Shoreline construction: pier, jetty, breakwater, wharf, groyne (CATSLC). | A fixed obstruction in the water: block along its line. | 3,004 point, 367,257 line, 6,704 area | 4,565 | **no** |
-| PONTON (95) | Pontoon | Pontoon: floating dock or marina finger. | Block. | 45,279 line, 2,285 area | 1,190 | **no** |
-| PILPNT (90) | Pile | Pile or post standing in the water. | Block, with a margin. | 64,218 point | 2,985 | **no** |
-| MORFAC (84) | Mooring/warping facility | Mooring facility: bollard, dolphin, mooring buoy. | Block. | 19,072 point, 30 line, 559 area | 1,749 | **no** |
-| FNCLNE (52) | Fence/wall | Fence or wall. | Block. | 311 line | 191 | **no** |
-| DYKCON (49) | Dyke | Dyke. | Block. | 6,463 line, 24 area | 774 | **no** |
-| GATCON (61) | Gate | Gate (tidal gate, flood barrage). | Block unless it opens. | 3 point, 619 line, 92 area | 249 | **no** |
-| DAMCON (38) | Dam | Dam or barrage. | Block. | 1 point, 352 line, 275 area | 364 | **no** |
-| LOKBSN (79) | Lock basin | Lock basin. | Passable only via the lock. | 10 area | 9 | **no** |
-| FLODOC (57) | Floating dock | Floating dock. | Block. | 6 line, 63 area | 40 | **no** |
-| DRYDOC (47) | Dry dock | Dry dock. | Block. | 177 area | 71 | **no** |
-| HULKES (65) | Hulk | Hulk (moored derelict). | Block. | 12 point, 253 area | 118 | **no** |
-| CONVYR (34) | Conveyor | Conveyor. | Structure over water. | 373 line, 17 area | 155 | **no** |
-| PYLONS (98) | Pylon/bridge support | Pylon or bridge support in the water. | Block. | 2,900 point, 1,166 area | 750 | **no** |
-| CAUSWY (26) | Causeway | Causeway. | A fixed obstruction: block. | 11 line, 55 area | 33 | **no** |
-| BRIDGE (11) | Bridge | Bridge, with VERCLR (vertical clearance), HORCLR and opening type (CATBRG). | Compare VERCLR with the boat's air draft; fixed spans under it are impassable to a tall mast. | 6,211 line, 14,712 area | 2,721 | **no** |
-| CBLOHD (21) | Cable, overhead | Overhead cable with VERCLR. | Same: air draft check. | 10,260 line | 1,937 | **no** |
-| PIPOHD (93) | Pipeline, overhead | Overhead pipeline with VERCLR. | Same. | 599 line | 318 | **no** |
+| SLCONS (122) | Shoreline Construction | Shoreline construction: pier, jetty, breakwater, wharf, groyne (CATSLC). | A fixed obstruction in the water: block along its line. | 3,004 point, 367,257 line, 6,704 area | 4,565 | **used** |
+| PONTON (95) | Pontoon | Pontoon: floating dock or marina finger. | Block. | 45,279 line, 2,285 area | 1,190 | **used** |
+| PILPNT (90) | Pile | Pile or post standing in the water. | Block, with a margin. | 64,218 point | 2,985 | **used** |
+| MORFAC (84) | Mooring/warping facility | Mooring facility: bollard, dolphin, mooring buoy. | Block. | 19,072 point, 30 line, 559 area | 1,749 | **used** |
+| FNCLNE (52) | Fence/wall | Fence or wall. | Block. | 311 line | 191 | **used** |
+| DYKCON (49) | Dyke | Dyke. | Block. | 6,463 line, 24 area | 774 | **used** |
+| GATCON (61) | Gate | Gate (tidal gate, flood barrage). | Block unless it opens. | 3 point, 619 line, 92 area | 249 | **used** |
+| DAMCON (38) | Dam | Dam or barrage. | Block. | 1 point, 352 line, 275 area | 364 | **used** |
+| LOKBSN (79) | Lock basin | Lock basin. | Passable only via the lock. | 10 area | 9 | **used** |
+| FLODOC (57) | Floating dock | Floating dock. | Block. | 6 line, 63 area | 40 | **used** |
+| DRYDOC (47) | Dry dock | Dry dock. | Block. | 177 area | 71 | **used** |
+| HULKES (65) | Hulk | Hulk (moored derelict). | Block. | 12 point, 253 area | 118 | **used** |
+| CONVYR (34) | Conveyor | Conveyor. | Structure over water. | 373 line, 17 area | 155 | **used** |
+| PYLONS (98) | Pylon/bridge support | Pylon or bridge support in the water. | Block. | 2,900 point, 1,166 area | 750 | **used** |
+| CAUSWY (26) | Causeway | Causeway. | A fixed obstruction: block. | 11 line, 55 area | 33 | **used** |
+| BRIDGE (11) | Bridge | Bridge, with VERCLR (vertical clearance), HORCLR and opening type (CATBRG). | Compare VERCLR with the boat's air draft; fixed spans under it are impassable to a tall mast. | 6,211 line, 14,712 area | 2,721 | **used** |
+| CBLOHD (21) | Cable, overhead | Overhead cable with VERCLR. | Same: air draft check. | 10,260 line | 1,937 | **used** |
+| PIPOHD (93) | Pipeline, overhead | Overhead pipeline with VERCLR. | Same. | 599 line | 318 | **used** |
 | TUNNEL (151) | Tunnel | Tunnel. | Not for a boat. | 15 line, 72 area | 54 | **no** |
 | CRANES (35) | Crane | Crane. | Structure on shore. | 41 point, 1 area | 25 | **no** |
 | BERTHS (10) | Berth | Berth. | Vessels alongside. | 1,409 point, 4 area | 114 | **no** |

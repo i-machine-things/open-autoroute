@@ -5,6 +5,7 @@
 # separation measure: a route lost, blocked water, wrong-way lane travel, more time in precautionary areas (small craft), more
 # lane crossings or a worse crossing angle. Exits 1 if any regression was found.
 set -euo pipefail
+shopt -s nullglob   # an empty directory must give no files, not a literal "*.txt"
 OLD=${1:?usage: compare.sh OLD_DIR NEW_DIR}
 NEW=${2:?usage: compare.sh OLD_DIR NEW_DIR}
 bad=0; same=0; changed=0
@@ -32,6 +33,11 @@ for f in "$OLD"/*.txt; do
       print r }')
   if [ -n "$verdict" ]; then echo "REGRESSION $name:$verdict"; bad=1; else echo "changed    $name"; fi
   printf '    old: %s\n    new: %s\n' "$(sed 's/SUMMARY //; s/charts=[0-9]* //; s/snap_[a-z_]*=[0-9]* //g' <<<"$o")" "$(sed 's/SUMMARY //; s/charts=[0-9]* //; s/snap_[a-z_]*=[0-9]* //g' <<<"$n")"
+done
+# A route that only the new run has (a route added to the benchmark) is reported too, not silently skipped.
+for f in "$NEW"/*.txt; do
+  name=$(basename "$f" .txt)
+  if [ ! -e "$OLD/$name.txt" ]; then echo "NEW       $name (no result in $OLD)"; fi
 done
 echo "identical: $same, changed: $changed"
 exit $bad
