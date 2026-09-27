@@ -112,7 +112,6 @@ def main():
         sys.exit(0)
 
     added = _added_lines_by_file(diff)
-    added_lines = [line for _, line in added]  # line-only view used by the checks below
 
     warnings = []
 
