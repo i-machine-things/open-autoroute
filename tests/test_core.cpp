@@ -1161,6 +1161,9 @@ static void testNavigationLock() {
     d.features.push_back(lineFeature("GATCON", {{mid.lat + 0.0003, mid.lon - l / 2 - 0.0009}, {mid.lat - 0.0003, mid.lon - l / 2 - 0.0009}}));
     d.features.push_back(lineFeature("GATCON", {{mid.lat + 0.0003, mid.lon + l / 2 + 0.0009}, {mid.lat - 0.0003, mid.lon + l / 2 + 0.0009}}));
     d.features.push_back(lineFeature("GATCON", {grid.centre({2, 8}), grid.centre({2, 9})}));           // a flood gate far from any lock
+    // The gate walkway at the chamber's east end is charted as a bridge with no clearance; a bridge elsewhere in the dam is a wall.
+    d.features.push_back(lineFeature("BRIDGE", {{mid.lat + 0.0003, mid.lon + l / 2 + 0.0004}, {mid.lat - 0.0003, mid.lon + l / 2 + 0.0004}}));
+    d.features.push_back(lineFeature("BRIDGE", {grid.centre({9, 8}), grid.centre({9, 9})}));
     AreaLayer areas;
     StampOptions o;
     o.areas = &areas;
@@ -1168,6 +1171,7 @@ static void testNavigationLock() {
     CHECK(!grid.blocked({5, 4}) && !grid.blocked({6, 4}) && !grid.blocked({7, 4}));   // the chamber and the dam cell it passes through
     CHECK(grid.blocked({6, 1}) && grid.blocked({6, 8}));                              // the rest of the dam
     CHECK(grid.blocked({2, 8}));                                                      // a gate that is no lock's
+    CHECK(grid.blocked({9, 8}));                                                      // nor is a bridge away from the lock part of it
     CHECK(!findRoute(grid, grid.centre({1, 4}), grid.centre({10, 4})).empty());       // through the lock
     bool noted = false;
     for (const AreaNote& n : areas.notes) noted = noted || n.kind.find("navigation lock") == 0;

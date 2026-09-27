@@ -354,6 +354,14 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
             // that is charted and too low holds whatever chart is stamped next. A power cable with no charted clearance over a navigable
             // channel (a dozen cross the Bonneville tailrace) costs x10 and is listed in the report, not treated as a wall: the rules for
             // building over navigable water make a very low one unlikely, and a wall of them would cut a channel that ships use.
+            // A gate walkway or service bridge at the end of a lock chamber (charted as a bridge with no clearance) is part of the lock.
+            bool atLock = false;
+            if (std::isnan(clearance) && cls == "BRIDGE") {
+                std::vector<uint8_t> own(shut.size(), 0);
+                shutGeometry(f, grid, own, scratch);
+                for (size_t i = 0; i < own.size() && !atLock; ++i) atLock = own[i] && lockNear[i];
+            }
+            if (atLock) continue;
             if (std::isnan(clearance) && cls == "CBLOHD") raise(penalty, grid, f, 10.0f, &sink, "overhead cable, clearance not charted");
             else if (std::isnan(clearance)) shutGeometry(f, grid, shutLocal, scratch);
             else if (clearance < opt.airDraftM + 1.0) shutGeometry(f, grid, shut, scratch);
