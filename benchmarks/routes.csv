@@ -1,0 +1,33 @@
+# name,from_lat,from_lon,to_lat,to_lon,vessel_length_m,cell_m,from_name,to_name,notes
+# Coordinates are approximate harbour/waypoint positions; the run reports how far each was snapped to safe water.
+# Roadmap validation regions
+columbia_bar_out,46.1905,-123.8294,46.2500,-124.1300,12,30,Astoria,Columbia River bar (offshore),Astoria to seaward of the Columbia bar
+columbia_ilwaco_astoria,46.3050,-124.0400,46.1905,-123.8294,12,30,Ilwaco,Astoria,Ilwaco across the entrance to Astoria (Sand Island spurs)
+columbia_astoria_cathlamet,46.1905,-123.8294,46.2030,-123.3800,12,30,Astoria,Cathlamet,River channel keeping between pile dikes and sandbars
+columbia_astoria_portland,46.1905,-123.8294,45.5170,-122.6720,12,60,Astoria,Portland,Long river route into the Willamette
+multnomah_channel,45.8330,-122.7950,45.6250,-122.7900,12,20,Columbia River,Willamette River,Via Multnomah Channel; narrow slough: midline and shallow banks
+deception_pass,48.4010,-122.6240,48.5150,-122.6020,12,15,Cornet Bay,Anacortes,Cornet Bay out through Deception Pass to Anacortes
+san_juan_anacortes_friday,48.5150,-122.6020,48.5390,-123.0100,12,30,Anacortes,Friday Harbor,San Juan Islands passage
+san_juan_friday_roche,48.5390,-123.0100,48.6110,-123.1580,12,20,Friday Harbor,Roche Harbor,Tight San Juan channels
+san_juan_bellingham_roche,48.7400,-122.5150,48.6110,-123.1580,12,30,Bellingham,Roche Harbor,Bellingham to Roche Harbor
+puget_seattle_port_townsend_small,47.6055,-122.3688,48.1001,-122.7556,12,30,Seattle,Port Townsend,Puget Sound TSS, small craft stays out of lanes
+puget_seattle_port_townsend_large,47.6055,-122.3688,48.1001,-122.7556,120,30,Seattle,Port Townsend,Puget Sound TSS, large vessel uses lanes
+puget_tacoma_seattle_small,47.2700,-122.4200,47.6055,-122.3688,12,30,Tacoma,Seattle,Tacoma to Seattle
+puget_tacoma_seattle_large,47.2700,-122.4200,47.6055,-122.3688,120,30,Tacoma,Seattle,Tacoma to Seattle, large vessel
+puget_everett_bainbridge,47.9820,-122.2280,47.6250,-122.5130,12,30,Everett,Bainbridge Island,Everett to Bainbridge crossing the sound
+puget_edmonds_kingston,47.8100,-122.3850,47.7950,-122.4950,12,30,Edmonds,Kingston,Edmonds to Kingston across the Puget Sound TSS lanes
+juan_de_fuca_large,48.3900,-124.8500,48.2300,-123.1000,120,60,Cape Flattery (west),Strait of Juan de Fuca (east),Along the Strait of Juan de Fuca in the lanes
+# Other US waters
+sf_sausalito_half_moon_bay,37.8590,-122.4870,37.4990,-122.4850,12,30,Sausalito,Half Moon Bay,Golden Gate and out along the coast
+sf_approach_oakland_large,37.7800,-122.7600,37.8000,-122.3300,120,30,San Francisco approach (offshore),Oakland,San Francisco TSS approach for a ship
+la_marina_catalina,33.9720,-118.4560,33.3450,-118.3250,12,30,Marina del Rey,Avalon (Catalina),Marina del Rey to Avalon
+la_approach_long_beach_large,33.6500,-118.4000,33.7250,-118.2200,120,30,Los Angeles approach (offshore),Long Beach,Los Angeles/Long Beach approach for a ship
+ny_sandy_hook_battery,40.4600,-73.9900,40.7050,-74.0150,12,30,Sandy Hook,The Battery (New York),Lower New York harbor
+chesapeake_annapolis_norfolk,38.9750,-76.4800,36.9600,-76.3100,12,60,Annapolis,Norfolk,Long Chesapeake Bay route
+boston_provincetown,42.3560,-71.0350,42.0480,-70.1850,12,30,Boston,Provincetown,Boston to Cape Cod
+galveston_houston_large,29.3300,-94.7400,29.7350,-95.2750,100,30,Galveston,Houston,Houston Ship Channel
+keys_key_west_marathon,24.5600,-81.8000,24.7100,-81.0900,12,30,Key West,Marathon,Florida Keys shoals
+lake_michigan_chicago_milwaukee,41.8900,-87.6100,43.0300,-87.8900,12,60,Chicago,Milwaukee,Great Lakes open water
+maine_portland_rockland,43.6550,-70.2400,44.1000,-69.1000,12,30,Portland (Maine),Rockland,Rocky coast with many islands
+hawaii_honolulu_maalaea,21.3100,-157.8700,20.7900,-156.5100,12,60,Honolulu,Maalaea (Maui),Inter-island channels
+columbia_camas_hood_river,45.5790,-122.3640,45.7135,-121.5090,12,30,Camas,Hood River,Up the Columbia through the Bonneville lock

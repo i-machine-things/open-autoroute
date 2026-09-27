@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
+  <rte>
+    <name>Seattle to Port Townsend (120 m)</name>
+    <desc>open-autoroute: 38.6 nm, 120.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="47.605398" lon="-122.368607"><name>Seattle</name></rtept>
+    <rtept lat="47.631538" lon="-122.420414"><name>WP002</name></rtept>
+    <rtept lat="47.649594" lon="-122.447322"><name>WP003</name></rtept>
+    <rtept lat="47.660913" lon="-122.448125"><name>WP004</name></rtept>
+    <rtept lat="47.668998" lon="-122.438486"><name>WP005</name></rtept>
+    <rtept lat="47.686515" lon="-122.438486"><name>WP006</name></rtept>
+    <rtept lat="47.691635" lon="-122.441298"><name>WP007</name></rtept>
+    <rtept lat="47.757122" lon="-122.436880"><name>WP008</name></rtept>
+    <rtept lat="47.774909" lon="-122.437683"><name>WP009</name></rtept>
+    <rtept lat="47.928520" lon="-122.475434"><name>WP010</name></rtept>
+    <rtept lat="47.932023" lon="-122.481057"><name>WP011</name></rtept>
+    <rtept lat="47.937683" lon="-122.493105"><name>WP012</name></rtept>
+    <rtept lat="47.942803" lon="-122.503948"><name>WP013</name></rtept>
+    <rtept lat="47.946037" lon="-122.510776"><name>WP014</name></rtept>
+    <rtept lat="47.949271" lon="-122.517603"><name>WP015</name></rtept>
+    <rtept lat="47.949271" lon="-122.521217"><name>WP016</name></rtept>
+    <rtept lat="47.967866" lon="-122.561378"><name>WP017</name></rtept>
+    <rtept lat="48.001283" lon="-122.593507"><name>WP018</name></rtept>
+    <rtept lat="48.022573" lon="-122.625234"><name>WP019</name></rtept>
+    <rtept lat="48.022843" lon="-122.625635"><name>WP020</name></rtept>
+    <rtept lat="48.023112" lon="-122.626037"><name>WP021</name></rtept>
+    <rtept lat="48.027694" lon="-122.650936"><name>WP022</name></rtept>
+    <rtept lat="48.103691" lon="-122.680254"><name>WP023</name></rtept>
+    <rtept lat="48.107464" lon="-122.685475"><name>WP024</name></rtept>
+    <rtept lat="48.108811" lon="-122.692704"><name>WP025</name></rtept>
+    <rtept lat="48.104499" lon="-122.730053"><name>WP026</name></rtept>
+    <rtept lat="48.100187" lon="-122.755756"><name>Port Townsend</name></rtept>
+  </rte>
+</gpx>

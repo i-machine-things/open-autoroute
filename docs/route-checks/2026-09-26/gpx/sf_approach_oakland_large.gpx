@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="open-autoroute" xmlns="http://www.topografix.com/GPX/1/1">
+  <rte>
+    <name>San Francisco approach (offshore) to Oakland (120 m)</name>
+    <desc>open-autoroute: 21.6 nm, 120.0 m vessel, 1.5 m draft plus 1.0 m clearance</desc>
+    <rtept lat="37.779895" lon="-122.759909"><name>San Francisco approach (offshore)</name></rtept>
+    <rtept lat="37.764803" lon="-122.633391"><name>WP002</name></rtept>
+    <rtept lat="37.764264" lon="-122.618728"><name>WP003</name></rtept>
+    <rtept lat="37.786632" lon="-122.541317"><name>WP004</name></rtept>
+    <rtept lat="37.795795" lon="-122.514035"><name>WP005</name></rtept>
+    <rtept lat="37.812504" lon="-122.488459"><name>WP006</name></rtept>
+    <rtept lat="37.818163" lon="-122.478910"><name>WP007</name></rtept>
+    <rtept lat="37.814390" lon="-122.387518"><name>WP008</name></rtept>
+    <rtept lat="37.801185" lon="-122.369444"><name>WP009</name></rtept>
+    <rtept lat="37.801454" lon="-122.346595"><name>WP010</name></rtept>
+    <rtept lat="37.800107" lon="-122.341821"><name>WP011</name></rtept>
+    <rtept lat="37.799568" lon="-122.339775"><name>WP012</name></rtept>
+    <rtept lat="37.799298" lon="-122.338411"><name>WP013</name></rtept>
+    <rtept lat="37.799568" lon="-122.330227"><name>WP014</name></rtept>
+    <rtept lat="37.799837" lon="-122.330227"><name>Oakland</name></rtept>
+  </rte>
+</gpx>
