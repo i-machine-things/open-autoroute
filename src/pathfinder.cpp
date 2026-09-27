@@ -1,6 +1,7 @@
 #include "openautoroute/pathfinder.hpp"
 
 #include <algorithm>
+#include <functional>
 #include <cmath>
 #include <cstdlib>
 #include <queue>
@@ -181,7 +182,7 @@ WaterBodies findWaterBodies(const CostGrid& grid) {
 }
 
 std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, double simplifyTolerance,
-                              std::vector<Cell>* rawPath, double minLegM) {
+                              std::vector<Cell>* rawPath, double minLegM, const std::function<bool(double)>* progress) {
     const Cell s = grid.cellAt(start), g = grid.cellAt(goal);
     if (!grid.inBounds(s) || !grid.inBounds(g) || grid.blocked(s) || grid.blocked(g)) return {};
 
@@ -199,11 +200,18 @@ std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, d
 
     best[idxOf(s)] = 0.0f;
     open.push({h(s), 0.0f, idxOf(s)});
+    const float h0 = std::max(h(s), 1e-3f);
+    float nearest = h0;  // the smallest estimate to the goal seen so far: how far the search front has got
+    unsigned long pops = 0;
     while (!open.empty()) {
         const Node cur = open.top();
         open.pop();
         const Cell c{cur.idx % cols, cur.idx / cols};
         if (c == g) break;
+        if (progress && (++pops & 0x3FFF) == 0) {
+            nearest = std::min(nearest, h(c));
+            if (!(*progress)(1.0 - static_cast<double>(nearest) / h0)) return {};
+        }
         if (cur.g > best[cur.idx]) continue;  // stale queue entry: a cheaper way here was found after this was queued
         for (int dr = -1; dr <= 1; ++dr) {
             for (int dc = -1; dc <= 1; ++dc) {

@@ -21,6 +21,7 @@
 #include "openautoroute/chart_grid.hpp"
 #include "openautoroute/gpx.hpp"
 #include "openautoroute/pathfinder.hpp"
+#include "openautoroute/planner.hpp"
 #include "openautoroute/s57.hpp"
 #include "openautoroute/vessel.hpp"
 
@@ -53,40 +54,6 @@ std::vector<LatLon> readGpxPoints(const std::string& path) {
         pts.push_back({std::atof(tag.c_str() + la + 5), std::atof(tag.c_str() + lo + 5)});
     }
     return pts;
-}
-
-struct Bounds {
-    double minLat = 1e9, maxLat = -1e9, minLon = 1e9, maxLon = -1e9;
-    void add(LatLon p) {
-        minLat = std::min(minLat, p.lat); maxLat = std::max(maxLat, p.lat);
-        minLon = std::min(minLon, p.lon); maxLon = std::max(maxLon, p.lon);
-    }
-    bool overlaps(const Bounds& o) const {
-        return minLat <= o.maxLat && maxLat >= o.minLat && minLon <= o.maxLon && maxLon >= o.minLon;
-    }
-};
-
-struct Snap {
-    Cell cell;
-    double distCells;
-};
-
-// For each water body, the open cell nearest to `c` within `radius` cells. A start point that lands on a blocked pixel (a
-// marina berth, a coarse-raster shoreline) still routes, and the caller can choose a body both endpoints share instead of
-// whichever tiny pocket happens to be closest.
-std::map<int, Snap> nearestPerBody(const CostGrid& g, const WaterBodies& bodies, Cell c, int radius) {
-    std::map<int, Snap> best;
-    for (int dr = -radius; dr <= radius; ++dr) {
-        for (int dc = -radius; dc <= radius; ++dc) {
-            const Cell n{c.col + dc, c.row + dr};
-            if (!g.inBounds(n) || g.blocked(n)) continue;
-            const double d = std::sqrt(static_cast<double>(dc * dc + dr * dr));
-            const int b = bodies.label[static_cast<size_t>(n.row) * g.cols() + n.col];
-            auto it = best.find(b);
-            if (it == best.end() || d < it->second.distCells) best[b] = {n, d};
-        }
-    }
-    return best;
 }
 
 void usage(const char* argv0) {
@@ -177,8 +144,6 @@ int main(int argc, char** argv) {
     bool summary = false, useMarks = true, useChannels = true, useHazards = true;
     double airDraftArg = -1.0;
     std::vector<std::string> skipClasses;  // dev switches (--no-marks, --no-boundaries) exist only to compare runs
-    const auto startedAt = std::chrono::steady_clock::now();
-    double snapStartM = 0.0, snapEndM = 0.0;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         const bool hasVal = i + 1 < argc;
@@ -228,15 +193,38 @@ int main(int argc, char** argv) {
         else if ((a == "-o" || a == "--out") && hasVal) outPath = argv[++i];
         else { usage(argv[0]); return 2; }
     }
-    std::vector<LatLon> given;  // the route being scored in --eval mode
+    PlanRequest req;
+    req.encDir = encDir;
+    req.from = from;
+    req.to = to;
+    req.draftM = draft;
+    req.clearanceM = clearance;
+    req.cellM = cellM;
+    req.shoreMarginM = marginM;
+    req.shoreMarginWeight = marginWeight;
+    req.lengthM = lengthM;
+    req.laneUse = laneUse;
+    req.simplifyTolerance = simplify;
+    req.laneMarginM = laneMarginM;
+    req.laneMarginWeight = laneMarginWeight;
+    req.caution = caution;
+    req.minLegM = minLegM;
+    req.airDraftM = airDraftArg;
+    req.underSail = underSail;
+    req.applyTss = applyTss;
+    req.useMarks = useMarks;
+    req.useChannels = useChannels;
+    req.useHazards = useHazards;
+    req.skipClasses = skipClasses;
+    req.routeName = routeName;
+    req.startName = startName;
+    req.endName = endName;
     if (!evalPath.empty()) {
-        given = readGpxPoints(evalPath);
-        if (given.size() < 2) {
+        req.evalRoute = readGpxPoints(evalPath);
+        if (req.evalRoute.size() < 2) {
             std::fprintf(stderr, "no route points found in %s\n", evalPath.c_str());
             return 2;
         }
-        from = given.front();
-        to = given.back();
         haveFrom = haveTo = true;
     }
     if (encDir.empty() || !haveFrom || !haveTo || cellM <= 0.0 || draft < 0.0 || clearance < 0.0) {
@@ -244,410 +232,83 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    // Grid covers the route's bounding box plus a margin so the router can swing wide around headlands.
-    Bounds ends;
-    ends.add(from);
-    ends.add(to);
-    for (LatLon p : given) ends.add(p);
-    const double marginDeg = std::max(0.03, 0.25 * std::max(ends.maxLat - ends.minLat, ends.maxLon - ends.minLon));
-    Bounds box;
-    box.add({ends.minLat - marginDeg, ends.minLon - marginDeg});
-    box.add({ends.maxLat + marginDeg, ends.maxLon + marginDeg});
-    const double latStep = cellM / 111320.0;
-    const double lonStep = latStep / std::cos(deg2rad((box.minLat + box.maxLat) / 2));
-    const double cols = std::ceil((box.maxLon - box.minLon) / lonStep), rows = std::ceil((box.maxLat - box.minLat) / latStep);
-    if (cols * rows > 25e6) {
-        std::fprintf(stderr, "grid would be %.0f x %.0f cells; raise --cell-m or route a shorter distance\n", cols, rows);
-        return 2;
-    }
-    CostGrid grid(static_cast<int>(cols), static_cast<int>(rows), {box.maxLat, box.minLon}, latStep, lonStep);
-    grid.fill(kBlocked);  // no chart data means not known to be safe
-
-    // Load overlapping cells; stamp coarse-to-fine by the usage band in the cell name (US5xxxxx = harbour scale).
-    std::vector<std::pair<std::string, fs::path>> cells;
-    for (const auto& e : fs::recursive_directory_iterator(encDir)) {
-        if (e.is_regular_file() && e.path().extension() == ".000") cells.emplace_back(e.path().stem().string(), e.path());
-    }
-    std::sort(cells.begin(), cells.end(), [](const auto& a, const auto& b) {
-        const char ba = a.first.size() > 2 ? a.first[2] : '0', bb = b.first.size() > 2 ? b.first[2] : '0';
-        return ba != bb ? ba < bb : a.first < b.first;
-    });
-    const double minDepth = draft + clearance;
-    // Vessel type decides how lanes are used (COLREGs Rule 10(j), see vessel.hpp). --lane-use overrides the factor.
-    Vessel vessel{lengthM, underSail};
-    vessel.airDraftM = airDraftArg;
-    const double airDraft = airDraftEstimateM(vessel);
-    if (laneUse < 0.0) laneUse = defaultLaneUseFactor(vessel);
-    const bool avoidsLanes = laneUse > 1.0;
-    // Precautionary areas are where lanes converge and traffic is heaviest. A small craft should go round or cross the lanes
-    // square elsewhere rather than through one (a square lane crossing costs far less than passing through the area);
-    // ships expect to pass through them and only take care.
-    const double cautionFactor = caution > 0.0 ? caution : (avoidsLanes ? 12.0 : 1.5);
-
-    int used = 0;
-    std::vector<LateralMark> marks;
-    AreaLayer areaLayer;  // restricted and dangerous areas costed rather than blocked, to report which ones the route crosses
-    for (const auto& [name, path] : cells) {
-        ChartData d;
-        std::string err;
-        if (!loadS57(path.string(), d, err)) {
-            std::fprintf(stderr, "skip %s: %s\n", name.c_str(), err.c_str());
-            continue;
-        }
-        Bounds b;
-        for (const auto& f : d.features) for (const auto& r : f.parts) for (const auto& p : r.points) b.add(p);
-        if (!b.overlaps(box)) continue;
-        StampOptions so;
-        so.minDepthM = minDepth;
-        so.applyTss = applyTss;
-        so.cautionFactor = cautionFactor;
-        so.airDraftM = airDraft;
-        so.vesselLengthM = lengthM;
-        so.hazardObjects = useHazards;
-        so.skipClasses = skipClasses;
-        so.areas = &areaLayer;
-        stampChart(d, so, grid);
-        if (useMarks) collectLateralMarks(d, marks);
-        std::printf("  chart %s\n", name.c_str());
-        ++used;
-    }
-    grid.openLockCorridors();  // the line of a lock chamber is a maintained channel, whatever thin walls and bank depths say at this resolution
-    grid.assignZoneDirections();  // separation zones take their direction from the lanes beside them
-    // Buoyed channels: pair opposite red/green marks into gates so the route stays between them (see applyChannelGates).
-    const std::vector<Gate> gates = useMarks ? applyChannelGates(grid, marks, 500.0) : std::vector<Gate>{};
-    if (useMarks) std::printf("%zu channel gates from %zu lateral marks\n", gates.size(), marks.size());
-    // Narrow charted channels (fairway or dredged area under 600 m wide, the dashed limits): stay between the limits, like keeping
-    // between the lines on a road. Automatic: it acts only within 1.5 km of a charted narrow channel, only on moves running along or
-    // cutting across its bends (not on a clean crossing of it), and never on traffic separation.
-    if (useChannels) {
-        grid.markNarrowChannels(600.0);
-        grid.applyChannelPreference(1500.0, 6.0);
-    }
-    grid.setLaneUseFactor(laneUse);
-    // Leeway: a vessel that avoids lanes also keeps a wide berth from lanes, zones and the ends of lane parts, so it prefers
-    // open water to a narrow strip between a shore and a lane.
-    if (avoidsLanes) grid.applyLaneMargin(laneMarginM, laneMarginWeight);
-    if (applyTss) {
-        std::printf("vessel %.1f m%s: %s (lane-use factor %.2f)\n", lengthM, underSail ? ", under sail" : "",
-                    avoidsLanes ? "stays out of traffic lanes, crosses square-on" : "uses traffic lanes", laneUse);
-    }
-    std::printf("air draft %.1f m%s: bridges and overhead cables need %.1f m clearance\n", airDraft, airDraftArg < 0 ? " (estimated from the length; set --air-draft-m)" : "", airDraft + 1.0);
-    // On any failure, still emit a summary line (found=0 and why) so a benchmark run records it and carries on.
-    const auto fail = [&](const char* reason) {
-        if (summary) std::printf("SUMMARY found=0 reason=%s\n", reason);
-        return 1;
-    };
-    if (used == 0) {
-        std::fprintf(stderr, "no ENC cells under %s overlap the route area\n", encDir.c_str());
-        return fail("no_charts");
-    }
-
-    // Keep off the shore: penalise cells near blocked water (see CostGrid::applyShoreMargin). The clearance report uses the
-    // distances from before the penalty changes any costs.
-    const std::vector<float> shoreDist = grid.distanceToBlockedM();
-    grid.applyShoreMargin(marginM, marginWeight);
-
-    std::vector<LatLon> route;
-    std::vector<Cell> rawPath;  // unsmoothed A* cells, drawn by --map
-    // Debug picture of the grid around --map, with the raw A* path and the smoothed route drawn over it. Also used when no
-    // route is found, which is exactly when the grid is what needs looking at.
-    const auto drawMap = [&]() {
-        // '#' blocked, '.' open, 'n/e/s/w' lane by flow direction (lower case), '*' route (upper case where over a lane)
-        std::vector<std::string> canvas;
-        const Cell mc = grid.cellAt(mapAt);
-        for (int r = mc.row - mapRadius; r <= mc.row + mapRadius; ++r) {
-            std::string line;
-            for (int c = mc.col - mapRadius; c <= mc.col + mapRadius; ++c) {
-                const Cell cell{c, r};
-                char ch = ' ';
-                if (grid.inBounds(cell)) {
-                    const float lane = grid.laneDirection(cell);
-                    if (grid.blocked(cell)) ch = '#';
-                    else if (!std::isnan(lane)) ch = "nesw"[static_cast<int>(std::floor((lane + 45.0f) / 90.0f)) & 3];
-                    else ch = '.';
+    PlanHooks hooks;
+    hooks.out = [](const std::string& s) { std::fputs(s.c_str(), stdout); };
+    hooks.err = [](const std::string& s) { std::fputs(s.c_str(), stderr); };
+    if (mapRadius > 0) {
+        // Debug picture of the grid around --map, with the raw A* path and the smoothed route drawn over it. Also used when no
+        // route is found, which is exactly when the grid is what needs looking at.
+        hooks.debugGrid = [&](const CostGrid& grid, const std::vector<Cell>& rawPath, const std::vector<LatLon>& route) {
+            // '#' blocked, '.' open, 'n/e/s/w' lane by flow direction (lower case), '*' route (upper case where over a lane)
+            std::vector<std::string> canvas;
+            const Cell mc = grid.cellAt(mapAt);
+            for (int r = mc.row - mapRadius; r <= mc.row + mapRadius; ++r) {
+                std::string line;
+                for (int c = mc.col - mapRadius; c <= mc.col + mapRadius; ++c) {
+                    const Cell cell{c, r};
+                    char ch = ' ';
+                    if (grid.inBounds(cell)) {
+                        const float lane = grid.laneDirection(cell);
+                        if (grid.blocked(cell)) ch = '#';
+                        else if (!std::isnan(lane)) ch = "nesw"[static_cast<int>(std::floor((lane + 45.0f) / 90.0f)) & 3];
+                        else ch = '.';
+                    }
+                    line += ch;
                 }
-                line += ch;
+                canvas.push_back(line);
             }
-            canvas.push_back(line);
-        }
-        for (const Cell& c : rawPath) {  // the raw A* cells first ('o'), so the smoothed route draws over them
-            const int y = c.row - (mc.row - mapRadius), x = c.col - (mc.col - mapRadius);
-            if (y >= 0 && y < static_cast<int>(canvas.size()) && x >= 0 && x < static_cast<int>(canvas[y].size())) {
-                char& ch = canvas[y][x];
-                ch = (ch == 'n' || ch == 'e' || ch == 's' || ch == 'w') ? static_cast<char>(ch - 32) : 'o';
-            }
-        }
-        for (size_t i = 1; i < route.size(); ++i) {
-            const double leg = haversineM(route[i - 1], route[i]);
-            const int steps = std::max(1, static_cast<int>(leg / (grid.cellSizeM() / 2)));
-            for (int k = 0; k <= steps; ++k) {
-                const double t = static_cast<double>(k) / steps;
-                const Cell c = grid.cellAt({route[i - 1].lat + t * (route[i].lat - route[i - 1].lat),
-                                            route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)});
+            for (const Cell& c : rawPath) {  // the raw A* cells first ('o'), so the smoothed route draws over them
                 const int y = c.row - (mc.row - mapRadius), x = c.col - (mc.col - mapRadius);
                 if (y >= 0 && y < static_cast<int>(canvas.size()) && x >= 0 && x < static_cast<int>(canvas[y].size())) {
                     char& ch = canvas[y][x];
-                    if (ch == 'n' || ch == 'e' || ch == 's' || ch == 'w') ch = static_cast<char>(ch - 32);  // upper case: route in a lane
-                    else if (ch != 'N' && ch != 'E' && ch != 'S' && ch != 'W') ch = '*';  // (a raw-path 'o' is drawn over by '*')
+                    ch = (ch == 'n' || ch == 'e' || ch == 's' || ch == 'w') ? static_cast<char>(ch - 32) : 'o';
                 }
             }
-        }
-        std::printf("map: %d cells (%.0f m each) around %.4f,%.4f, north up. # blocked, . open, n/e/s/w lane flow, "
-                    "* smoothed route, o raw A* path, N/E/S/W path in a lane\n", 2 * mapRadius + 1, grid.cellSizeM(), mapAt.lat, mapAt.lon);
-        for (const auto& line : canvas) std::printf("%s\n", line.c_str());
-        if (trace) {
-            std::printf("raw path cells in the window (col,row: lane flow, zone, caution, cost), in travel order:\n");
-            Cell prev{-1, -1};
-            for (const Cell& c : rawPath) {
-                if (std::abs(c.col - mc.col) > mapRadius || std::abs(c.row - mc.row) > mapRadius) continue;
-                const float lane = grid.laneDirection(c);
-                std::printf("  (%d,%d)", c.col, c.row);
-                if (prev.col >= 0) std::printf(" step %+d,%+d", c.col - prev.col, c.row - prev.row);
-                std::printf(" lane=%s%.0f zone=%d caution=%d cost=%.2f\n", std::isnan(lane) ? "-" : "", std::isnan(lane) ? 0.0f : lane,
-                            grid.isZone(c) ? 1 : 0, grid.isCaution(c) ? 1 : 0, grid.cost(c));
-                prev = c;
-            }
-        }
-    };
-    if (!evalPath.empty()) {
-        route = given;  // score as-is: no snapping, no rerouting
-    } else {
-        Cell s = grid.cellAt(from), g = grid.cellAt(to);
-        if (!grid.inBounds(s) || !grid.inBounds(g)) {
-            std::fprintf(stderr, "start or end is outside the charted area\n");
-            return fail("endpoint_outside_grid");
-        }
-        const WaterBodies bodies = findWaterBodies(grid);
-        const auto sc = nearestPerBody(grid, bodies, s, 40), gc = nearestPerBody(grid, bodies, g, 40);
-        if (sc.empty() || gc.empty()) {
-            std::fprintf(stderr, "%s is not near charted water deep enough for %.1f m draft + %.1f m clearance\n",
-                         sc.empty() ? "start" : "end", draft, clearance);
-            if (mapRadius > 0) drawMap();
-            return fail("endpoint_not_in_safe_water");
-        }
-        // Prefer a water body both endpoints can reach, closest overall, and never a tiny pocket when a real one is available.
-        int chosen = -1;
-        double bestScore = 1e30;
-        for (const auto& [body, ss] : sc) {
-            const auto it = gc.find(body);
-            if (it == gc.end()) continue;
-            const double score = ss.distCells + it->second.distCells + (bodies.size[body] < 500 ? 1e6 : 0.0);
-            if (score < bestScore) { bestScore = score; chosen = body; }
-        }
-        if (chosen < 0) {
-            auto biggest = [&](const std::map<int, Snap>& m) {
-                size_t n = 0;
-                for (const auto& kv : m) n = std::max(n, bodies.size[kv.first]);
-                return n;
-            };
-            std::fprintf(stderr, "start and end are in different bodies of water: nearest to the start is %zu cells, to the end %zu\n",
-                         biggest(sc), biggest(gc));
-            if (mapRadius > 0) drawMap();
-            return fail("disconnected_water");
-        }
-        const Cell s2 = sc.at(chosen).cell, g2 = gc.at(chosen).cell;
-        snapStartM = haversineM(from, grid.centre(s2));
-        snapEndM = haversineM(to, grid.centre(g2));
-        if (!(s == s2)) std::printf("start moved to nearest safe water (%.0f m)\n", snapStartM);
-        if (!(g == g2)) std::printf("end moved to nearest safe water (%.0f m)\n", snapEndM);
-
-        route = findRoute(grid, grid.centre(s2), grid.centre(g2), simplify, &rawPath, minLegM);
-        if (route.empty()) {
-            std::fprintf(stderr, "no route found: the charts show no continuous water at least %.1f m deep between the points\n",
-                         minDepth);
-            std::fprintf(stderr, "  search ran inside one body of %zu cells; start cell %d,%d (blocked=%d cost=%g) goal cell %d,%d (blocked=%d cost=%g)\n",
-                         bodies.size[chosen], s2.col, s2.row, grid.blocked(s2) ? 1 : 0, grid.cost(s2), g2.col, g2.row, grid.blocked(g2) ? 1 : 0, grid.cost(g2));
-            if (mapRadius > 0) drawMap();
-            return fail("no_route");
-        }
-    }
-    double nm = 0;
-    for (size_t i = 1; i < route.size(); ++i) nm += haversineM(route[i - 1], route[i]) / 1852.0;
-    // Clearance report: sample each leg about every cell and look up the distance to blocked water. Samples within
-    // 1 km of either end are skipped, since a start in a marina or a berth is at the shore by definition.
-    if (mapRadius > 0) drawMap();
-    std::vector<double> clearances;
-    double travelled = 0.0, unsafeM = 0.0, cautionM = 0.0, narrowInM = 0.0, narrowNearOutM = 0.0;
-    std::vector<float> narrowDist;  // distance to the nearest narrow-channel cell, for "near but outside"
-    if (grid.cols() > 0) narrowDist = grid.distanceToNarrowChannelM();
-    int cautionStretches = 0;
-    bool inCaution = false;
-    struct Spot { LatLon at; double alongM; };
-    std::vector<Spot> unsafeSpots;  // first sample of each separate unsafe stretch
-    bool inUnsafe = false;
-    // Rule 10: maximal runs of samples inside a traffic lane, with how the route's heading relates to the lane's flow.
-    struct LaneRun { LatLon at; double alongM = 0, lengthM = 0, thetaSum = 0, thetaMin = 180, thetaMax = 0; float lane = 0; int n = 0; };
-    std::vector<LaneRun> laneRuns;
-    bool inLane = false;
-    // Restricted and dangerous areas the route crosses: metres and separate stretches in each, and where the first stretch starts.
-    struct AreaCrossing { double m = 0; int stretches = 0; LatLon at{}; };
-    std::map<int32_t, AreaCrossing> crossed;
-    int32_t inArea = -1;
-    for (size_t i = 1; i < route.size(); ++i) {
-        const double leg = haversineM(route[i - 1], route[i]);
-        const int steps = std::max(1, static_cast<int>(leg / grid.cellSizeM()));
-        for (int k = 0; k <= steps; ++k) {
-            const double t = static_cast<double>(k) / steps;
-            const double along = travelled + t * leg;
-            const LatLon here{route[i - 1].lat + t * (route[i].lat - route[i - 1].lat),
-                              route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)};
-            const Cell hc = grid.cellAt(here);
-            const bool unsafe = !grid.inBounds(hc) || grid.blocked(hc);
-            if (unsafe) {
-                unsafeM += leg / steps;
-                if (!inUnsafe) unsafeSpots.push_back({here, along});
-            }
-            inUnsafe = unsafe;
-            if (grid.inBounds(hc)) {
-                if (grid.isNarrowChannel(hc)) narrowInM += leg / steps;
-                else if (!narrowDist.empty() && narrowDist[static_cast<size_t>(hc.row) * grid.cols() + hc.col] < 1500.0f && !grid.isChannel(hc)) narrowNearOutM += leg / steps;
-            }
-            const int32_t areaId = (grid.inBounds(hc) && !areaLayer.id.empty()) ? areaLayer.id[static_cast<size_t>(hc.row) * grid.cols() + hc.col] : -1;
-            if (areaId >= 0) {
-                AreaCrossing& ac = crossed[areaId];
-                if (ac.stretches == 0) ac.at = here;
-                if (areaId != inArea) ++ac.stretches;
-                ac.m += leg / steps;
-            }
-            inArea = areaId;
-            const bool caut = grid.inBounds(hc) && grid.isCaution(hc);
-            if (caut) {
-                cautionM += leg / steps;
-                if (!inCaution) ++cautionStretches;
-            }
-            inCaution = caut;
-            const float lane = grid.inBounds(hc) ? grid.laneDirection(hc) : std::nanf("");
-            if (std::isnan(lane)) {
-                inLane = false;
-            } else {
-                const double theta = angleDiffDeg(bearingDeg(route[i - 1], route[i]), lane);
-                if (!inLane || laneRuns.back().lane != lane) {
-                    laneRuns.push_back({here, along, 0, 0, 180, 0, lane, 0});
-                    inLane = true;
+            for (size_t i = 1; i < route.size(); ++i) {
+                const double leg = haversineM(route[i - 1], route[i]);
+                const int steps = std::max(1, static_cast<int>(leg / (grid.cellSizeM() / 2)));
+                for (int k = 0; k <= steps; ++k) {
+                    const double t = static_cast<double>(k) / steps;
+                    const Cell c = grid.cellAt({route[i - 1].lat + t * (route[i].lat - route[i - 1].lat),
+                                                route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)});
+                    const int y = c.row - (mc.row - mapRadius), x = c.col - (mc.col - mapRadius);
+                    if (y >= 0 && y < static_cast<int>(canvas.size()) && x >= 0 && x < static_cast<int>(canvas[y].size())) {
+                        char& ch = canvas[y][x];
+                        if (ch == 'n' || ch == 'e' || ch == 's' || ch == 'w') ch = static_cast<char>(ch - 32);  // upper case: route in a lane
+                        else if (ch != 'N' && ch != 'E' && ch != 'S' && ch != 'W') ch = '*';  // (a raw-path 'o' is drawn over by '*')
+                    }
                 }
-                LaneRun& run = laneRuns.back();
-                run.lengthM += leg / steps;
-                run.thetaSum += theta;
-                run.thetaMin = std::min(run.thetaMin, theta);
-                run.thetaMax = std::max(run.thetaMax, theta);
-                ++run.n;
             }
-            if (along < 1000.0 || along > nm * 1852.0 - 1000.0) continue;
-            const Cell c = grid.cellAt({route[i - 1].lat + t * (route[i].lat - route[i - 1].lat),
-                                        route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)});
-            if (grid.inBounds(c)) clearances.push_back(shoreDist[static_cast<size_t>(c.row) * grid.cols() + c.col]);
-        }
-        travelled += leg;
+            std::printf("map: %d cells (%.0f m each) around %.4f,%.4f, north up. # blocked, . open, n/e/s/w lane flow, "
+                        "* smoothed route, o raw A* path, N/E/S/W path in a lane\n", 2 * mapRadius + 1, grid.cellSizeM(), mapAt.lat, mapAt.lon);
+            for (const auto& line : canvas) std::printf("%s\n", line.c_str());
+            if (trace) {
+                std::printf("raw path cells in the window (col,row: lane flow, zone, caution, cost), in travel order:\n");
+                Cell prev{-1, -1};
+                for (const Cell& c : rawPath) {
+                    if (std::abs(c.col - mc.col) > mapRadius || std::abs(c.row - mc.row) > mapRadius) continue;
+                    const float lane = grid.laneDirection(c);
+                    std::printf("  (%d,%d)", c.col, c.row);
+                    if (prev.col >= 0) std::printf(" step %+d,%+d", c.col - prev.col, c.row - prev.row);
+                    std::printf(" lane=%s%.0f zone=%d caution=%d cost=%.2f\n", std::isnan(lane) ? "-" : "", std::isnan(lane) ? 0.0f : lane,
+                                grid.isZone(c) ? 1 : 0, grid.isCaution(c) ? 1 : 0, grid.cost(c));
+                    prev = c;
+                }
+            }
+        };
     }
-    if (!clearances.empty()) {
-        std::sort(clearances.begin(), clearances.end());
-        std::printf("clearance from land, shoal or uncharted water (excluding 1 km at each end): closest %.0f m, "
-                    "median %.0f m\n", clearances.front(), clearances[clearances.size() / 2]);
+    const PlanResult result = planRoute(req, hooks);
+    if (result.status == 2) return 2;
+    if (result.status != 0) {
+        if (summary) std::printf("%s\n", result.summaryLine.c_str());
+        return 1;
     }
-    // Restricted and dangerous areas crossed, dearest first. The router treats these as costs (so a harbour is never cut off), which
-    // means it will go through one when the way round is long: the skipper has to know, and check the rules for that area.
-    std::vector<std::pair<int32_t, AreaCrossing>> areasCrossed(crossed.begin(), crossed.end());
-    std::sort(areasCrossed.begin(), areasCrossed.end(), [&](const auto& a, const auto& b) {
-        const float fa = areaLayer.notes[a.first].factor, fb = areaLayer.notes[b.first].factor;
-        return fa != fb ? fa > fb : a.second.m > b.second.m;
-    });
-    double areasM = 0.0;
-    for (const auto& [id, ac] : areasCrossed) areasM += ac.m;
-    if (areasCrossed.empty()) {
-        std::printf("restricted or dangerous areas crossed: none charted\n");
-    } else {
-        std::printf("restricted or dangerous areas crossed (check the rules for each before you go):\n");
-        for (const auto& [id, ac] : areasCrossed) {
-            const AreaNote& n = areaLayer.notes[id];
-            std::printf("  %s (x%.1f): %.1f nm in %d stretch(es), first near %.4f,%.4f%s%s\n", n.kind.c_str(), n.factor, ac.m / 1852.0,
-                        ac.stretches, ac.at.lat, ac.at.lon, n.text.empty() ? "" : ": ", n.text.c_str());
-        }
+    if (evalPath.empty()) {
+        if (result.grid && !picturePath.empty()) writePicture(picturePath, *result.grid, result.route);
+        std::ofstream(outPath) << routeToGpx(result.route, result.routeName, startName, endName, result.description);
+        std::printf("%zu charts, %zu waypoints, %.1f nm (straight line %.1f nm), wrote %s\n", static_cast<size_t>(result.chartsUsed),
+                    result.route.size(), result.nm, result.straightNm, outPath.c_str());
     }
-    // Rule 10 counts. A run within 25 degrees of the flow is normal lane use, within 25 degrees of the opposite is wrong-way
-    // travel, and anything between is a crossing, judged by how far it is from square to the flow.
-    int withFlow = 0, crossings = 0, wrongWay = 0;
-    double wrongWayM = 0, worstOff = 0;
-    for (const LaneRun& r : laneRuns) {
-        const double mean = r.thetaSum / r.n;
-        if (mean <= 25.0) ++withFlow;
-        else if (mean >= 155.0) { ++wrongWay; wrongWayM += r.lengthM; }
-        else { ++crossings; worstOff = std::max(worstOff, std::fabs(mean - 90.0)); }
-    }
-    // Buoy gates on this stretch of route: does the route pass between the pair? (Planar approximation around each gate.)
-    int gatesNear = 0, gatesMissed = 0;
-    for (const Gate& g : gates) {
-        double nearest = 1e30;
-        for (const LatLon& p : route) nearest = std::min(nearest, std::min(haversineM(p, g.port), haversineM(p, g.starboard)));
-        if (nearest > 1500.0) continue;
-        ++gatesNear;
-        const double cl = std::cos(deg2rad(g.port.lat)), k = 111320.0;
-        const double rx = (g.starboard.lon - g.port.lon) * cl * k, ry = (g.starboard.lat - g.port.lat) * k;
-        bool hit = false;
-        for (size_t i = 1; i < route.size() && !hit; ++i) {
-            const double ax = (route[i - 1].lon - g.port.lon) * cl * k, ay = (route[i - 1].lat - g.port.lat) * k;
-            const double bx = (route[i].lon - g.port.lon) * cl * k, by = (route[i].lat - g.port.lat) * k;
-            const double den = (bx - ax) * ry - (by - ay) * rx, cr = rx * (by - ay) - ry * (bx - ax);
-            if (std::fabs(den) < 1e-9 || std::fabs(cr) < 1e-9) continue;
-            const double u = (-ax * ry + ay * rx) / den, t = (ax * (by - ay) - ay * (bx - ax)) / cr;
-            hit = u >= 0 && u <= 1 && t >= 0 && t <= 1;
-        }
-        gatesMissed += !hit;
-    }
-    const auto printSummary = [&]() {
-        if (!summary) return;
-        const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count();
-        std::printf("SUMMARY found=1 nm=%.2f straight_nm=%.2f waypoints=%zu charts=%d closest_m=%.0f median_m=%.0f blocked_m=%.0f "
-                    "vessel_m=%.0f caution_m=%.0f restricted_m=%.0f narrow_in_m=%.0f narrow_near_out_m=%.0f gates=%d gates_missed=%d lane_runs=%zu with_flow=%d crossings=%d wrong_way_m=%.0f worst_off_deg=%.0f snap_start_m=%.0f snap_end_m=%.0f "
-                    "seconds=%.1f\n", nm, haversineM(from, to) / 1852.0, route.size(), used,
-                    clearances.empty() ? -1.0 : clearances.front(), clearances.empty() ? -1.0 : clearances[clearances.size() / 2],
-                    unsafeM, lengthM, cautionM, areasM, narrowInM, narrowNearOutM, gatesNear, gatesMissed, laneRuns.size(), withFlow, crossings, wrongWayM, worstOff, snapStartM, snapEndM, secs);
-    };
-    if (!evalPath.empty()) {
-        std::printf("unsafe by the chart rules: %.0f m of %.0f m (%.1f%%) in %zu stretch(es)\n", unsafeM, nm * 1852.0,
-                    100.0 * unsafeM / (nm * 1852.0), unsafeSpots.size());
-        for (size_t i = 0; i < unsafeSpots.size() && i < 10; ++i) {
-            std::printf("  at %.5f,%.5f (%.1f nm along)\n", unsafeSpots[i].at.lat, unsafeSpots[i].at.lon,
-                        unsafeSpots[i].alongM / 1852.0);
-        }
-        std::printf("precautionary areas: %.0f m in %d stretch(es)\n", cautionM, cautionStretches);
-        std::printf("narrow channels: %.0f m inside, %.0f m running just outside; buoy gates: %d near the route, %d missed\n", narrowInM, narrowNearOutM, gatesNear, gatesMissed);
-        std::printf("traffic lanes (Rule 10): %zu lane transit(s): %d with the flow, %d crossing, %d wrong-way (%.0f m)\n",
-                    laneRuns.size(), withFlow, crossings, wrongWay, wrongWayM);
-        for (size_t i = 0; i < laneRuns.size() && i < 12; ++i) {
-            const LaneRun& r = laneRuns[i];
-            const double mean = r.thetaSum / r.n;
-            const char* kind = mean <= 25.0 ? "with flow" : mean >= 155.0 ? "WRONG WAY" : "crossing";
-            std::printf("  %-9s lane %3.0f deg, %4.0f m in lane, heading %.0f deg off the flow", kind, r.lane, r.lengthM, mean);
-            if (mean > 25.0 && mean < 155.0) std::printf(" (%.0f deg from square)", std::fabs(mean - 90.0));
-            std::printf(" at %.4f,%.4f\n", r.at.lat, r.at.lon);
-        }
-        if (crossings > 0) std::printf("  worst crossing is %.0f deg from square\n", worstOff);
-        std::printf("%zu charts, %zu waypoints, %.1f nm (straight line %.1f nm)\n", static_cast<size_t>(used), route.size(),
-                    nm, haversineM(from, to) / 1852.0);
-        printSummary();
-        return 0;
-    }
-    // OpenCPN's Route Manager shows the route name and the names of the first and last waypoints (its From and To columns).
-    char descBuf[200];
-    std::snprintf(descBuf, sizeof descBuf, "open-autoroute: %.1f nm, %.1f m vessel, %.1f m draft plus %.1f m clearance", nm, lengthM, draft, clearance);
-    std::string desc = descBuf;
-    if (!areasCrossed.empty()) {
-        desc += ". Crosses restricted or dangerous areas:";
-        for (const auto& [id, ac] : areasCrossed) {
-            char one[80];
-            std::snprintf(one, sizeof one, " %s %.1f nm;", areaLayer.notes[id].kind.c_str(), ac.m / 1852.0);
-            desc += one;
-        }
-    }
-    if (routeName.empty()) {
-        char nb[80];
-        std::snprintf(nb, sizeof nb, "open-autoroute %.3f,%.3f to %.3f,%.3f", from.lat, from.lon, to.lat, to.lon);
-        routeName = nb;
-    }
-    if (!picturePath.empty()) writePicture(picturePath, grid, route);
-    std::ofstream(outPath) << routeToGpx(route, routeName, startName, endName, desc);
-    std::printf("%zu charts, %zu waypoints, %.1f nm (straight line %.1f nm), wrote %s\n", static_cast<size_t>(used),
-                route.size(), nm, haversineM(from, to) / 1852.0, outPath.c_str());
-    printSummary();
+    if (summary) std::printf("%s\n", result.summaryLine.c_str());
     return 0;
 }

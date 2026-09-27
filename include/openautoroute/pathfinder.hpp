@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <vector>
 
 #include "openautoroute/cost_grid.hpp"
@@ -28,8 +29,12 @@ float laneFactor(double headingDeg, double laneDeg);
 /// `minLegM` (metres) is a preferred minimum distance between waypoints: a waypoint closer than that to its neighbour is
 /// dropped when the straight leg that replaces it is still legal (clear of blocked water, no wrong-way lane or zone travel) and
 /// costs no more than 25% above the stretch it replaces. Legs stay shorter where a channel really needs them. 0 disables it.
+///
+/// `progress`, if given, is called now and then during the search with a fraction from 0 to 1 (how much closer to the goal the search
+/// front has got; it never goes backwards). Returning false cancels the search, and findRoute then returns an empty route.
 std::vector<LatLon> findRoute(const CostGrid& grid, LatLon start, LatLon goal, double simplifyTolerance = 0.0,
-                              std::vector<Cell>* rawPath = nullptr, double minLegM = 0.0);
+                              std::vector<Cell>* rawPath = nullptr, double minLegM = 0.0,
+                              const std::function<bool(double)>* progress = nullptr);
 
 /// True when the straight segment between two cells crosses no blocked cell. Exposed for testing.
 bool lineOfSight(const CostGrid& grid, Cell a, Cell b);

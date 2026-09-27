@@ -2,7 +2,7 @@
 CXX ?= g++
 CXXFLAGS ?= -O2 -std=c++17 -Wall -Wextra -Iinclude
 HEADERS := $(wildcard include/openautoroute/*.hpp)
-CORE := src/cost_grid.cpp src/pathfinder.cpp src/gpx.cpp src/s57.cpp src/chart_grid.cpp
+CORE := src/cost_grid.cpp src/pathfinder.cpp src/gpx.cpp src/s57.cpp src/chart_grid.cpp src/planner.cpp
 
 all: build/openautoroute build/test_core
 

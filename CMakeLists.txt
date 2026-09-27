@@ -13,6 +13,7 @@ add_library(openautoroute_core STATIC
   src/gpx.cpp
   src/s57.cpp
   src/chart_grid.cpp
+  src/planner.cpp
 )
 target_include_directories(openautoroute_core PUBLIC include)
 target_compile_options(openautoroute_core PRIVATE -Wall -Wextra -Wpedantic)
