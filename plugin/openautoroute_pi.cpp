@@ -155,6 +155,7 @@ private:
     // The route a Replan or Check started from, as it was when the job started (OpenCPN may change it while the plan runs).
     wxString routeGuid_;
     std::vector<LatLon> routePts_;
+    wxString routeNameText_;
     double cellM_ = 30.0;
 };
 
@@ -389,6 +390,7 @@ void AutoRouteDialog::RunOnRoute(const wxString& guid, bool check) {
     if (!ReadVessel(req)) return;
     routeGuid_ = guid;
     routePts_ = pts;
+    routeNameText_ = route->m_NameString;
     SetFrom(pts.front().lat, pts.front().lon);
     SetTo(pts.back().lat, pts.back().lon);
     if (check) {
@@ -579,13 +581,102 @@ void AutoRouteDialog::FinishReplan(const PlanResult& result) {
                       "\" in the Route Manager.");
 }
 
-// The route as drawn, scored against the same chart rules the planner uses. Nothing in OpenCPN is changed.
+// The route as drawn, scored against the same chart rules the planner uses, in plain words: problems first, then things worth a
+// look, then what is fine. Nothing in OpenCPN is changed.
 void AutoRouteDialog::FinishCheck(const PlanResult& result) {
-    wxString text = wxString::FromUTF8(result.checkReport.c_str());
-    text += wxString::Format("\nChecked on a %s grid: a hazard smaller than that between two samples can be missed. A second opinion, not a guarantee.",
-                             Length(cellM_));
-    text += "\nUse at your own risk. Not for navigation: check every leg against the chart and notices to mariners. Depths are at chart datum, with no tide or current. This plugin is not part of OpenCPN.";
+    const RouteCheck& c = result.check;
+    const auto nmText = [](double m) { return wxString::Format("%.1f nm", m / 1852.0); };
+    const auto where = [&](LatLon at, double alongM) {
+        return wxString::Format("%s along (%s)", nmText(alongM), pointText(at.lat, at.lon));
+    };
+    double len = 0;
+    length_->GetValue().ToDouble(&len);
+    const bool smallCraft = sail_->GetValue() || ToMetres(len) < 20.0;   // COLREGs Rule 10(j), as the planner decides it
+
+    wxArrayString problems, look, fine;
+    if (c.unsafe.empty()) {
+        fine.Add("Stays in water deep enough for your draft and clearance, clear of charted hazards.");
+    } else {
+        wxString t = wxString::Format("Crosses land, water too shallow for your draft, or a charted hazard, in %zu place%s (%s in all):",
+                                      c.unsafe.size(), c.unsafe.size() == 1 ? "" : "s", Length(c.unsafeM));
+        for (const RouteCheck::Spot& sp : c.unsafe) {
+            t += "\n    - " + where(sp.at, sp.alongM);
+            if (sp.alongM < 2.0 * cellM_) t += ": at the start, which is expected if you leave from a berth or a marina";
+            else if (sp.alongM > c.lengthM - 2.0 * cellM_) t += ": at the end, which is expected if you arrive at a berth or a marina";
+        }
+        problems.Add(t);
+    }
+    int crossings = 0, sharp = 0;
+    double worst = 0.0;
+    for (const RouteCheck::LaneTransit& l : c.lanes) {
+        if (l.offFlowDeg >= 155.0) {
+            problems.Add(wxString::Format("Goes the wrong way in a traffic lane for %s, %s. Lanes are one-way (COLREGs Rule 10).",
+                                          Length(l.lengthM), where(l.at, l.alongM)));
+        } else if (l.offFlowDeg <= 25.0) {
+            if (smallCraft) {
+                look.Add(wxString::Format("Runs along a traffic lane for %s, %s. Under 20 m or under sail, keep out of the lanes and "
+                                          "only cross them (Rule 10(j)).", nmText(l.lengthM), where(l.at, l.alongM)));
+            }
+        } else {
+            ++crossings;
+            const double off = std::fabs(l.offFlowDeg - 90.0);
+            worst = std::max(worst, off);
+            if (off > 30.0) {
+                ++sharp;
+                look.Add(wxString::Format("Crosses a traffic lane %.0f degrees off square, %s. Cross lanes as close to square-on as you "
+                                          "can (Rule 10).", off, where(l.at, l.alongM)));
+            }
+        }
+    }
+    if (crossings > 0 && sharp == 0) {
+        fine.Add(wxString::Format("Crosses traffic lanes %d time%s, all close to square-on (worst %.0f degrees off).", crossings,
+                                  crossings == 1 ? "" : "s", worst));
+    }
+    if (c.cautionStretches > 0) {
+        look.Add(wxString::Format("Passes through a precautionary area for %s. Ships converge there: %s", nmText(c.cautionM),
+                                  smallCraft ? "a small boat should go round." : "keep a sharp lookout."));
+    }
+    if (c.narrowNearOutM > 0.0) {
+        look.Add(wxString::Format("Runs just outside a narrow channel for %s. Use the channel, keeping to its starboard side (Rule 9).",
+                                  nmText(c.narrowNearOutM)));
+    }
+    if (c.gatesMissed > 0) {
+        look.Add(wxString::Format("Misses %d of the %d buoy gates it passes: it goes outside the marked channel there.", c.gatesMissed,
+                                  c.gatesNear));
+    } else if (c.gatesNear > 0) {
+        fine.Add(wxString::Format("Passes between all %d buoy gates on the way.", c.gatesNear));
+    }
+    if (!result.areasCrossed.empty()) {
+        wxString t = "Crosses restricted or regulated areas. Check the rules for each before you go:";
+        for (const AreaCrossing& ar : result.areasCrossed) {
+            t += "\n    - " + wxString::FromUTF8(ar.kind.c_str()) + ", " + nmText(ar.metres);
+            if (!ar.text.empty()) t += ": " + wxString::FromUTF8(ar.text.c_str());
+        }
+        look.Add(t);
+    }
+    if (c.closestShoreM >= 0.0) {
+        fine.Add(wxString::Format("Closest approach to land or too-shallow water: %s (not counting 1 km at each end).",
+                                  Length(c.closestShoreM)));
+    }
+
+    wxString text = routeNameText_.IsEmpty() ? wxString("Route check") : "Route check: " + routeNameText_;
+    text += wxString::Format(", %s, %zu waypoints.\n\n", nmText(c.lengthM), routePts_.size());
+    if (problems.IsEmpty() && look.IsEmpty()) text += "No problems found.\n";
+    else if (problems.IsEmpty()) text += wxString::Format("Nothing to fix. %zu thing%s worth a look.\n", look.size(), look.size() == 1 ? "" : "s");
+    else text += wxString::Format("%zu problem%s to fix.\n", problems.size(), problems.size() == 1 ? "" : "s");
+    const auto section = [&](const wxString& title, const wxArrayString& items) {
+        if (items.IsEmpty()) return;
+        text += "\n" + title + "\n";
+        for (const wxString& item : items) text += "* " + item + "\n";
+    };
+    section("PROBLEMS", problems);
+    section("WORTH A LOOK", look);
+    section("FINE", fine);
+    text += wxString::Format("\nChecked every %s along the route, so a hazard smaller than that can be missed: a second opinion, not a "
+                             "guarantee. Depths are at chart datum, with no tide or current. Not for navigation; this plugin is not part "
+                             "of OpenCPN.", Length(cellM_));
     report_->SetValue(text);
+    report_->ShowPosition(0);
 }
 
 // The route goes in as a normal OpenCPN route, named so the Route Manager's From and To columns read sensibly.
