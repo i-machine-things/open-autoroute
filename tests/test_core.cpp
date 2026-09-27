@@ -1046,10 +1046,10 @@ static void testRestrictedAreaTextAndNotes() {
     stampNoted({resare(0, 1u << 9, careText)}, layer);
     stampNoted({resare(0, 1u << 9, careText)}, layer);
     CHECK(layer.notes.size() == 1 && layer.id[5 * 12 + 1] == 0);
-    // Blocked areas are not "crossed": no note.
-    AreaLayer none;
-    stampNoted({resare(1u << 7, 0, "")}, none);
-    CHECK(none.id[5 * 12 + 1] == -1);
+    // A closed area is noted too (an --eval route that crosses one should say so).
+    AreaLayer closed;
+    stampNoted({resare(1u << 7, 0, "")}, closed);
+    CHECK(closed.id[5 * 12 + 1] >= 0 && closed.notes[closed.id[5 * 12 + 1]].kind.find("entry prohibited") == 0);
 }
 
 // A finer chart re-draws the depth areas but not every hazard: a wreck, a prohibited area or a low bridge that only the coarser chart
@@ -1077,10 +1077,36 @@ static void testHazardsSurviveFinerChart() {
     CHECK(g.blocked({9, 3}) && g.blocked({2, 5}) && g.blocked({6, 5}) && g.cost({10, 5}) == 30.0f && g.cost({0, 8}) == 1.5f);
     stampChart(fine, o, g);
     CHECK(g.blocked({9, 3}));                        // the wreck survives
-    CHECK(g.blocked({6, 5}) && g.blocked({7, 5}));   // prohibited area survives
+    CHECK(!g.blocked({6, 5}) && g.cost({6, 5}) == 30.0f);  // the prohibited area stays, as a cost: a coarse polygon must not wall off a strait
     CHECK(g.cost({10, 5}) == 30.0f);                 // so does the military area cost
     CHECK(!g.blocked({3, 5}));                       // the finer chart has surveyed what the coarse one called unsurveyed
     CHECK(g.cost({0, 8}) == 1.0f);                   // and the overview-chart note is gone
+}
+
+// Bridges: an overview chart's bridge with no charted clearance does not outlive a finer chart; a charted low clearance does.
+static void testBridgeAcrossScales() {
+    auto stamp2 = [](double clearance) {
+        CostGrid g = makeGrid(12, 10);
+        g.fill(kBlocked);
+        ChartData coarse, fine;
+        coarse.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.988, 30.0));
+        ChartFeature bridge = lineFeature("BRIDGE", {{45.9954, -123.9955}, {45.9954, -123.9895}});   // row 4
+        bridge.verclr = clearance;
+        coarse.features.push_back(bridge);
+        fine.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.988, 30.0));
+        StampOptions o;
+        o.airDraftM = 5.0;
+        stampChart(coarse, o, g);
+        const bool blockedByCoarse = g.blocked({6, 4});
+        stampChart(fine, o, g);
+        return std::make_pair(blockedByCoarse, g.blocked({6, 4}));
+    };
+    const auto unknown = stamp2(std::nan(""));
+    CHECK(unknown.first && !unknown.second);   // unknown clearance blocks its own chart, the finer chart decides
+    const auto low = stamp2(3.0);
+    CHECK(low.first && low.second);            // a charted clearance under the air draft holds
+    const auto high = stamp2(30.0);
+    CHECK(!high.first && !high.second);
 }
 
 // Land or a shoal narrower than a cell must still block: a cell centre test alone lets a mole or a spit vanish.
@@ -1429,6 +1455,7 @@ int main() {
     testHazardRestrictedAreas();
     testRestrictedAreaTextAndNotes();
     testHazardsSurviveFinerChart();
+    testBridgeAcrossScales();
     testThinPolygonsStillBlock();
     testHazardPenalties();
     testHazardMarks();

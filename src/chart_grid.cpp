@@ -254,7 +254,10 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
             const AreaText words = readAreaText(f.inform);
             const bool forbidden = (restrn & (1u << 7)) || ((restrn & (1u << 14)) && ship) || words == AreaText::KeepOut;
             if (forbidden) {
-                shutGeometry(f, grid, shut, scratch);
+                // An overview chart draws these polygons roughly (a Golden Gate security zone spans the whole strait), so the block holds
+                // only where this chart covers the water; a finer chart that omits or redraws the area cannot erase it, though: it stays x30.
+                shutGeometry(f, grid, shutLocal, scratch);
+                raise(penalty, grid, f, 30.0f, &sink, "entry prohibited or closed area");
             } else {
                 float factor = 1.0f;
                 const char* kind = "restricted area";
@@ -291,7 +294,8 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
             // only a little; and if its text says the area is closed or keep out, it is blocked.
             const AreaText words = readAreaText(f.inform);
             if (words == AreaText::KeepOut) {
-                shutGeometry(f, grid, shut, scratch);
+                shutGeometry(f, grid, shutLocal, scratch);
+                raise(penalty, grid, f, 30.0f, &sink, "closed military area");
             } else {
                 const uint32_t transitLimits = f.restrn & ~((1u << 7) | (1u << 8) | (1u << 14));
                 const bool onlyCare = (transitLimits != 0 && !(f.restrn & (1u << 8))) || words == AreaText::Caution;
@@ -307,8 +311,10 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
         } else if (cls == "DMPGRD") {
             // CATDPG (attribute 23): 2 chemical waste, 3 nuclear waste, 4 explosives, 5 spoil ground, 6 vessel dumping ground. The first
             // three are dangerous however deep the water is: blocked. Spoil and vessel grounds change depth and hold debris: very costly.
-            if (f.catdpg & ((1u << 2) | (1u << 3) | (1u << 4))) shutGeometry(f, grid, shut, scratch);
-            else raise(penalty, grid, f, 15.0f, &sink, "dumping ground");
+            if (f.catdpg & ((1u << 2) | (1u << 3) | (1u << 4))) {
+                shutGeometry(f, grid, shutLocal, scratch);
+                raise(penalty, grid, f, 30.0f, &sink, "hazardous dumping ground");
+            } else raise(penalty, grid, f, 15.0f, &sink, "dumping ground");
         } else if (cls == "ACHARE") {
             raise(penalty, grid, f, 3.0f);  // vessels lie at anchor here
         } else if (cls == "WEDKLP") {
@@ -320,7 +326,10 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
         } else if (cls == "BRIDGE" || cls == "CBLOHD" || cls == "PIPOHD") {
             // A span is only passable if it is higher than the mast. An opening bridge is treated as closed (VERCCL); unknown is unsafe.
             const double clearance = !std::isnan(f.verccl) ? f.verccl : f.verclr;
-            if (std::isnan(clearance) || clearance < opt.airDraftM + 1.0) shutGeometry(f, grid, shut, scratch);
+            // An overview chart draws a bridge without its clearance and not exactly where it is; the finer chart decides those. A clearance
+            // that is charted and too low holds whatever chart is stamped next.
+            if (std::isnan(clearance)) shutGeometry(f, grid, shutLocal, scratch);
+            else if (clearance < opt.airDraftM + 1.0) shutGeometry(f, grid, shut, scratch);
         }
     }
 }
