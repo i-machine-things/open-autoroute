@@ -1269,6 +1269,12 @@ static void testHazardOverheadClearance() {
     CHECK(stampHazards({bridgeAt(30.0, 5.0)}, 8.0).blocked({5, 4}));
     // Unknown clearance is unsafe, whatever the mast.
     CHECK(stampHazards({bridgeAt(nan, nan)}, 0.0).blocked({5, 4}));
+    // ...but an overhead cable with no charted clearance is a costly crossing, not a wall (see applyHazardObjects).
+    ChartFeature unknownCable = lineFeature("CBLOHD", {{45.9955, -123.9995}, {45.9955, -123.9885}});
+    CostGrid cableGrid = stampHazards({unknownCable}, 5.0);
+    CHECK(!cableGrid.blocked({5, 4}) && cableGrid.cost({5, 4}) == 10.0f);
+    ChartFeature unknownPipe = lineFeature("PIPOHD", {{45.9955, -123.9995}, {45.9955, -123.9885}});
+    CHECK(stampHazards({unknownPipe}, 5.0).blocked({5, 4}));
     // Overhead cables and pipelines follow the same rule.
     ChartFeature cable = lineFeature("CBLOHD", {{45.9955, -123.9995}, {45.9955, -123.9885}});
     cable.verclr = 12.0;

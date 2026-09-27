@@ -172,6 +172,19 @@ int32_t noteIndex(AreaLayer& layer, const std::string& kind, const std::string& 
 
 void raise(std::vector<float>& penalty, const CostGrid& grid, const ChartFeature& f, float factor, NoteSink* sink = nullptr,
            const char* kind = "") {
+    if (f.geometry == Geometry::Line) {  // a line (an overhead cable) makes the cells it crosses dearer
+        std::vector<uint8_t> cells(penalty.size(), 0);
+        paintLine(f, grid, cells);
+        const int32_t note = (sink && sink->layer) ? noteIndex(*sink->layer, kind, f.inform, factor) : -1;
+        for (size_t i = 0; i < cells.size(); ++i) {
+            if (!cells[i]) continue;
+            if (factor > penalty[i]) {
+                penalty[i] = factor;
+                if (note >= 0) sink->at[i] = note;
+            }
+        }
+        return;
+    }
     if (f.geometry != Geometry::Area) return;
     const int32_t note = (sink && sink->layer) ? noteIndex(*sink->layer, kind, f.inform, factor) : -1;
     forEachCellInArea(f, grid, [&](int row, int col) {
@@ -338,8 +351,11 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
             // A span is only passable if it is higher than the mast. An opening bridge is treated as closed (VERCCL); unknown is unsafe.
             const double clearance = !std::isnan(f.verccl) ? f.verccl : f.verclr;
             // An overview chart draws a bridge without its clearance and not exactly where it is; the finer chart decides those. A clearance
-            // that is charted and too low holds whatever chart is stamped next.
-            if (std::isnan(clearance)) shutGeometry(f, grid, shutLocal, scratch);
+            // that is charted and too low holds whatever chart is stamped next. A power cable with no charted clearance over a navigable
+            // channel (a dozen cross the Bonneville tailrace) costs x10 and is listed in the report, not treated as a wall: the rules for
+            // building over navigable water make a very low one unlikely, and a wall of them would cut a channel that ships use.
+            if (std::isnan(clearance) && cls == "CBLOHD") raise(penalty, grid, f, 10.0f, &sink, "overhead cable, clearance not charted");
+            else if (std::isnan(clearance)) shutGeometry(f, grid, shutLocal, scratch);
             else if (clearance < opt.airDraftM + 1.0) shutGeometry(f, grid, shut, scratch);
         }
     }
