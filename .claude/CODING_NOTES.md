@@ -172,7 +172,7 @@ This note was created based on issues encountered with PyInstaller executables r
 
 ### Currents, tides and magnetics (Rule 6)
 
-- **CURENT, TS_FEB, TS_TIS.** Current strength and direction matter for Rule 6 and for the v0.6.0 flow milestone; not modelled. TS_PRH, TS_PNH, T_HMON and friends are not shipped in NOAA ENCs.
+- **CURENT, TS_FEB, TS_TIS.** Current strength and direction matter for Rule 6 and for the currents and flow theme in the roadmap backlog; not modelled. TS_PRH, TS_PNH, T_HMON and friends are not shipped in NOAA ENCs.
 - **MAGVAR, LOCMAG.** Variation converts bearings for display; a local anomaly warns of compass error. Information.
 
 ### Stations, signals and pilotage

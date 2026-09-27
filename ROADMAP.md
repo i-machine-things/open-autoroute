@@ -4,7 +4,7 @@ How versions work here: a numbered milestone below is a scoped piece of work, an
 
 ### `v0.1.0` — Rule-Compliant Core Auto-Router & Live Testing
 
-Status: the core router, the GPX output, the OpenCPN plugin and the 29-route benchmark exist. Still open: the NMEA streaming investigation and the live on-the-water runs.
+Status: the core router, the GPX output, the OpenCPN plugin and the 29-route benchmark exist. Still open: the live on-the-water runs.
 
 * **Static S-57 Parsing:** Extract depth contours (`DEPCNT`), land polygons (`LNDARE`), fairways (`FAIRWY`), traffic separation schemes (`TSS`), and hazards from ENC vector charts.  
 * **Safety Cost Grid:** Build a 2D spatial cost matrix enforcing hard barriers at `vessel draft + safety clearance` with exponential edge penalties for channel centering.  
@@ -12,32 +12,41 @@ Status: the core router, the GPX output, the OpenCPN plugin and the 29-route ben
   * **Rule 9 (Narrow Channels):** Force routing biases to the starboard/right side of channels and fairways.  
   * **Rule 10 (Traffic Separation Schemes):** Restrict routing to established lane vectors and enforce perpendicular crossings.  
 * **Pathfinding Core:** Implement \$A^\*\$ / Any-Angle pathfinding to export clean GPX route outputs into OpenCPN's Route Manager.  
-* **Legacy Hardware Integration:** Investigate NMEA 0183 route (`RTE`) and waypoint (`WPL`) sentence streaming directly into legacy serial inputs (such as the Garmin GPSMAP 541s) to bypass manual SD card GPX imports.  
-* **Live On-the-Water Testing:** Conduct live field validation runs on target marine hardware and legacy plotters.
+* **Live On-the-Water Testing:** Conduct live field validation runs, checking planned routes against a real plotter on the water (routes reach the plotter as GPX through OpenCPN; direct plotter communication is its own milestone, `v0.2.0`).
 
 **Done when:** the router produces rule-compliant routes on the benchmark regions below with no regression against the last approved run, the OpenCPN plugin plans and adds a route from inside OpenCPN, and a route has been checked on the water against a real plotter.
 
-### `v0.2.0` — Weather & Point-of-Sail Router
+### `v0.2.0` — Communications & Plotter Integration
+
+Everything about moving routes and live data between the router and other equipment, kept apart from the routing itself:
+
+* **Legacy Plotter Output:** Stream a planned route as NMEA 0183 route (`RTE`) and waypoint (`WPL`) sentences directly into legacy serial inputs (such as the Garmin GPSMAP 541s), so there is no manual SD card GPX import.  
+* **Live Data Input:** Receive live NMEA 0183 and Signal K data (position, wind, speed through water, engine and fuel) over serial, network and OpenCPN's own connections, as a transport the later features build on; interpreting it stays with those features.  
+* **Link Handling:** Connection setup, error handling and safe defaults for each link (no route is ever sent to a device without the user asking for it).
+
+**Done when (proposed):** a planned route appears on a legacy plotter over its serial input without touching a memory card, and live position and wind from a real instrument feed reach the router through the same layer.
+
+### `v0.3.0` — Weather & Point-of-Sail Router
 
 * **GRIB2 Weather Integration:** Ingest wind vectors and wave heights for point-of-sail routing and motor vs. sail recommendations.  
 * **Tack/Gybe Waypoint Generation:** Automatically generate optimized tacking and gybing legs based on true wind angles.
 
 **Done when (proposed):** a route can be planned with a GRIB wind and wave forecast, and the tack and gybe legs it produces match hand-worked ones on at least three test passages.
 
-### `v0.3.0` — Polar Performance Library
+### `v0.4.0` — Polar Performance Library
 
 * **Polar Database:** Integrate preset boat polars and ORC VPP database profiles to map vessel performance curves directly into the routing engine.
 
 **Done when (proposed):** a boat is chosen by name or polar file, and the planned time on a test passage is within a stated tolerance of the polar-predicted time.
 
-### `v0.4.0` — Adaptive Self-Tuning Engine
+### `v0.5.0` — Adaptive Self-Tuning Engine
 
-* **Live Telemetry Ingestion:** Ingest real-time NMEA 0183 / Signal K data (wind speed/direction, Speed Through Water, engine RPM, fuel flow).  
+* **Live Telemetry Use:** Use the live NMEA 0183 / Signal K data that the communications layer (`v0.2.0`) delivers (wind speed/direction, Speed Through Water, engine RPM, fuel flow).  
 * **Dynamic Auto-Tuning:** Provide user-selectable options for dynamic polar auto-tuning and real-time fuel range modeling.
 
 **Done when (proposed):** live wind, speed through water and fuel flow can feed the router, and its tuned polar is closer to logged performance than the preset one on a recorded trip.
 
-### `v0.5.0` — Standalone Cross-Platform App Release
+### `v0.6.0` — Standalone Cross-Platform App Release
 
 * **Flutter Framework:** Launch the standalone, hardware-accelerated cross-platform application for Android, iOS, Windows, macOS, and Linux.  
 * **Online NOAA Sync:** Connect the standalone app directly to live NOAA hydrographic data repositories and online chart distribution networks.

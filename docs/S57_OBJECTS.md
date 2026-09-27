@@ -173,9 +173,9 @@ The hazard, restricted-area, structure, bridge and cable, cardinal and isolated-
 
 | Code | Object | What it is | How a router should treat it | In the charts | Cells | Status |
 |---|---|---|---|---|---|---|
-| CURENT (36) | Current - non - gravitational | Current (velocity, direction). | Needed for the currents milestone (v0.6.0). | 1,239 point | 70 | **no** |
-| TS_FEB (160) | Tidal stream - flood/ebb | Tidal stream, flood and ebb. | v0.6.0. | 470 point, 2 area | 114 | **no** |
-| TS_TIS (139) | Tidal stream - time series | Tidal stream time series. | v0.6.0. | 8 point | 1 | **no** |
+| CURENT (36) | Current - non - gravitational | Current (velocity, direction). | Needed for the currents and flow theme in the roadmap backlog. | 1,239 point | 70 | **no** |
+| TS_FEB (160) | Tidal stream - flood/ebb | Tidal stream, flood and ebb. | The currents and flow theme in the roadmap backlog. | 470 point, 2 area | 114 | **no** |
+| TS_TIS (139) | Tidal stream - time series | Tidal stream time series. | The currents and flow theme in the roadmap backlog. | 8 point | 1 | **no** |
 | MAGVAR (81) | Magnetic variation | Magnetic variation. | Bearings for display. | 3,680 point, 12,718 area | 7,337 | **no** |
 | LOCMAG (78) | Local magnetic anomaly | Local magnetic anomaly. | Compass deviation warning. | 151 point, 142 area | 178 | **no** |
 
