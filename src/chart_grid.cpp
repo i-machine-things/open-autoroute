@@ -79,6 +79,26 @@ void paintLine(const ChartFeature& f, const CostGrid& grid, std::vector<uint8_t>
     }
 }
 
+// A polygon narrower than about a cell (a mole, a spit, a drying ledge) can slip between the cell centres and vanish. Measured as
+// 2 x area / perimeter in metres, which is the width of a long thin shape; when it is under 1.5 cells the outline cells are shut too.
+bool isThinPolygon(const ChartFeature& f, const CostGrid& grid) {
+    if (f.parts.empty()) return false;
+    const double lat0 = f.parts[0].points.empty() ? 0.0 : f.parts[0].points[0].lat;
+    const double kx = std::cos(lat0 * kPi / 180.0) * 111320.0, ky = 111320.0;
+    double area = 0.0, perimeter = 0.0;
+    for (size_t r = 0; r < f.parts.size(); ++r) {
+        const auto& v = f.parts[r].points;
+        double a = 0.0;
+        for (size_t i = 0, j = v.size() - 1; i < v.size(); j = i++) {
+            const double xi = v[i].lon * kx, yi = v[i].lat * ky, xj = v[j].lon * kx, yj = v[j].lat * ky;
+            a += xj * yi - xi * yj;
+            perimeter += std::hypot(xi - xj, yi - yj);
+        }
+        area += (r == 0 ? 1.0 : -1.0) * std::fabs(a) / 2.0;  // the first ring is the outside, the rest are holes
+    }
+    return perimeter > 0.0 && 2.0 * std::max(area, 0.0) / perimeter < 1.5 * grid.cellSizeM();
+}
+
 }  // namespace
 
 namespace {
@@ -181,17 +201,22 @@ AreaText readAreaText(const std::string& inform) {
     return AreaText::None;
 }
 
+// `shut` and `penalty` are hazards that stay on the grid whatever a finer chart says. `shutLocal` and `penaltyLocal` are the two things
+// a larger-scale chart legitimately answers, so they hold only for the cells this chart covers: an unsurveyed area, and the note that
+// an overview chart omits detail.
 void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const CostGrid& grid, std::vector<uint8_t>& shut,
-                        std::vector<float>& penalty, NoteSink& sink) {
+                        std::vector<float>& penalty, std::vector<uint8_t>& shutLocal, std::vector<float>& penaltyLocal, NoteSink& sink) {
     // Fixed things standing in the water, and areas nobody should enter, that the depth areas call open water.
-    static const char* kBlockAlways[] = {"UNSARE", "FSHFAC", "MARCUL", "PRDARE", "OSPARE", "HULKES", "SLCONS", "PONTON", "PILPNT",
+    static const char* kBlockAlways[] = {"FSHFAC", "MARCUL", "PRDARE", "OSPARE", "HULKES", "SLCONS", "PONTON", "PILPNT",
                                          "MORFAC", "FNCLNE", "DYKCON", "CAUSWY", "CONVYR", "PYLONS", "FLODOC", "DRYDOC", "GATCON", "DAMCON",
                                          "GRIDRN", "OILBAR", "RAPIDS", "WATFAL"};
     std::vector<uint8_t> scratch;
     for (const ChartFeature& f : chart.features) {
         const std::string& cls = f.objectClass;
         if (std::find(opt.skipClasses.begin(), opt.skipClasses.end(), cls) != opt.skipClasses.end()) continue;  // developer switch
-        if (contains(kBlockAlways, sizeof kBlockAlways / sizeof *kBlockAlways, cls)) {
+        if (cls == "UNSARE") {
+            shutGeometry(f, grid, shutLocal, scratch);
+        } else if (contains(kBlockAlways, sizeof kBlockAlways / sizeof *kBlockAlways, cls)) {
             shutGeometry(f, grid, shut, scratch);
         } else if (cls == "OBSTRN" || cls == "WRECKS" || cls == "UWTROC") {
             if (depthUnsafe(f, opt.minDepthM)) shutGeometry(f, grid, shut, scratch);
@@ -278,7 +303,7 @@ void applyHazardObjects(const ChartData& chart, const StampOptions& opt, const C
             std::string t = f.inform;
             std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             const bool scaleNote = t.find("more appropriate navigational purpose") != std::string::npos || t.find("omitted in this area") != std::string::npos;
-            raise(penalty, grid, f, scaleNote ? 1.5f : 3.0f);
+            raise(scaleNote ? penaltyLocal : penalty, grid, f, scaleNote ? 1.5f : 3.0f);
         } else if (cls == "DMPGRD") {
             // CATDPG (attribute 23): 2 chemical waste, 3 nuclear waste, 4 explosives, 5 spoil ground, 6 vessel dumping ground. The first
             // three are dangerous however deep the water is: blocked. Spoil and vessel grounds change depth and hold debris: very costly.
@@ -311,9 +336,12 @@ void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& g
     for (const ChartFeature& f : chart.features) {
         if (f.geometry != Geometry::Area) continue;
         if (f.objectClass == "DEPARE" || f.objectClass == "DRGARE") {
-            paintArea(f, (!std::isnan(f.drval1) && f.drval1 >= minDepthM) ? kOpen : kShut, grid, state);
+            const bool deepEnough = !std::isnan(f.drval1) && f.drval1 >= minDepthM;
+            paintArea(f, deepEnough ? kOpen : kShut, grid, state);
+            if (!deepEnough && isThinPolygon(f, grid)) paintLine(f, grid, state);  // a thin shoal or bar must not vanish between cell centres
         } else if (f.objectClass == "LNDARE") {
             paintArea(f, kShut, grid, state);
+            if (isThinPolygon(f, grid)) paintLine(f, grid, state);  // a mole or spit narrower than a cell
         }
     }
     covered = state;  // point hazards below must not extend the chart's coverage
@@ -356,34 +384,40 @@ void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& g
 
     // ---- Hazard objects (see StampOptions / stampChart docs). `shut` cells are blocked whatever the depth areas say; `penalty` is a cost
     // multiplier (never compounded across charts: the largest wins).
-    std::vector<uint8_t> shut(state.size(), 0);
-    std::vector<float> penalty(state.size(), 1.0f);
+    std::vector<uint8_t> shut(state.size(), 0), shutLocal(state.size(), 0);
+    std::vector<float> penalty(state.size(), 1.0f), penaltyLocal(state.size(), 1.0f);
     NoteSink sink;
     sink.layer = options.areas;
     if (sink.layer) {
         sink.at.assign(state.size(), -1);
         if (sink.layer->id.size() != state.size()) sink.layer->id.assign(state.size(), -1);
     }
-    if (options.hazardObjects) applyHazardObjects(chart, options, grid, shut, penalty, sink);
+    if (options.hazardObjects) applyHazardObjects(chart, options, grid, shut, penalty, shutLocal, penaltyLocal, sink);
 
     for (int row = 0; row < grid.rows(); ++row) {
         for (int col = 0; col < grid.cols(); ++col) {
             const size_t i = static_cast<size_t>(row) * grid.cols() + col;
+            const Cell cell{col, row};
             const uint8_t s = state[i];
-            if (s != kUnknown) grid.setCost({col, row}, s == kOpen ? 1.0f : kBlocked);
-            if (s == kOpen && channel[i]) grid.setChannel({col, row});
-            if (s == kOpen && zone[i]) grid.setZone({col, row});  // water, but a separation zone: crossable only square on
+            // Hazards accumulate over every chart; only the depth and land verdict is replaced by a chart that covers the cell.
+            if (shut[i]) grid.setHazardShut(cell);
+            if (penalty[i] > 1.0f) grid.raiseHazardCost(cell, penalty[i]);
+            if (s != kUnknown) grid.setCost(cell, s == kOpen ? 1.0f : kBlocked);
+            if (s == kOpen && channel[i]) grid.setChannel(cell);
+            if (s == kOpen && zone[i]) grid.setZone(cell);  // water, but a separation zone: crossable only square on
             if (s == kOpen && caution[i]) {
-                grid.setCost({col, row}, static_cast<float>(cautionFactor));
-                grid.setCaution({col, row});
+                grid.setCost(cell, static_cast<float>(cautionFactor));
+                grid.setCaution(cell);
             }
-            if (sink.layer && (s != kUnknown || shut[i])) sink.layer->id[i] = -1;  // a chart that covers the cell replaces what an older one said
-            if (shut[i]) {
-                grid.setCost({col, row}, kBlocked);
-            } else if (penalty[i] > 1.0f && !grid.blocked({col, row})) {
-                const float before = grid.cost({col, row});
-                grid.setCost({col, row}, std::max(before, penalty[i]));
-                if (sink.layer && sink.at[i] >= 0 && penalty[i] >= before) sink.layer->id[i] = sink.at[i];
+            if (shutLocal[i] || grid.isHazardShut(cell)) {
+                grid.setCost(cell, kBlocked);
+            } else if (!grid.blocked(cell)) {
+                const float p = std::max(grid.hazardCost(cell), penaltyLocal[i]);
+                if (p > 1.0f) grid.setCost(cell, std::max(grid.cost(cell), p));
+            }
+            if (sink.layer && sink.at[i] >= 0) {  // keep the dearest costed area seen on any chart
+                int32_t& cur = sink.layer->id[i];
+                if (cur < 0 || sink.layer->notes[cur].factor < sink.layer->notes[sink.at[i]].factor) cur = sink.at[i];
             }
         }
     }

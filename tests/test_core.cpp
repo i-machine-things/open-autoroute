@@ -232,7 +232,7 @@ static void testStampChart() {
     CHECK(g.blocked({3, 3}));            // shallow wreck
     CHECK(g.blocked({2, 4}));            // obstruction with no depth is treated as unsafe
     CHECK(g.cost({4, 3}) == 1.0f);       // wreck deeper than draft + clearance is harmless
-    CHECK(g.cost({11, 5}) == 7.0f);      // not covered by the chart: untouched
+    CHECK(g.cost({11, 8}) == 7.0f);      // not covered by the chart: untouched
     CHECK(g.blocked({10, 4}));           // unknown DRVAL1 area is blocked, not assumed safe
 }
 
@@ -1040,9 +1040,9 @@ static void testRestrictedAreaTextAndNotes() {
     CHECK(layer.notes[0].text.find("Naval Operating Area") == 0);
     CHECK(layer.id[5 * 12 + 1] == 0);
     CHECK(layer.id[5 * 12 + 8] == -1);             // outside the area
-    // A finer chart that covers the same water and has no such area clears it, as it clears the cost; one that repeats it adds no second note.
+    // A finer chart that covers the same water and says nothing about the area does not erase it (see testHazardsSurviveFinerChart).
     stampNoted({}, layer);
-    CHECK(layer.id[5 * 12 + 1] == -1);
+    CHECK(layer.id[5 * 12 + 1] == 0);
     stampNoted({resare(0, 1u << 9, careText)}, layer);
     stampNoted({resare(0, 1u << 9, careText)}, layer);
     CHECK(layer.notes.size() == 1 && layer.id[5 * 12 + 1] == 0);
@@ -1050,6 +1050,66 @@ static void testRestrictedAreaTextAndNotes() {
     AreaLayer none;
     stampNoted({resare(1u << 7, 0, "")}, none);
     CHECK(none.id[5 * 12 + 1] == -1);
+}
+
+// A finer chart re-draws the depth areas but not every hazard: a wreck, a prohibited area or a low bridge that only the coarser chart
+// carries must survive it. (Unsurveyed areas and the "less detail" note are the exceptions: a larger-scale chart does answer those.)
+static void testHazardsSurviveFinerChart() {
+    CostGrid g = makeGrid(12, 10);
+    g.fill(kBlocked);
+    ChartData coarse, fine;
+    coarse.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.988, 30.0));
+    ChartFeature wreck = pointFeature("WRECKS", {9, 3}, g, 1.0);   // 1 m over it, on a cell of its own
+    ChartFeature banned = areaFeature("RESARE", 45.990, 46.0, -123.994, -123.992);          // cols 6-7
+    banned.restrn = 1u << 7;
+    ChartFeature military = areaFeature("MIPARE", 45.990, 46.0, -123.990, -123.988);        // cols 10-11
+    ChartFeature unsurveyed = areaFeature("UNSARE", 45.990, 46.0, -123.998, -123.996);      // cols 2-3, rows all
+    ChartFeature overview = areaFeature("CTNARE", 45.990, 45.992, -124.0, -123.996);        // cols 0-3, rows 8-9
+    overview.inform = "Most features, including bathymetry, are omitted in this area. Mariners should use a more appropriate navigational purpose chart.";
+    coarse.features.push_back(wreck);
+    coarse.features.push_back(banned);
+    coarse.features.push_back(military);
+    coarse.features.push_back(unsurveyed);
+    coarse.features.push_back(overview);
+    fine.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.988, 30.0));   // the same water, nothing else drawn
+    StampOptions o;
+    stampChart(coarse, o, g);
+    CHECK(g.blocked({9, 3}) && g.blocked({2, 5}) && g.blocked({6, 5}) && g.cost({10, 5}) == 30.0f && g.cost({0, 8}) == 1.5f);
+    stampChart(fine, o, g);
+    CHECK(g.blocked({9, 3}));                        // the wreck survives
+    CHECK(g.blocked({6, 5}) && g.blocked({7, 5}));   // prohibited area survives
+    CHECK(g.cost({10, 5}) == 30.0f);                 // so does the military area cost
+    CHECK(!g.blocked({3, 5}));                       // the finer chart has surveyed what the coarse one called unsurveyed
+    CHECK(g.cost({0, 8}) == 1.0f);                   // and the overview-chart note is gone
+}
+
+// Land or a shoal narrower than a cell must still block: a cell centre test alone lets a mole or a spit vanish.
+static void testThinPolygonsStillBlock() {
+    CostGrid g = makeGrid(12, 10);
+    g.fill(kBlocked);
+    ChartData d;
+    d.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.988, 30.0));
+    // 0.00002 degrees is about 2 m: a breakwater far thinner than a 111 m cell, running through row 4 between cell centres.
+    d.features.push_back(areaFeature("LNDARE", 45.99590, 45.99592, -123.998, -123.992));
+    // A shoal strip the same way, in row 7, drawn as a shallow depth area.
+    d.features.push_back(areaFeature("DEPARE", 45.99290, 45.99292, -123.998, -123.992, 0.5));
+    StampOptions o;
+    stampChart(d, o, g);
+    bool land = false, shoal = false;
+    for (int col = 2; col <= 8; ++col) {
+        land = land || g.blocked({col, 4}) || g.blocked({col, 3});
+        shoal = shoal || g.blocked({col, 7}) || g.blocked({col, 6});
+    }
+    CHECK(land);
+    CHECK(shoal);
+    // A normal coast is not thickened: a polygon several cells wide keeps its open water right up to its edge.
+    CostGrid h = makeGrid(12, 10);
+    h.fill(kBlocked);
+    ChartData e;
+    e.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.988, 30.0));
+    e.features.push_back(areaFeature("LNDARE", 45.990, 46.0, -124.0, -123.995));   // cols 0-4
+    stampChart(e, o, h);
+    CHECK(h.blocked({4, 5}) && !h.blocked({5, 5}) && !h.blocked({6, 5}));
 }
 
 static void testHazardPenalties() {
@@ -1368,6 +1428,8 @@ int main() {
     testHazardBlocksAlways();
     testHazardRestrictedAreas();
     testRestrictedAreaTextAndNotes();
+    testHazardsSurviveFinerChart();
+    testThinPolygonsStillBlock();
     testHazardPenalties();
     testHazardMarks();
     testHazardOverheadClearance();
