@@ -79,6 +79,7 @@ struct PlanResult {
     std::vector<size_t> pointIndex;           // where from, each via point and to are in `route` (planning only)
     int failedLeg = -1;                       // on "no_route" with via points: the leg with no route (leg i leaves point i; from is 0)
     std::vector<AreaCrossing> areasCrossed;   // dearest first
+    std::string checkReport;        // the human-readable report on what the route crosses (the same lines `out` receives at the end)
     std::string summaryLine;        // one machine-readable line ("SUMMARY found=1 ..." or "SUMMARY found=0 reason=..."), for scripts
     std::shared_ptr<CostGrid> grid; // the router's view of the water, for drawing a picture
 };

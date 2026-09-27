@@ -422,6 +422,11 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
         }
     }
     if (!report("Checking the route", 0.0, 0.95, 1.0)) return failed("cancelled");
+    // What the route crosses is also kept in the result, so a front end can show the report without the chart-by-chart log.
+    const std::function<void(const std::string&)> checkOut = [&](const std::string& s) {
+        result.checkReport += s;
+        if (hooks.out) hooks.out(s);
+    };
     double nm = 0;
     for (size_t i = 1; i < route.size(); ++i) nm += haversineM(route[i - 1], route[i]) / 1852.0;
     // Clearance report: sample each leg about every cell and look up the distance to blocked water. Samples within
@@ -502,7 +507,7 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     }
     if (!clearances.empty()) {
         std::sort(clearances.begin(), clearances.end());
-        emitTo(hooks.out, "clearance from land, shoal or uncharted water (excluding 1 km at each end): closest %.0f m, "
+        emitTo(checkOut, "clearance from land, shoal or uncharted water (excluding 1 km at each end): closest %.0f m, "
                     "median %.0f m\n", clearances.front(), clearances[clearances.size() / 2]);
     }
     // Restricted and dangerous areas crossed, dearest first. The router treats these as costs (so a harbour is never cut off), which
@@ -515,12 +520,12 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     double areasM = 0.0;
     for (const auto& [id, ac] : areasCrossed) areasM += ac.m;
     if (areasCrossed.empty()) {
-        emitTo(hooks.out, "restricted or dangerous areas crossed: none charted\n");
+        emitTo(checkOut, "restricted or dangerous areas crossed: none charted\n");
     } else {
-        emitTo(hooks.out, "restricted or dangerous areas crossed (check the rules for each before you go):\n");
+        emitTo(checkOut, "restricted or dangerous areas crossed (check the rules for each before you go):\n");
         for (const auto& [id, ac] : areasCrossed) {
             const AreaNote& n = areaLayer.notes[id];
-            emitTo(hooks.out, "  %s (x%.1f): %.1f nm in %d stretch(es), first near %.4f,%.4f%s%s\n", n.kind.c_str(), n.factor, ac.m / 1852.0,
+            emitTo(checkOut, "  %s (x%.1f): %.1f nm in %d stretch(es), first near %.4f,%.4f%s%s\n", n.kind.c_str(), n.factor, ac.m / 1852.0,
                         ac.stretches, ac.at.lat, ac.at.lon, n.text.empty() ? "" : ": ", n.text.c_str());
         }
     }
@@ -565,26 +570,26 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
         result.summaryLine = sb;
     };
     if (evaluating) {
-        emitTo(hooks.out, "unsafe by the chart rules: %.0f m of %.0f m (%.1f%%) in %zu stretch(es)\n", unsafeM, nm * 1852.0,
+        emitTo(checkOut, "unsafe by the chart rules: %.0f m of %.0f m (%.1f%%) in %zu stretch(es)\n", unsafeM, nm * 1852.0,
                     100.0 * unsafeM / (nm * 1852.0), unsafeSpots.size());
         for (size_t i = 0; i < unsafeSpots.size() && i < 10; ++i) {
-            emitTo(hooks.out, "  at %.5f,%.5f (%.1f nm along)\n", unsafeSpots[i].at.lat, unsafeSpots[i].at.lon,
+            emitTo(checkOut, "  at %.5f,%.5f (%.1f nm along)\n", unsafeSpots[i].at.lat, unsafeSpots[i].at.lon,
                         unsafeSpots[i].alongM / 1852.0);
         }
-        emitTo(hooks.out, "precautionary areas: %.0f m in %d stretch(es)\n", cautionM, cautionStretches);
-        emitTo(hooks.out, "narrow channels: %.0f m inside, %.0f m running just outside; buoy gates: %d near the route, %d missed\n", narrowInM, narrowNearOutM, gatesNear, gatesMissed);
-        emitTo(hooks.out, "traffic lanes (Rule 10): %zu lane transit(s): %d with the flow, %d crossing, %d wrong-way (%.0f m)\n",
+        emitTo(checkOut, "precautionary areas: %.0f m in %d stretch(es)\n", cautionM, cautionStretches);
+        emitTo(checkOut, "narrow channels: %.0f m inside, %.0f m running just outside; buoy gates: %d near the route, %d missed\n", narrowInM, narrowNearOutM, gatesNear, gatesMissed);
+        emitTo(checkOut, "traffic lanes (Rule 10): %zu lane transit(s): %d with the flow, %d crossing, %d wrong-way (%.0f m)\n",
                     laneRuns.size(), withFlow, crossings, wrongWay, wrongWayM);
         for (size_t i = 0; i < laneRuns.size() && i < 12; ++i) {
             const LaneRun& r = laneRuns[i];
             const double mean = r.thetaSum / r.n;
             const char* kind = mean <= 25.0 ? "with flow" : mean >= 155.0 ? "WRONG WAY" : "crossing";
-            emitTo(hooks.out, "  %-9s lane %3.0f deg, %4.0f m in lane, heading %.0f deg off the flow", kind, r.lane, r.lengthM, mean);
-            if (mean > 25.0 && mean < 155.0) emitTo(hooks.out, " (%.0f deg from square)", std::fabs(mean - 90.0));
-            emitTo(hooks.out, " at %.4f,%.4f\n", r.at.lat, r.at.lon);
+            emitTo(checkOut, "  %-9s lane %3.0f deg, %4.0f m in lane, heading %.0f deg off the flow", kind, r.lane, r.lengthM, mean);
+            if (mean > 25.0 && mean < 155.0) emitTo(checkOut, " (%.0f deg from square)", std::fabs(mean - 90.0));
+            emitTo(checkOut, " at %.4f,%.4f\n", r.at.lat, r.at.lon);
         }
-        if (crossings > 0) emitTo(hooks.out, "  worst crossing is %.0f deg from square\n", worstOff);
-        emitTo(hooks.out, "%zu charts, %zu waypoints, %.1f nm (straight line %.1f nm)\n", static_cast<size_t>(used), route.size(),
+        if (crossings > 0) emitTo(checkOut, "  worst crossing is %.0f deg from square\n", worstOff);
+        emitTo(checkOut, "%zu charts, %zu waypoints, %.1f nm (straight line %.1f nm)\n", static_cast<size_t>(used), route.size(),
                     nm, haversineM(from, to) / 1852.0);
         printSummary();
         result.status = 0;
