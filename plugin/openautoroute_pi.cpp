@@ -1,7 +1,6 @@
 #include "openautoroute_pi.h"
 
 #include <wx/wx.h>
-#include <wx/filepicker.h>
 #include <wx/fileconf.h>
 #include <wx/gauge.h>
 
@@ -81,7 +80,6 @@ private:
     wxTextCtrl *from_, *to_, *length_, *draft_, *clearance_, *airDraft_, *report_;
     wxChoice* units_;
     wxCheckBox* sail_;
-    wxDirPickerCtrl* encDir_;
     wxGauge* gauge_;
     wxStaticText* phase_;
     wxButton *plan_, *cancel_;
@@ -94,13 +92,12 @@ private:
 AutoRouteDialog::AutoRouteDialog(wxWindow* parent, openautoroute_pi* owner)
     : wxDialog(parent, wxID_ANY, "Auto-route", wxDefaultPosition, wxSize(520, 640), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER), owner_(owner) {
     wxConfigBase* cfg = GetOCPNConfigObject();
-    wxString from, to, enc, len = "12", draft = "1.5", clr = "1.0", air;
+    wxString from, to, len = "12", draft = "1.5", clr = "1.0", air;
     long units = 0, sail = 0;
     if (cfg) {
         cfg->SetPath("/PlugIns/OpenAutoRoute");
         cfg->Read("From", &from);
         cfg->Read("To", &to);
-        cfg->Read("EncDir", &enc);
         cfg->Read("Units", &units, 0L);
         cfg->Read("Sail", &sail, 0L);
         cfg->Read("Length", &len);
@@ -109,7 +106,6 @@ AutoRouteDialog::AutoRouteDialog(wxWindow* parent, openautoroute_pi* owner)
         cfg->Read("AirDraft", &air);
         cfg->SetPath("/");
     }
-    if (enc.IsEmpty()) enc = owner_->DefaultEncDir();
 
     auto* top = new wxBoxSizer(wxVERTICAL);
     auto* grid = new wxFlexGridSizer(3, 5, 5);
@@ -164,10 +160,8 @@ AutoRouteDialog::AutoRouteDialog(wxWindow* parent, openautoroute_pi* owner)
     grid->AddSpacer(0);
     top->Add(grid, 0, wxEXPAND | wxALL, 8);
 
-    top->Add(label("S-57 chart folder (ENC_ROOT)"), 0, wxLEFT | wxRIGHT, 8);
-    encDir_ = new wxDirPickerCtrl(this, wxID_ANY, enc, "Choose the ENC_ROOT folder", wxDefaultPosition, wxDefaultSize,
-                                  wxDIRP_USE_TEXTCTRL | wxDIRP_DIR_MUST_EXIST);
-    top->Add(encDir_, 0, wxEXPAND | wxALL, 8);
+    // Charts come from OpenCPN's own chart folders: nothing to configure here.
+    top->Add(label("Charts: S-57 (ENC) cells in OpenCPN's chart folders"), 0, wxLEFT | wxRIGHT | wxTOP, 8);
 
     phase_ = new wxStaticText(this, wxID_ANY, "Ready");
     top->Add(phase_, 0, wxLEFT | wxRIGHT, 8);
@@ -205,7 +199,6 @@ void AutoRouteDialog::Save() {
     cfg->SetPath("/PlugIns/OpenAutoRoute");
     cfg->Write("From", from_->GetValue());
     cfg->Write("To", to_->GetValue());
-    cfg->Write("EncDir", encDir_->GetPath());
     cfg->Write("Units", static_cast<long>(units_->GetSelection()));
     cfg->Write("Sail", static_cast<long>(sail_->GetValue() ? 1 : 0));
     cfg->Write("Length", length_->GetValue());
@@ -274,12 +267,13 @@ void AutoRouteDialog::OnPlan(wxCommandEvent&) {
         wxMessageBox("Air draft must be a positive number, or blank to estimate it from the vessel length.", "Auto-route");
         return;
     }
-    if (encDir_->GetPath().IsEmpty()) {
-        wxMessageBox("Choose the folder that holds your NOAA S-57 chart cells (an ENC_ROOT folder).", "Auto-route");
+    const std::vector<std::string> chartDirs = owner_->ChartFolders();
+    if (chartDirs.empty()) {
+        wxMessageBox("OpenCPN has no chart folders yet. Add the folder with your NOAA S-57 (ENC) cells in Options, Charts.", "Auto-route");
         return;
     }
     Save();
-    req.encDir = encDir_->GetPath().ToStdString();
+    req.encDirs = chartDirs;
     req.lengthM = ToMetres(len);
     req.draftM = ToMetres(draft);
     req.clearanceM = ToMetres(clr);
@@ -439,12 +433,16 @@ wxString openautoroute_pi::GetLongDescription() {
            "A planning aid only; not for navigation. Check every route against the chart.";
 }
 
-wxString openautoroute_pi::DefaultEncDir() const {
-    const wxArrayString dirs = GetChartDBDirArrayString();
-    for (const wxString& d : dirs) {
-        if (d.Lower().Contains("enc")) return d;   // a chart folder that looks like ENC_ROOT
+// OpenCPN's own chart folders, as set in Options, Charts. The planner searches them (and everything below) for S-57 cells.
+std::vector<std::string> openautoroute_pi::ChartFolders() const {
+    std::vector<std::string> out;
+    for (const wxString& d : GetChartDBDirArrayString()) {
+        std::string dir = d.ToStdString();
+        const size_t caret = dir.find('^');   // OpenCPN stores a folder as "path^flags" in its config
+        if (caret != std::string::npos) dir.resize(caret);
+        if (!dir.empty()) out.push_back(dir);
     }
-    return dirs.IsEmpty() ? wxString() : dirs[0];
+    return out;
 }
 
 void openautoroute_pi::ShowDialog() {

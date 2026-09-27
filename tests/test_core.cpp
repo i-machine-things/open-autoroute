@@ -1,3 +1,5 @@
+#include <filesystem>
+#include <fstream>
 #include <cmath>
 #include <functional>
 #include <cstdint>
@@ -1329,6 +1331,31 @@ static void testSharedScratchStamping() {
     CHECK(!a.blocked({20, 25}));                             // open water the coarse chart supplies, away from both fine charts
 }
 
+// Cells are found under the folder however deep the catalogue is: the folder given may be ENC_ROOT or one above it.
+static void testFindEncCells() {
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / "oar_test_enc_tree";
+    fs::remove_all(root);
+    fs::create_directories(root / "ENC_ROOT" / "US5WA3CJ");
+    fs::create_directories(root / "ENC_ROOT" / "US5FL1XX");
+    fs::create_directories(root / "ENC_ROOT" / "US5ZZ9NO");
+    for (const char* n : {"US5WA3CJ", "US5FL1XX", "US5ZZ9NO"}) std::ofstream(root / "ENC_ROOT" / n / (std::string(n) + ".000")) << "x";
+    const std::string us = "\x1f", leader = "00119 D     00053   550400010000600000CATD0006000006";
+    auto rec = [&](int id, const char* n, const char* s, const char* w, const char* nn, const char* e) {
+        return std::string("CD") + (id < 10 ? "000000000" : "00000000") + std::to_string(id) + n + "\\" + n + ".000" + us + us + "V01X01" + us + "BIN" + s + us + w + us + nn + us + e + us + us + us;
+    };
+    std::ofstream(root / "ENC_ROOT" / "CATALOG.031") << leader << "\x1e" << rec(2, "US5WA3CJ", "45.6", "-121.95", "45.68", "-121.88") << "\x1e" << leader << "\x1e"
+                                                     << rec(3, "US5FL1XX", "25.0", "-81.0", "25.5", "-80.5") << "\x1e";   // US5ZZ9NO is not listed
+    const auto near = findEncCells(root.string(), 45.62, 45.66, -121.93, -121.90);        // the folder ABOVE ENC_ROOT
+    std::vector<std::string> names;
+    for (const auto& c : near) names.push_back(c.first);
+    std::sort(names.begin(), names.end());
+    CHECK(names.size() == 2 && names[0] == "US5WA3CJ" && names[1] == "US5ZZ9NO");        // the far cell is skipped; an unlisted one is kept
+    CHECK(findEncCells(root.string(), 45.62, 45.66, -121.93, -121.90, false).size() == 3);   // without the catalogue every cell stays
+    CHECK(findEncCells((root / "ENC_ROOT").string(), 25.1, 25.3, -80.9, -80.6).size() == 2);  // the ENC_ROOT folder itself works too
+    fs::remove_all(root);
+}
+
 static void testHazardPenalties() {
     ChartFeature military = areaFeature("MIPARE", 45.996, 46.0, -124.000, -123.996);   // cols 0-3, rows 0-3: heavily costly, never a wall
     ChartFeature caution = areaFeature("CTNARE", 45.990, 45.994, -124.000, -123.996);   // cols 0-3, rows 6-9
@@ -1657,6 +1684,7 @@ int main() {
     testSearchProgressAndCancel();
     testSuggestedCellSize();
     testEncCatalog();
+    testFindEncCells();
     testSharedScratchStamping();
     testLockCorridor();
     testThinPolygonsStillBlock();

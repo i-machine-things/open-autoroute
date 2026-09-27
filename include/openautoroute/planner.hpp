@@ -7,6 +7,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "openautoroute/cost_grid.hpp"
@@ -16,7 +17,7 @@ namespace oar {
 /// Everything a plan depends on. Distances are metres, depths metres, positions decimal degrees (the core is metric and nautical;
 /// converting to feet or knots is the front end's job).
 struct PlanRequest {
-    std::string encDir;                 // folder searched recursively for ENC base cells (.000)
+    std::vector<std::string> encDirs;   // folders searched recursively for ENC base cells (.000); a front end passes the chart folders it already knows
     LatLon from{}, to{};
     std::vector<LatLon> evalRoute;      // if two or more points: score this route instead of planning one (from/to are taken from it)
     double draftM = 1.5, clearanceM = 1.0;
@@ -86,6 +87,12 @@ struct CellExtent {
 /// Read the cell extents from the bytes of a CATALOG.031 file, keyed by cell name (e.g. "US5WA3CJ"). Lets the planner skip the thousands
 /// of cells a route does not touch without opening them. Entries it cannot read are left out; an empty map means "no catalogue".
 std::map<std::string, CellExtent> parseEncCatalog(const std::string& bytes);
+
+/// The ENC cells (name, path) under `encDir` that may touch the box, found by searching every folder below it. A CATALOG.031 anywhere in
+/// that tree (NOAA's ENC_ROOT has one) lets the cells the box cannot touch be skipped without opening them, so it does not matter whether
+/// `encDir` is the ENC_ROOT folder or a folder above it. `useCatalogue` false keeps every cell (to compare speed).
+std::vector<std::pair<std::string, std::string>> findEncCells(const std::string& encDir, double minLat, double maxLat, double minLon,
+                                                              double maxLon, bool useCatalogue = true);
 
 /// A cell size in metres for a route between two points: `preferredM` when the grid stays within `maxCells`, otherwise the smallest
 /// multiple of 10 m that does. A front end uses this so a long passage never asks for more memory than the machine has (the planner

@@ -197,7 +197,7 @@ int main(int argc, char** argv) {
         else { usage(argv[0]); return 2; }
     }
     PlanRequest req;
-    req.encDir = encDir;
+    if (!encDir.empty()) req.encDirs.push_back(encDir);
     req.from = from;
     req.to = to;
     req.draftM = draft;

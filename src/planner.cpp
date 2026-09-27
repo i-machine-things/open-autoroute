@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -112,6 +113,43 @@ std::map<std::string, CellExtent> parseEncCatalog(const std::string& bytes) {
     return out;
 }
 
+std::vector<std::pair<std::string, std::string>> findEncCells(const std::string& encDir, double minLat, double maxLat, double minLon,
+                                                              double maxLon, bool useCatalogue) {
+    // NOAA's ENC_ROOT lists every cell's extent in CATALOG.031. With it, the cells a route cannot touch are skipped without being opened
+    // (a full set is thousands of cells, and opening them all is what takes minutes on a small machine). A generous margin means nothing
+    // the exact check made after loading would have kept is lost. A cell no catalogue lists is kept.
+    std::vector<fs::path> cellFiles, catalogues;
+    std::error_code ec;
+    for (fs::recursive_directory_iterator it(encDir, fs::directory_options::skip_permission_denied, ec), end; !ec && it != end; it.increment(ec)) {
+        if (!it->is_regular_file(ec)) continue;
+        const fs::path& p = it->path();
+        std::string file = p.filename().string();
+        for (char& c : file) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        if (file == "CATALOG.031") catalogues.push_back(p);
+        else if (p.extension() == ".000") cellFiles.push_back(p);
+    }
+    std::map<std::string, CellExtent> catalogue;
+    if (useCatalogue) {
+        for (const fs::path& c : catalogues) {
+            std::ifstream in(c, std::ios::binary);
+            if (!in) continue;
+            for (const auto& kv : parseEncCatalog(std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()))) catalogue.insert(kv);
+        }
+    }
+    constexpr double kMarginDeg = 0.1;
+    std::vector<std::pair<std::string, std::string>> out;
+    for (const fs::path& p : cellFiles) {
+        const std::string name = p.stem().string();
+        const auto known = catalogue.find(name);
+        if (known != catalogue.end()) {
+            const CellExtent& x = known->second;
+            if (x.north < minLat - kMarginDeg || x.south > maxLat + kMarginDeg || x.east < minLon - kMarginDeg || x.west > maxLon + kMarginDeg) continue;
+        }
+        out.emplace_back(name, p.string());
+    }
+    return out;
+}
+
 double suggestedCellM(LatLon from, LatLon to, double preferredM, double maxCells) {
     // The same box the planner uses: the endpoints plus a margin of 0.03 degrees or a quarter of the span.
     const double dLat = std::fabs(to.lat - from.lat), dLon = std::fabs(to.lon - from.lon);
@@ -125,7 +163,7 @@ double suggestedCellM(LatLon from, LatLon to, double preferredM, double maxCells
 
 PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     PlanResult result;
-    const std::string& encDir = req.encDir;
+    const std::vector<std::string>& encDirs = req.encDirs;
     const bool evaluating = req.evalRoute.size() >= 2;
     const std::vector<LatLon>& given = req.evalRoute;
     LatLon from = req.from, to = req.to;
@@ -142,7 +180,7 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     std::string routeName = req.routeName;
     const auto startedAt = std::chrono::steady_clock::now();
     double snapStartM = 0.0, snapEndM = 0.0;
-    if (encDir.empty() || cellM <= 0.0 || draft < 0.0 || clearance < 0.0) {
+    if (encDirs.empty() || cellM <= 0.0 || draft < 0.0 || clearance < 0.0) {
         emitTo(hooks.err, "the request needs an ENC folder, a positive cell size and non-negative draft and clearance\n");
         result.status = 2;
         result.failReason = "bad_request";
@@ -183,24 +221,11 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
 
     // Load overlapping cells; stamp coarse-to-fine by the usage band in the cell name (US5xxxxx = harbour scale).
     std::vector<std::pair<std::string, fs::path>> cells;
-    // NOAA's ENC_ROOT lists every cell's extent in CATALOG.031. With it, the cells a route cannot touch are skipped without being opened
-    // (a full set is thousands of cells, and opening them all is what takes minutes on a small machine). A generous margin means nothing
-    // the exact check below would have kept is lost; without a catalogue every cell is opened, as before.
-    std::map<std::string, CellExtent> catalogue;
-    {
-        std::ifstream cat(fs::path(encDir) / "CATALOG.031", std::ios::binary);
-        if (cat && req.useCatalogue) catalogue = parseEncCatalog(std::string((std::istreambuf_iterator<char>(cat)), std::istreambuf_iterator<char>()));
-    }
-    constexpr double kCatalogueMarginDeg = 0.1;
-    for (const auto& e : fs::recursive_directory_iterator(encDir)) {
-        if (!e.is_regular_file() || e.path().extension() != ".000") continue;
-        const auto known = catalogue.find(e.path().stem().string());
-        if (known != catalogue.end()) {
-            const CellExtent& x = known->second;
-            if (x.north < box.minLat - kCatalogueMarginDeg || x.south > box.maxLat + kCatalogueMarginDeg ||
-                x.east < box.minLon - kCatalogueMarginDeg || x.west > box.maxLon + kCatalogueMarginDeg) continue;
+    for (const std::string& dir : encDirs) {
+        for (const auto& [name, path] : findEncCells(dir, box.minLat, box.maxLat, box.minLon, box.maxLon, req.useCatalogue)) {
+            const bool dup = std::any_of(cells.begin(), cells.end(), [&](const auto& c) { return c.second == fs::path(path); });   // folders may nest
+            if (!dup) cells.emplace_back(name, path);
         }
-        cells.emplace_back(e.path().stem().string(), e.path());
     }
     std::sort(cells.begin(), cells.end(), [](const auto& a, const auto& b) {
         const char ba = a.first.size() > 2 ? a.first[2] : '0', bb = b.first.size() > 2 ? b.first[2] : '0';
@@ -283,7 +308,7 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     }
     emitTo(hooks.out, "air draft %.1f m%s: bridges and overhead cables need %.1f m clearance\n", airDraft, airDraftArg < 0 ? " (estimated from the length; set --air-draft-m)" : "", airDraft + 1.0);
     if (used == 0) {
-        emitTo(hooks.err, "no ENC cells under %s overlap the route area\n", encDir.c_str());
+        emitTo(hooks.err, "no S-57 (ENC) cells in the chart folders overlap the route area\n");
         return failed("no_charts");
     }
 

@@ -5,7 +5,9 @@
 // this file adds the buttons, the dialog, a progress bar, and the conversion between the units a person sails in and the core's metres.
 
 #include <memory>
+#include <string>
 #include <thread>
+#include <vector>
 
 #include "ocpn_plugin.h"
 #include "openautoroute/planner.hpp"
@@ -41,7 +43,7 @@ public:
     double ShipLon() const { return shipLon_; }
     double CursorLat() const { return cursorLat_; }
     double CursorLon() const { return cursorLon_; }
-    wxString DefaultEncDir() const;
+    std::vector<std::string> ChartFolders() const;
     void Closed() { CancelPick(); dialog_ = nullptr; }
 
     /// Hide the dialog and let the next left-click on the chart set its "from" or "to" position (a right-click cancels).
