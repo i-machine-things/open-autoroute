@@ -352,14 +352,20 @@ void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& g
     const bool applyTss = options.applyTss;
     std::vector<uint8_t> state(static_cast<size_t>(grid.cols()) * grid.rows(), kUnknown);
     std::vector<uint8_t> covered(state.size(), 0);
+    std::vector<uint8_t> land(state.size(), 0), deepInside(state.size(), 0);  // for lock approaches, below
 
     for (const ChartFeature& f : chart.features) {
         if (f.geometry != Geometry::Area) continue;
         if (f.objectClass == "DEPARE" || f.objectClass == "DRGARE") {
             const bool deepEnough = !std::isnan(f.drval1) && f.drval1 >= minDepthM;
+            // A depth area that shoals to the bank but is deep enough somewhere inside (DRVAL2): a lock approach can use it.
+            if (!deepEnough && !std::isnan(f.drval2) && f.drval2 >= minDepthM) {
+                forEachCellInArea(f, grid, [&](int row, int col) { deepInside[static_cast<size_t>(row) * grid.cols() + col] = 1; });
+            }
             paintArea(f, deepEnough ? kOpen : kShut, grid, state);
             if (!deepEnough && isThinPolygon(f, grid)) paintLine(f, grid, state);  // a thin shoal or bar must not vanish between cell centres
         } else if (f.objectClass == "LNDARE") {
+            forEachCellInArea(f, grid, [&](int row, int col) { land[static_cast<size_t>(row) * grid.cols() + col] = 1; });
             paintArea(f, kShut, grid, state);
             if (isThinPolygon(f, grid)) paintLine(f, grid, state);  // a mole or spit narrower than a cell
         }
@@ -411,6 +417,21 @@ void stampChart(const ChartData& chart, const StampOptions& options, CostGrid& g
             if (f.objectClass != "LOKBSN" || f.geometry != Geometry::Area) continue;
             forEachCellInArea(f, grid, [&](int row, int col) { lock[static_cast<size_t>(row) * grid.cols() + col] = 1; });
             paintLine(f, grid, lock);
+        }
+        // The water either side of a chamber is the lock's approach, a maintained channel, though the depth area it lies in usually shoals
+        // to 0 m at the bank: within about 350 m of a chamber, a depth area that is deep enough somewhere (DRVAL2) is open, unless it is land.
+        const int reach = static_cast<int>(std::ceil(350.0 / grid.cellSizeM()));
+        for (int row = 0; row < grid.rows(); ++row) {
+            for (int col = 0; col < grid.cols(); ++col) {
+                if (!lock[static_cast<size_t>(row) * grid.cols() + col]) continue;
+                for (int dr = -reach; dr <= reach; ++dr) {
+                    for (int dc = -reach; dc <= reach; ++dc) {
+                        if (!grid.inBounds({col + dc, row + dr})) continue;
+                        const size_t j = static_cast<size_t>(row + dr) * grid.cols() + col + dc;
+                        if (deepInside[j] && !land[j]) state[j] = kOpen;
+                    }
+                }
+            }
         }
         for (int row = 0; row < grid.rows(); ++row) {
             for (int col = 0; col < grid.cols(); ++col) {
