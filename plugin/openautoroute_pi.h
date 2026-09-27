@@ -1,6 +1,7 @@
 #pragma once
 
-// OpenCPN plugin: plan a route between two points with the open-autoroute core and add it to OpenCPN's Route Manager.
+// OpenCPN plugin: plan a route between two points with the open-autoroute core and add it to OpenCPN's Route Manager, or
+// right-click a route to re-plan it through its own waypoints or to check it.
 // The plugin is only a front end. Everything about the sea (charts, depths, rules of the road, restricted areas, locks) is in the core;
 // this file adds the buttons, the dialog, a progress bar, and the conversion between the units a person sails in and the core's metres.
 
@@ -14,7 +15,7 @@
 
 class AutoRouteDialog;
 
-class openautoroute_pi : public opencpn_plugin_118 {
+class openautoroute_pi : public opencpn_plugin_120 {
 public:
     explicit openautoroute_pi(void* ppimgr);
     ~openautoroute_pi() override;
@@ -33,6 +34,8 @@ public:
 
     void OnToolbarToolCallback(int id) override;
     void OnContextMenuItemCallback(int id) override;
+    /// A menu item on a route's own right-click menu: OpenCPN passes the route's GUID (API 1.20 and up).
+    void OnContextMenuItemCallbackExt(int id, std::string obj_ident, std::string obj_type, double lat, double lon) override;
     void SetCursorLatLon(double lat, double lon) override;
     void SetPositionFix(PlugIn_Position_Fix& pfix) override;
     bool MouseEventHook(wxMouseEvent& event) override;
@@ -53,7 +56,7 @@ private:
 
     wxBitmap icon_;
     AutoRouteDialog* dialog_ = nullptr;
-    int toolId_ = 0, fromItem_ = 0, toItem_ = 0;
+    int toolId_ = 0, fromItem_ = 0, toItem_ = 0, replanItem_ = 0, checkItem_ = 0;
     double cursorLat_ = 0.0, cursorLon_ = 0.0, shipLat_ = 0.0, shipLon_ = 0.0;
     bool haveShip_ = false;
     bool picking_ = false, pickFrom_ = true;

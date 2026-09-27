@@ -48,6 +48,55 @@ bool parsePoint(const wxString& text, LatLon& out) {
 
 wxString pointText(double lat, double lon) { return wxString::Format("%.5f, %.5f", lat, lon); }
 
+// OpenCPN's route interface published in 5.14 (API 1.21): reads and writes a route with its colour, visibility and full waypoints.
+std::shared_ptr<HostApi121> hostApi() {
+    std::shared_ptr<HostApi> api = GetHostApi();
+    return std::dynamic_pointer_cast<HostApi121>(api);
+}
+
+template <typename F>
+void forEachWaypoint(const HostApi121::Route& route, F f) {
+    if (!route.pWaypointList) return;
+    for (auto* node = route.pWaypointList->GetFirst(); node; node = node->GetNext()) f(*node->GetData());
+}
+
+std::vector<LatLon> routePoints(const HostApi121::Route& route) {
+    std::vector<LatLon> pts;
+    forEachWaypoint(route, [&](const PlugIn_Waypoint_ExV2& wp) { pts.push_back({wp.m_lat, wp.m_lon}); });
+    return pts;
+}
+
+bool samePoints(const std::vector<LatLon>& a, const std::vector<LatLon>& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (std::fabs(a[i].lat - b[i].lat) > 1e-9 || std::fabs(a[i].lon - b[i].lon) > 1e-9) return false;
+    }
+    return true;
+}
+
+// A copy of a waypoint with an empty GUID: OpenCPN gives it a new one, so the copy never shares a point with another route.
+PlugIn_Waypoint_ExV2* freshCopy(const PlugIn_Waypoint_ExV2& wp) {
+    auto* copy = new PlugIn_Waypoint_ExV2(wp);
+    copy->m_GUID = "";
+    return copy;
+}
+
+// The route's settings (name, colour, style, planned speed...) without its waypoints or GUID.
+std::unique_ptr<HostApi121::Route> sameSettings(const HostApi121::Route& src) {
+    auto dst = std::make_unique<HostApi121::Route>();
+    dst->m_NameString = src.m_NameString;
+    dst->m_StartString = src.m_StartString;
+    dst->m_EndString = src.m_EndString;
+    dst->m_isVisible = src.m_isVisible;
+    dst->m_Description = src.m_Description;
+    dst->m_PlannedSpeed = src.m_PlannedSpeed;
+    dst->m_Colour = src.m_Colour;
+    dst->m_style = src.m_style;
+    dst->m_PlannedDeparture = src.m_PlannedDeparture;
+    dst->m_TimeDisplayFormat = src.m_TimeDisplayFormat;
+    return dst;
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -64,8 +113,19 @@ public:
     void SetFrom(double lat, double lon) { from_->SetValue(pointText(lat, lon)); }
     void SetTo(double lat, double lon) { to_->SetValue(pointText(lat, lon)); }
 
+    /// Re-plan an existing route through its own waypoints (`check` false), or score it as drawn and change nothing (`check` true).
+    void RunOnRoute(const wxString& guid, bool check);
+
 private:
+    enum class Job { Plan, Replan, Check };
+
     void OnPlan(wxCommandEvent&);
+    bool ReadVessel(PlanRequest& req);
+    void Start(const PlanRequest& req, Job job);
+    wxString NoRouteText(const PlanResult& result) const;
+    wxString RouteSummary(const PlanResult& result) const;
+    void FinishReplan(const PlanResult& result);
+    void FinishCheck(const PlanResult& result);
     void OnCancelOrClose(wxCommandEvent&);
     void OnShipFrom(wxCommandEvent&);
     void OnCursorFrom(wxCommandEvent&);
@@ -91,6 +151,11 @@ private:
     std::atomic<bool> cancel_flag_{false};
     bool running_ = false;
     int lastUnits_ = 0;
+    Job job_ = Job::Plan;
+    // The route a Replan or Check started from, as it was when the job started (OpenCPN may change it while the plan runs).
+    wxString routeGuid_;
+    std::vector<LatLon> routePts_;
+    double cellM_ = 30.0;
 };
 
 AutoRouteDialog::AutoRouteDialog(wxWindow* parent, openautoroute_pi* owner)
@@ -269,20 +334,30 @@ void AutoRouteDialog::OnPlan(wxCommandEvent&) {
         wxMessageBox("Enter both positions as decimal degrees, for example 47.605, -122.360 (south and west are negative).", "Auto-route");
         return;
     }
+    if (!ReadVessel(req)) return;
+    req.cellM = suggestedCellM(req.from, req.to);   // fine for a short trip, coarser for a long one so the laptop's memory holds
+    req.startName = "Start";
+    req.endName = "End";
+    req.routeName = wxString::Format("Auto-route %s to %s", from_->GetValue(), to_->GetValue()).ToStdString();
+    Start(req, Job::Plan);
+}
+
+// The vessel and the charts, from the dialog and OpenCPN; false (after telling the user why) if something is missing or wrong.
+bool AutoRouteDialog::ReadVessel(PlanRequest& req) {
     double len = 0, draft = 0, clr = 0, air = -1.0;
     if (!length_->GetValue().ToDouble(&len) || len <= 0 || !draft_->GetValue().ToDouble(&draft) || draft < 0 ||
         !clearance_->GetValue().ToDouble(&clr) || clr < 0) {
         wxMessageBox("Vessel length must be more than zero, and draft and clearance zero or more.", "Auto-route");
-        return;
+        return false;
     }
     if (!airDraft_->GetValue().Trim().IsEmpty() && (!airDraft_->GetValue().ToDouble(&air) || air <= 0)) {
         wxMessageBox("Air draft must be a positive number, or blank to estimate it from the vessel length.", "Auto-route");
-        return;
+        return false;
     }
     const std::vector<std::string> chartDirs = owner_->ChartFolders();
     if (chartDirs.empty()) {
         wxMessageBox("OpenCPN has no chart folders yet. Add the folder with your NOAA S-57 (ENC) cells in Options, Charts.", "Auto-route");
-        return;
+        return false;
     }
     Save();
     req.encDirs = chartDirs;
@@ -291,11 +366,46 @@ void AutoRouteDialog::OnPlan(wxCommandEvent&) {
     req.clearanceM = ToMetres(clr);
     req.airDraftM = air > 0 ? ToMetres(air) : -1.0;
     req.underSail = sail_->GetValue();
-    req.cellM = suggestedCellM(req.from, req.to);   // fine for a short trip, coarser for a long one so the laptop's memory holds
-    req.startName = "Start";
-    req.endName = "End";
-    req.routeName = wxString::Format("Auto-route %s to %s", from_->GetValue(), to_->GetValue()).ToStdString();
+    return true;
+}
 
+void AutoRouteDialog::RunOnRoute(const wxString& guid, bool check) {
+    if (running_) {
+        wxMessageBox("A plan is already running. Wait for it or cancel it first.", "Auto-route");
+        return;
+    }
+    std::shared_ptr<HostApi121> api = hostApi();
+    std::unique_ptr<HostApi121::Route> route = api ? api->GetRoute(guid) : nullptr;
+    if (!route) {
+        wxMessageBox("OpenCPN could not find that route.", "Auto-route");
+        return;
+    }
+    std::vector<LatLon> pts = routePoints(*route);
+    if (pts.size() < 2) {
+        wxMessageBox("The route needs at least two waypoints.", "Auto-route");
+        return;
+    }
+    PlanRequest req;
+    if (!ReadVessel(req)) return;
+    routeGuid_ = guid;
+    routePts_ = pts;
+    SetFrom(pts.front().lat, pts.front().lon);
+    SetTo(pts.back().lat, pts.back().lon);
+    if (check) {
+        req.evalRoute = pts;
+    } else {
+        req.from = pts.front();
+        req.to = pts.back();
+        req.via.assign(pts.begin() + 1, pts.end() - 1);
+    }
+    req.cellM = suggestedCellM(pts);
+    cellM_ = req.cellM;
+    req.routeName = route->m_NameString.ToStdString();
+    Start(req, check ? Job::Check : Job::Replan);
+}
+
+void AutoRouteDialog::Start(const PlanRequest& req, Job job) {
+    job_ = job;
     report_->Clear();
     cancel_flag_ = false;
     SetRunning(true);
@@ -336,21 +446,42 @@ void AutoRouteDialog::Finish(PlanResult result) {
     }
     if (result.status != 0) {
         phase_->SetLabel("No route");
-        wxString why = result.failReason;
-        if (result.failReason == "disconnected_water") why = "the start and end are in different bodies of water at this depth (or a closed lock, bridge or barrier lies between them)";
-        else if (result.failReason == "endpoint_not_in_safe_water") why = "the start or end is not near water deep enough for this draft";
-        else if (result.failReason == "endpoint_outside_grid") why = "the start or end is outside the charts";
-        else if (result.failReason == "no_charts") why = "no chart cells in that folder cover the area";
-        else if (result.failReason == "no_route") why = "no legal route was found between the two points";
-        report_->SetValue("No route: " + why + ".");
+        report_->SetValue(NoRouteText(result));
         return;
     }
     phase_->SetLabel("Done");
     gauge_->SetValue(1000);
+    if (job_ == Job::Replan) return FinishReplan(result);
+    if (job_ == Job::Check) return FinishCheck(result);
     AddToOpenCPN(result);
-    wxString text = wxString::Format("Route added to the Route Manager: %.1f nm (straight line %.1f nm), %zu waypoints, %d charts.\n",
-                                     result.nm, result.straightNm, result.route.size(), result.chartsUsed);
+    report_->SetValue("Route added to the Route Manager: " + RouteSummary(result));
+}
+
+wxString AutoRouteDialog::NoRouteText(const PlanResult& result) const {
+    wxString why = result.failReason;
+    if (result.failReason == "disconnected_water") why = "the points are in different bodies of water at this depth (or a closed lock, bridge or barrier lies between them)";
+    else if (result.failReason == "endpoint_not_in_safe_water") why = "a point is not near water deep enough for this draft";
+    else if (result.failReason == "endpoint_outside_grid") why = "a point is outside the charts";
+    else if (result.failReason == "no_charts") why = "no chart cells in that folder cover the area";
+    else if (result.failReason == "no_route") why = "no legal route was found between the points";
+    wxString text = "No route: " + why + ".";
+    if (result.failedLeg >= 0 && routePts_.size() > 2) {
+        text += wxString::Format(" The leg with no route is from waypoint %d to waypoint %d.", result.failedLeg + 1, result.failedLeg + 2);
+    }
+    if (job_ == Job::Replan) text += "\n\nYour route was not changed.";
+    return text;
+}
+
+// Length, moved points and what the route crosses, with the same warning every plan carries.
+wxString AutoRouteDialog::RouteSummary(const PlanResult& result) const {
+    wxString text = wxString::Format("%.1f nm (straight line %.1f nm), %zu waypoints, %d charts.\n", result.nm, result.straightNm,
+                                     result.route.size(), result.chartsUsed);
     if (result.snapStartM > 1.0) text += wxString::Format("The start was moved %s to reach safe water.\n", Length(result.snapStartM));
+    for (size_t i = 0; i < result.snapViaM.size(); ++i) {
+        if (result.snapViaM[i] > cellM_) {
+            text += wxString::Format("Waypoint %zu was moved %s to reach safe water.\n", i + 2, Length(result.snapViaM[i]));
+        }
+    }
     if (result.snapEndM > 1.0) text += wxString::Format("The end was moved %s to reach safe water.\n", Length(result.snapEndM));
     if (result.areasCrossed.empty()) {
         text += "\nNo restricted or dangerous charted areas are crossed.";
@@ -362,6 +493,97 @@ void AutoRouteDialog::Finish(PlanResult result) {
             text += "\n";
         }
     }
+    text += "\nUse at your own risk. Not for navigation: check every leg against the chart and notices to mariners. Depths are at chart datum, with no tide or current. This plugin is not part of OpenCPN.";
+    return text;
+}
+
+// Replace the route with the plan, keeping the user's own waypoints (name, symbol, description) at the points the plan passes through.
+// The original is kept as a hidden copy, because OpenCPN has no undo. If the route changed or went away while the plan ran, or it is
+// the route being navigated and the user says no, the original is left alone and the plan is added beside it in green instead.
+void AutoRouteDialog::FinishReplan(const PlanResult& result) {
+    std::shared_ptr<HostApi121> api = hostApi();
+    std::unique_ptr<HostApi121::Route> orig = api ? api->GetRoute(routeGuid_) : nullptr;
+    const bool unchanged = orig && samePoints(routePoints(*orig), routePts_) && result.pointIndex.size() == routePts_.size();
+
+    std::vector<const PlugIn_Waypoint_ExV2*> own;
+    if (orig) forEachWaypoint(*orig, [&](const PlugIn_Waypoint_ExV2& wp) { own.push_back(&wp); });
+    const auto build = [&](std::unique_ptr<HostApi121::Route> route) {
+        size_t next = 0;   // the next of the user's waypoints to place
+        for (size_t i = 0; i < result.route.size(); ++i) {
+            if (unchanged && next < result.pointIndex.size() && result.pointIndex[next] == i) {
+                PlugIn_Waypoint_ExV2* wp = freshCopy(*own[next]);
+                // A point already in safe water keeps its exact position; one that had to move goes where the plan put it.
+                const double moved = next == 0 ? result.snapStartM : next + 1 == routePts_.size() ? result.snapEndM : result.snapViaM[next - 1];
+                if (moved > cellM_) {
+                    wp->m_lat = result.route[i].lat;
+                    wp->m_lon = result.route[i].lon;
+                }
+                route->pWaypointList->Append(wp);
+                ++next;
+            } else {
+                route->pWaypointList->Append(new PlugIn_Waypoint_ExV2(result.route[i].lat, result.route[i].lon, "diamond", ""));
+            }
+        }
+        return route;
+    };
+    const auto addBeside = [&](const wxString& why) {
+        std::unique_ptr<HostApi121::Route> route = orig ? sameSettings(*orig) : std::make_unique<HostApi121::Route>();
+        route->m_NameString = (orig ? orig->m_NameString : wxString::FromUTF8(result.routeName.c_str())) + " (auto-route)";
+        route->m_isVisible = true;
+        route->m_Colour = "Green";
+        route = build(std::move(route));
+        if (!api || !api->AddRoute(route.get(), true)) {
+            report_->SetValue("OpenCPN did not accept the new route.");
+            return;
+        }
+        report_->SetValue(why + "\n\nAdded as a new route in green: " + RouteSummary(result));
+    };
+
+    if (!api) {
+        report_->SetValue("This OpenCPN does not offer the route interface the plugin needs (OpenCPN 5.14 or later).");
+        return;
+    }
+    if (!unchanged) {
+        addBeside("The route was changed or deleted while the plan ran, so it was left as it is.");
+        if (wxWindow* canvas = GetOCPNCanvasWindow()) RequestRefresh(canvas);
+        return;
+    }
+    const bool active = api->IsRouteActive(routeGuid_);
+    if (active && wxMessageBox("You are navigating this route. Replace it with the auto-route?\n\n"
+                               "Yes: the route is replaced and navigation restarts on it at the best next waypoint.\n"
+                               "No: your route is left as it is, and the auto-route is added beside it in green.",
+                               "Auto-route", wxYES_NO | wxNO_DEFAULT | wxICON_WARNING, this) != wxYES) {
+        addBeside("You are navigating this route, so it was left as it is.");
+        if (wxWindow* canvas = GetOCPNCanvasWindow()) RequestRefresh(canvas);
+        return;
+    }
+
+    // The hidden copy first, so the original is safe before anything is replaced.
+    std::unique_ptr<HostApi121::Route> backup = sameSettings(*orig);
+    backup->m_NameString = orig->m_NameString + " (before auto-route)";
+    backup->m_isVisible = false;
+    for (const PlugIn_Waypoint_ExV2* wp : own) backup->pWaypointList->Append(freshCopy(*wp));
+    if (!api->AddRoute(backup.get(), true)) {
+        report_->SetValue("OpenCPN did not accept the backup copy, so your route was not changed.");
+        return;
+    }
+    std::unique_ptr<HostApi121::Route> route = build(sameSettings(*orig));
+    route->m_GUID = routeGuid_;
+    if (!api->UpdateRoute(route.get())) {
+        report_->SetValue("OpenCPN did not accept the new route. Your route is kept as \"" + backup->m_NameString + "\" (hidden, in the Route Manager).");
+        return;
+    }
+    if (active) api->ActivateRoutePI(routeGuid_, true);
+    if (wxWindow* canvas = GetOCPNCanvasWindow()) RequestRefresh(canvas);
+    report_->SetValue("Route replaced: " + RouteSummary(result) + "\n\nThe original is kept, hidden, as \"" + backup->m_NameString +
+                      "\" in the Route Manager.");
+}
+
+// The route as drawn, scored against the same chart rules the planner uses. Nothing in OpenCPN is changed.
+void AutoRouteDialog::FinishCheck(const PlanResult& result) {
+    wxString text = wxString::FromUTF8(result.checkReport.c_str());
+    text += wxString::Format("\nChecked on a %s grid: a hazard smaller than that between two samples can be missed. A second opinion, not a guarantee.",
+                             Length(cellM_));
     text += "\nUse at your own risk. Not for navigation: check every leg against the chart and notices to mariners. Depths are at chart datum, with no tide or current. This plugin is not part of OpenCPN.";
     report_->SetValue(text);
 }
@@ -397,7 +619,7 @@ extern "C" DECL_EXP void destroy_pi(opencpn_plugin* p) {
     delete p;
 }
 
-openautoroute_pi::openautoroute_pi(void* ppimgr) : opencpn_plugin_118(ppimgr) {
+openautoroute_pi::openautoroute_pi(void* ppimgr) : opencpn_plugin_120(ppimgr) {
     icon_ = makeIcon();
     wxLogMessage("open-autoroute plugin: constructed, icon %s", icon_.IsOk() ? "ok" : "NOT ok");
 }
@@ -408,6 +630,9 @@ int openautoroute_pi::Init() {
     toolId_ = InsertPlugInTool("", &icon_, &icon_, wxITEM_NORMAL, "Auto-route", "Plan a route between two points", nullptr, -1, 0, this);
     fromItem_ = AddCanvasContextMenuItem(new wxMenuItem(nullptr, wxID_ANY, "Auto-route from here"), this);
     toItem_ = AddCanvasContextMenuItem(new wxMenuItem(nullptr, wxID_ANY, "Auto-route to here"), this);
+    // On a route's own right-click menu; OpenCPN tells OnContextMenuItemCallbackExt which route was clicked.
+    replanItem_ = AddCanvasContextMenuItemExt(new wxMenuItem(nullptr, wxID_ANY, "Auto-route this route"), this, "Route");
+    checkItem_ = AddCanvasContextMenuItemExt(new wxMenuItem(nullptr, wxID_ANY, "Check this route"), this, "Route");
     return WANTS_TOOLBAR_CALLBACK | INSTALLS_TOOLBAR_TOOL | INSTALLS_CONTEXTMENU_ITEMS | WANTS_CURSOR_LATLON | WANTS_MOUSE_EVENTS | WANTS_NMEA_EVENTS | WANTS_CONFIG;
 }
 
@@ -427,9 +652,9 @@ int openautoroute_pi::GetAPIVersionMajor() {
     wxLogMessage("open-autoroute plugin: GetAPIVersionMajor -> %d", API_VERSION_MAJOR);
     return API_VERSION_MAJOR;
 }
-// Must match the base class this plugin is built on (opencpn_plugin_118), not the newest API the header describes: OpenCPN casts the plugin
+// Must match the base class this plugin is built on (opencpn_plugin_120), not the newest API the header describes: OpenCPN casts the plugin
 // to the class named by this number and calls it incompatible when the cast fails.
-int openautoroute_pi::GetAPIVersionMinor() { return 18; }
+int openautoroute_pi::GetAPIVersionMinor() { return 20; }
 int openautoroute_pi::GetPlugInVersionMajor() { return 0; }
 int openautoroute_pi::GetPlugInVersionMinor() { return 0; }   // pre-release: no version numbers until the first release
 wxBitmap* openautoroute_pi::GetPlugInBitmap() {
@@ -444,6 +669,7 @@ wxString openautoroute_pi::GetShortDescription() { return "Plan a safe route bet
 wxString openautoroute_pi::GetLongDescription() {
     return "Plans a route between two points using the open-autoroute engine: depth against your draft, land, obstructions and wrecks, "
            "traffic separation schemes, narrow channels, restricted areas and navigation locks. The route is added to the Route Manager. "
+           "Right-click an existing route to re-plan it through its own waypoints, or to check it against the same rules. "
            "A planning aid only, used at your own risk; not for navigation. This plugin is not part of OpenCPN and is not supported by its developers. Check every route against the chart.";
 }
 
@@ -471,6 +697,12 @@ void openautoroute_pi::OnContextMenuItemCallback(int id) {
     ShowDialog();
     if (id == fromItem_) dialog_->SetFrom(cursorLat_, cursorLon_);
     else if (id == toItem_) dialog_->SetTo(cursorLat_, cursorLon_);
+}
+
+void openautoroute_pi::OnContextMenuItemCallbackExt(int id, std::string obj_ident, std::string obj_type, double, double) {
+    if (obj_type != "Route" || obj_ident.empty() || (id != replanItem_ && id != checkItem_)) return;
+    ShowDialog();
+    dialog_->RunOnRoute(wxString::FromUTF8(obj_ident.c_str()), id == checkItem_);
 }
 
 void openautoroute_pi::BeginPick(bool forFrom) {

@@ -12,6 +12,7 @@ Status: the core router, the GPX output, the OpenCPN plugin and the 29-route ben
   * **Rule 9 (Narrow Channels):** Force routing biases to the starboard/right side of channels and fairways.  
   * **Rule 10 (Traffic Separation Schemes):** Restrict routing to established lane vectors and enforce perpendicular crossings.  
 * **Pathfinding Core:** Implement \$A^\*\$ / Any-Angle pathfinding to export clean GPX route outputs into OpenCPN's Route Manager.  
+* **Route Context Menu:** Right-click an existing OpenCPN route to re-plan it through its own waypoints (the original kept as a hidden copy) or to check it against the same rules without changing it ([#38](https://github.com/i-machine-things/open-autoroute/issues/38)).  
 
 **Done when:** the router produces rule-compliant routes on the benchmark regions below with no regression against the last approved run, and the OpenCPN plugin plans a route and adds it to the Route Manager from inside OpenCPN.
 
@@ -79,7 +80,7 @@ These come from real findings: independent reviews of the code, the gaps listed 
 
 **Route checking**
 
-* Score any route, not only ones this tool planned: `--eval` does it on the command line. Bring it into the plugin as "check this route" on a route already in OpenCPN, listing the hazards, restricted areas and traffic lanes it crosses. OpenCPN's own issue tracker discusses the need for a route checker ([issue #4387](https://github.com/OpenCPN/OpenCPN/issues/4387)).
+* Score any route, not only ones this tool planned: `--eval` does it on the command line, and the plugin's "Check this route" does it on a route already in OpenCPN (see `v0.1.0`). Still to do: mark the unsafe spots on the chart instead of only listing them. OpenCPN's own issue tracker discusses the need for a route checker ([issue #4387](https://github.com/OpenCPN/OpenCPN/issues/4387)).
 
 **Performance and resolution**
 

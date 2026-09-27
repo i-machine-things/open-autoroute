@@ -79,6 +79,13 @@ The core works in metres and nautical miles. Converting to feet is left to whate
 
 `plugin/` holds an OpenCPN plugin that calls the same planner: a toolbar button and right-click items ("Auto-route from here", "Auto-route to here") open a small dialog for the two positions, vessel size (metres or feet), draft, and your ENC folder. Planning runs in the background with a progress bar and a Cancel button, and the finished route is added to the Route Manager. The crossed restricted areas and locks are listed in the dialog.
 
+Right-click a route that is already in OpenCPN for two more items:
+
+- **Auto-route this route** re-plans it through its own waypoints, in order: your waypoints stay (with their names and symbols) and the legs between them are filled in. The route is replaced in place, and the original is kept as a hidden copy named "(before auto-route)" in the Route Manager, since OpenCPN has no undo. If you are navigating that route, it asks first: yes replaces it and restarts navigation, no leaves it alone and adds the plan beside it in green. A waypoint on land or in shallow water is moved to the nearest safe water and the dialog says so.
+- **Check this route** scores the route as drawn against the same rules and changes nothing: stretches over land or too-shallow water, precautionary areas, narrow channels and buoy gates, traffic-lane crossings, and restricted areas. It checks on the planning grid, so a hazard smaller than a grid cell can be missed.
+
+These need OpenCPN 5.14 or later (plugin API 1.20 and the route interface published in 5.14).
+
 It builds against OpenCPN's own plugin header and wxWidgets 3.2 (GTK3), so match the OpenCPN release you run:
 
 ```bash
