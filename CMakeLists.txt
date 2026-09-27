@@ -17,6 +17,7 @@ add_library(openautoroute_core STATIC
 )
 target_include_directories(openautoroute_core PUBLIC include)
 target_compile_options(openautoroute_core PRIVATE -Wall -Wextra -Wpedantic)
+set_target_properties(openautoroute_core PROPERTIES POSITION_INDEPENDENT_CODE ON)  # linked into the plugin's shared library
 
 enable_testing()
 add_executable(test_core tests/test_core.cpp)
@@ -31,3 +32,9 @@ target_link_libraries(s57_scan PRIVATE openautoroute_core)
 # Command-line router: ENC cells in, GPX route out (import into OpenCPN to check it).
 add_executable(openautoroute tools/openautoroute.cpp)
 target_link_libraries(openautoroute PRIVATE openautoroute_core)
+
+# Optional OpenCPN plugin front end (needs OpenCPN's ocpn_plugin.h and wxWidgets 3.2; see plugin/CMakeLists.txt).
+option(OAR_BUILD_PLUGIN "Build the OpenCPN plugin" OFF)
+if(OAR_BUILD_PLUGIN)
+  add_subdirectory(plugin)
+endif()

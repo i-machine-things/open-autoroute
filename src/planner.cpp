@@ -74,6 +74,17 @@ void emitTo(const std::function<void(const std::string&)>& hook, const char* fmt
 
 }  // namespace
 
+double suggestedCellM(LatLon from, LatLon to, double preferredM, double maxCells) {
+    // The same box the planner uses: the endpoints plus a margin of 0.03 degrees or a quarter of the span.
+    const double dLat = std::fabs(to.lat - from.lat), dLon = std::fabs(to.lon - from.lon);
+    const double margin = std::max(0.03, 0.25 * std::max(dLat, dLon));
+    const double midLat = (from.lat + to.lat) / 2.0;
+    const double heightM = (dLat + 2.0 * margin) * 111320.0;
+    const double widthM = (dLon + 2.0 * margin) * 111320.0 * std::cos(deg2rad(midLat));
+    const double needed = std::sqrt(std::max(widthM * heightM, 1.0) / std::max(maxCells, 1.0));
+    return needed <= preferredM ? preferredM : std::ceil(needed / 10.0) * 10.0;
+}
+
 PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     PlanResult result;
     const std::string& encDir = req.encDir;

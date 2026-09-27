@@ -77,6 +77,11 @@ struct PlanResult {
     std::shared_ptr<CostGrid> grid; // the router's view of the water, for drawing a picture
 };
 
+/// A cell size in metres for a route between two points: `preferredM` when the grid stays within `maxCells`, otherwise the smallest
+/// multiple of 10 m that does. A front end uses this so a long passage never asks for more memory than the machine has (the planner
+/// itself refuses a grid over 25 million cells).
+double suggestedCellM(LatLon from, LatLon to, double preferredM = 30.0, double maxCells = 6e6);
+
 /// Plan (or, with `evalRoute`, score) a route. Never throws for chart or routing problems; those come back in `status` and `failReason`.
 PlanResult planRoute(const PlanRequest& request, const PlanHooks& hooks = {});
 

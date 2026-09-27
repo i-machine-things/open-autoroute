@@ -1,4 +1,5 @@
 #include <cmath>
+#include <functional>
 #include <cstdint>
 #include <cstdio>
 #include <array>
@@ -14,6 +15,7 @@
 #include "openautoroute/geo.hpp"
 #include "openautoroute/gpx.hpp"
 #include "openautoroute/pathfinder.hpp"
+#include "openautoroute/planner.hpp"
 #include "openautoroute/s57.hpp"
 #include "openautoroute/vessel.hpp"
 
@@ -1213,6 +1215,35 @@ static void testLockCorridor() {
     CHECK(g.blocked({22, 5}));                          // beyond reach
 }
 
+// The search reports progress that never goes backwards and can be cancelled.
+static void testSearchProgressAndCancel() {
+    CostGrid g = makeGrid(400, 300);   // 120,000 cells of open water
+    g.fill(1.0f);
+    std::vector<double> seen;
+    std::function<bool(double)> record = [&](double f) { seen.push_back(f); return true; };
+    const auto route = findRoute(g, g.centre({2, 2}), g.centre({396, 296}), 0.05, nullptr, 0.0, &record);
+    CHECK(!route.empty());
+    CHECK(!seen.empty());
+    for (size_t i = 0; i < seen.size(); ++i) {
+        CHECK(seen[i] >= 0.0 && seen[i] <= 1.0);
+        if (i > 0) CHECK(seen[i] >= seen[i - 1]);
+    }
+    int calls = 0;
+    std::function<bool(double)> cancelSecond = [&](double) { return ++calls < 2; };   // says stop on its second look
+    CHECK(findRoute(g, g.centre({2, 2}), g.centre({396, 296}), 0.05, nullptr, 0.0, &cancelSecond).empty());
+    CHECK(calls == 2);
+}
+
+// A route's cell size stays fine for a short trip and coarsens (in whole 10 m steps) so a long passage stays within the memory budget.
+static void testSuggestedCellSize() {
+    CHECK(suggestedCellM({47.6, -122.4}, {48.1, -122.7}) == 30.0);                    // Seattle to Port Townsend
+    const double big = suggestedCellM({21.31, -157.87}, {20.79, -156.51}, 30.0, 1e6);  // Honolulu to Maui with a small budget
+    CHECK(big > 30.0 && std::fmod(big, 10.0) == 0.0);
+    const double height = (0.52 + 2 * std::max(0.03, 0.25 * 1.36)) * 111320.0, width = (1.36 + 2 * std::max(0.03, 0.25 * 1.36)) * 111320.0 * std::cos(21.05 * 3.14159265 / 180.0);
+    CHECK(width * height / (big * big) <= 1e6 * 1.001);                                // fits the budget
+    CHECK(width * height / ((big - 10.0) * (big - 10.0)) > 1e6);                       // and it is the smallest step that does
+}
+
 static void testHazardPenalties() {
     ChartFeature military = areaFeature("MIPARE", 45.996, 46.0, -124.000, -123.996);   // cols 0-3, rows 0-3: heavily costly, never a wall
     ChartFeature caution = areaFeature("CTNARE", 45.990, 45.994, -124.000, -123.996);   // cols 0-3, rows 6-9
@@ -1538,6 +1569,8 @@ int main() {
     testHazardsSurviveFinerChart();
     testBridgeAcrossScales();
     testNavigationLock();
+    testSearchProgressAndCancel();
+    testSuggestedCellSize();
     testLockCorridor();
     testThinPolygonsStillBlock();
     testHazardPenalties();
