@@ -91,7 +91,7 @@ Before pushing any commit that touches core logic:
 
 Do not push if there are unhandled exceptions or broken/empty outputs.
 
-CI runs on every PR (`.github/workflows/ci.yml`: lint, tests on gcc and clang, sanitizers, the plugin build; `codeql.yml`: security scan). Merge a PR only with all of them green: that is a process rule, since branch protection is not enabled on `master`, so nothing but discipline enforces it. The 29-route benchmark needs the full NOAA chart set and stays manual: run `benchmarks/run.sh` and `benchmarks/compare.sh` for any routing change.
+CI runs on every PR (`.github/workflows/ci.yml`: lint, tests on gcc and clang, sanitizers, the plugin build; `codeql.yml`: security scan). `master` is protected: changes go in through a PR, and the six checks that run on every PR (lint, tests on gcc and clang, sanitizers, the plugin build, CodeQL) must be green before GitHub allows the merge, for admins too. Force-pushes and deleting `master` are blocked. The 29-route benchmark needs the full NOAA chart set and stays manual: run `benchmarks/run.sh` and `benchmarks/compare.sh` for any routing change.
 
 Project-specific: configure and build with `cmake -S . -B build && cmake --build build -j2`, then run `ctest --test-dir build --output-on-failure`. Validate routing changes against the benchmark regions in `ROADMAP.md` once real ENC data is wired in.
 

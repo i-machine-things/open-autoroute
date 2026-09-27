@@ -2,9 +2,9 @@
 
 How versions work here: a numbered milestone below is a scoped piece of work, and finishing it (its "Done when" test, judged by the maintainer) is what bumps the minor version, in order: `v0.1.0`, `v0.2.0`, and so on. Every other release is a patch of the current milestone (`v0.1.0` then `v0.1.1`). Nothing after `v0.5.0` has a number yet: it lives in the backlog at the end of this file, and an item gets a numbered milestone only when it is scoped. See [docs/RELEASING.md](docs/RELEASING.md).
 
-### `v0.1.0` — Rule-Compliant Core Auto-Router & Live Testing
+### `v0.1.0` — Rule-Compliant Core Auto-Router
 
-Status: the core router, the GPX output, the OpenCPN plugin and the 29-route benchmark exist. Still open: the live on-the-water runs.
+Status: the core router, the GPX output, the OpenCPN plugin and the 29-route benchmark exist. Live testing on the water moved to `v0.2.0`, with the autopilot and plotter communications it depends on.
 
 * **Static S-57 Parsing:** Extract depth contours (`DEPCNT`), land polygons (`LNDARE`), fairways (`FAIRWY`), traffic separation schemes (`TSS`), and hazards from ENC vector charts.  
 * **Safety Cost Grid:** Build a 2D spatial cost matrix enforcing hard barriers at `vessel draft + safety clearance` with exponential edge penalties for channel centering.  
@@ -12,9 +12,8 @@ Status: the core router, the GPX output, the OpenCPN plugin and the 29-route ben
   * **Rule 9 (Narrow Channels):** Force routing biases to the starboard/right side of channels and fairways.  
   * **Rule 10 (Traffic Separation Schemes):** Restrict routing to established lane vectors and enforce perpendicular crossings.  
 * **Pathfinding Core:** Implement \$A^\*\$ / Any-Angle pathfinding to export clean GPX route outputs into OpenCPN's Route Manager.  
-* **Live On-the-Water Testing:** Conduct live field validation runs, checking planned routes against a real plotter on the water (routes reach the plotter as GPX through OpenCPN; direct plotter communication is its own milestone, `v0.2.0`).
 
-**Done when:** the router produces rule-compliant routes on the benchmark regions below with no regression against the last approved run, the OpenCPN plugin plans and adds a route from inside OpenCPN, and a route has been checked on the water against a real plotter.
+**Done when:** the router produces rule-compliant routes on the benchmark regions below with no regression against the last approved run, and the OpenCPN plugin plans a route and adds it to the Route Manager from inside OpenCPN.
 
 ### `v0.2.0` — Communications & Plotter Integration
 
@@ -23,8 +22,9 @@ Everything about moving routes and live data between the router and other equipm
 * **Legacy Plotter Output:** Stream a planned route as NMEA 0183 route (`RTE`) and waypoint (`WPL`) sentences directly into legacy serial inputs (such as the Garmin GPSMAP 541s), so there is no manual SD card GPX import.  
 * **Live Data Input:** Receive live NMEA 0183 and Signal K data (position, wind, speed through water, engine and fuel) over serial, network and OpenCPN's own connections, as a transport the later features build on; interpreting it stays with those features.  
 * **Link Handling:** Connection setup, error handling and safe defaults for each link (no route is ever sent to a device without the user asking for it).
+* **Live On-the-Water Testing:** Field validation runs on real marine hardware: planned routes checked against a real plotter and followed by an autopilot on the water. This waits for the plotter and autopilot links above, since it depends on them.
 
-**Done when (proposed):** a planned route appears on a legacy plotter over its serial input without touching a memory card, and live position and wind from a real instrument feed reach the router through the same layer.
+**Done when (proposed):** a planned route appears on a legacy plotter over its serial input without touching a memory card, live position and wind from a real instrument feed reach the router through the same layer, and at least one planned route has been checked and followed on the water with a real plotter and autopilot.
 
 ### `v0.3.0` — Weather & Point-of-Sail Router
 
