@@ -311,7 +311,7 @@ int main(int argc, char** argv) {
         std::printf("  chart %s\n", name.c_str());
         ++used;
     }
-    grid.openLockApproaches(350.0);  // the water either side of a lock chamber is a maintained approach, whatever the depth area at the bank says
+    grid.openLockCorridors();  // the line of a lock chamber is a maintained channel, whatever thin walls and bank depths say at this resolution
     grid.assignZoneDirections();  // separation zones take their direction from the lanes beside them
     // Buoyed channels: pair opposite red/green marks into gates so the route stays between them (see applyChannelGates).
     const std::vector<Gate> gates = useMarks ? applyChannelGates(grid, marks, 500.0) : std::vector<Gate>{};

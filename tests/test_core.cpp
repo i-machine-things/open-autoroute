@@ -1185,43 +1185,32 @@ static void testNavigationLock() {
     CHECK(off.blocked({6, 4}));
 }
 
-// The water either side of a lock chamber lies in depth areas that shoal to 0 m at the bank but are deep inside. That approach is opened
-// once every chart is stamped; the same kind of area away from a lock, land, and anything blocked for a real reason stay shut.
-static void testLockApproach() {
-    CostGrid g = makeGrid(30, 10);
+// A lock's approach is a corridor on the line of the chamber. Once every chart is stamped it is passable through whatever thin walls, cables
+// and shoal-to-the-bank depth areas seal it at chart resolution; land, and everything off the line or beyond its reach, stays shut.
+static void testLockCorridor() {
+    CostGrid g = makeGrid(30, 10);   // cells of about 111 m by 78 m
     g.fill(kBlocked);
     ChartData d;
-    ChartFeature bank = areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.985, 0.0);           // cols 0-14: 0 to 9 m, "shoals to the bank"
-    bank.drval2 = 9.0;
-    ChartFeature farBank = areaFeature("DEPARE", 45.990, 46.0, -123.980, -123.971, 0.0);      // cols 20-28: the same, nowhere near a lock
-    farBank.drval2 = 9.0;
-    ChartFeature shallow = areaFeature("DEPARE", 45.990, 46.0, -123.985, -123.980, 0.0);      // cols 15-19, shallow throughout
-    shallow.drval2 = 1.0;
-    d.features.push_back(bank);
-    d.features.push_back(farBank);
-    d.features.push_back(shallow);
-    d.features.push_back(areaFeature("LNDARE", 45.992, 45.994, -123.9920, -123.9895));         // cols 8-9, rows 6-7: land inside the shoal, within reach
-    d.features.push_back(pointFeature("WRECKS", {8, 3}, g, 1.0));                              // a wreck in the approach
+    d.features.push_back(areaFeature("DEPARE", 45.990, 46.0, -124.0, -123.970, 0.5));         // shoal everywhere: nothing is open
     const LatLon mid = g.centre({12, 5});
     ChartFeature basin;
     basin.objectClass = "LOKBSN";
     basin.geometry = Geometry::Area;
-    basin.parts.push_back({{{mid.lat + 0.0002, mid.lon - 0.0006}, {mid.lat + 0.0002, mid.lon + 0.0006}, {mid.lat - 0.0002, mid.lon + 0.0006}, {mid.lat - 0.0002, mid.lon - 0.0006}}, true});
+    const double lw = 0.0002, ll = 0.0012;   // 22 m half-width, 94 m half-length: long axis east-west
+    basin.parts.push_back({{{mid.lat + lw, mid.lon - ll}, {mid.lat + lw, mid.lon + ll}, {mid.lat - lw, mid.lon + ll}, {mid.lat - lw, mid.lon - ll}}, true});
     d.features.push_back(basin);
-    d.features.push_back(lineFeature("SLCONS", {g.centre({9, 2}), g.centre({12, 2})}));       // a guide wall over water, in reach
-    d.features.push_back(lineFeature("SLCONS", {g.centre({24, 5}), g.centre({26, 5})}));      // a wall far from the lock
+    d.features.push_back(lineFeature("SLCONS", {g.centre({9, 2}), g.centre({9, 8})}));         // a guide wall across the approach line
+    d.features.push_back(areaFeature("LNDARE", 45.9940, 45.9950, -123.9930, -123.9910));         // a land cell on the line (col 8, row 5)
     StampOptions o;
     stampChart(d, o, g);
-    CHECK(g.blocked({10, 2}) && g.blocked({25, 5}));   // walls are walls until the approach pass
-    CHECK(g.blocked({8, 5}));                 // before the pass: a 0 m depth area is shut
-    g.openLockApproaches(350.0);              // about 3 cells of 111 m
-    CHECK(!g.blocked({10, 5}) && !g.blocked({8, 5}) && g.cost({8, 5}) == 5.0f);   // opened, and dearer
-    CHECK(g.blocked({8, 3}));                 // the wreck stays a wall
-    CHECK(g.blocked({9, 6}));                 // land stays land, though it is within reach and sits in a depth area deep inside
-    CHECK(g.blocked({16, 5}));                // a shallow area stays shut
-    CHECK(g.blocked({24, 5}));                // and so does the same kind of area far from any lock
-    CHECK(!g.blocked({10, 2}));               // the guide wall over water in the lock's reach lets the approach through
-    CHECK(g.blocked({25, 5}));                // a wall far from any lock stays a wall
+    CHECK(g.blocked({9, 5}) && g.blocked({14, 8}));     // before the pass: the approach is a wall of shoal and pier
+    g.openLockCorridors();
+    CHECK(!g.blocked({12, 5}));                         // the chamber
+    CHECK(!g.blocked({9, 5}) && g.cost({9, 5}) == 5.0f);  // the guide wall and the shoal on the line
+    CHECK(!g.blocked({16, 5}));                         // and the far side (about 4 cells, 350 m, past the end)
+    CHECK(g.blocked({8, 5}));                           // land stays land, though it lies on the line
+    CHECK(g.blocked({12, 4}) && g.blocked({12, 6}) && g.blocked({10, 4}));  // off the line, a cell to either side
+    CHECK(g.blocked({22, 5}));                          // beyond reach
 }
 
 static void testHazardPenalties() {
@@ -1549,7 +1538,7 @@ int main() {
     testHazardsSurviveFinerChart();
     testBridgeAcrossScales();
     testNavigationLock();
-    testLockApproach();
+    testLockCorridor();
     testThinPolygonsStillBlock();
     testHazardPenalties();
     testHazardMarks();

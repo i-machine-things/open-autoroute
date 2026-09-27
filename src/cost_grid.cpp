@@ -273,22 +273,25 @@ void CostGrid::applyShoreMargin(double rangeM, double weight) {
 
 namespace oar {
 
-void CostGrid::openLockApproaches(double reachM) {
-    if (lockCell_.empty()) return;
-    const int reach = static_cast<int>(std::ceil(reachM / cellSizeM()));
-    for (int row = 0; row < rows_; ++row) {
-        for (int col = 0; col < cols_; ++col) {
-            if (!lockCell_[index({col, row})]) continue;
-            for (int dr = -reach; dr <= reach; ++dr) {
-                for (int dc = -reach; dc <= reach; ++dc) {
-                    const Cell c{col + dc, row + dr};
-                    if (!inBounds(c) || !blocked(c)) continue;
-                    const bool shoal = !shoalDeep_.empty() && shoalDeep_[index(c)] && !isHazardShut(c);
-                    const bool wall = !wallCell_.empty() && wallCell_[index(c)];
-                    if (!shoal && !wall) continue;
-                    clearHazardShut(c);
-                    setCost(c, 5.0f);
-                }
+void CostGrid::openLockCorridors() {
+    const double kx = std::cos(deg2rad(northWest_.lat)) * 111320.0, ky = 111320.0;
+    for (const LockCorridor& lc : corridors_) {
+        // Everything in metres on a local plane; a cell is in the corridor if its centre is within halfWidthM of the axis segment.
+        const double ax = lc.a.lon * kx, ay = lc.a.lat * ky, bx = lc.b.lon * kx, by = lc.b.lat * ky;
+        const double dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+        const Cell c0 = cellAt({std::max(lc.a.lat, lc.b.lat) + lc.halfWidthM / ky, std::min(lc.a.lon, lc.b.lon) - lc.halfWidthM / kx});
+        const Cell c1 = cellAt({std::min(lc.a.lat, lc.b.lat) - lc.halfWidthM / ky, std::max(lc.a.lon, lc.b.lon) + lc.halfWidthM / kx});
+        for (int row = std::max(c0.row, 0); row <= std::min(c1.row, rows_ - 1); ++row) {
+            for (int col = std::max(c0.col, 0); col <= std::min(c1.col, cols_ - 1); ++col) {
+                const Cell c{col, row};
+                const LatLon p = centre(c);
+                const double px = p.lon * kx - ax, py = p.lat * ky - ay;
+                const double t = len2 > 0.0 ? std::clamp((px * dx + py * dy) / len2, 0.0, 1.0) : 0.0;
+                if (std::hypot(px - t * dx, py - t * dy) > lc.halfWidthM) continue;
+                if (!landCell_.empty() && landCell_[index(c)]) continue;   // land stays land
+                if (!blocked(c)) continue;
+                clearHazardShut(c);
+                setCost(c, 5.0f);
             }
         }
     }

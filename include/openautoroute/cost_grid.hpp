@@ -39,24 +39,16 @@ public:
     /// Physical hazards a chart reports (wrecks, rocks, structures, a bridge with a charted low clearance) are remembered apart from the
     /// depth verdict, so a finer chart that only re-draws the depth areas cannot erase a hazard that only a coarser chart carries.
     bool isHazardShut(Cell c) const { return !hazardShut_.empty() && hazardShut_[index(c)]; }
-    /// Navigation locks: chart stamping records lock chamber cells, and depth areas that shoal to the bank but are deep enough somewhere
-    /// inside (not land). Once every chart is stamped, openLockApproaches makes those within `reachM` of a chamber passable (cost 5),
-    /// since a lock's approach is a maintained channel. Done after stamping because the approach can lie on a different chart.
-    void setLock(Cell c) {
-        if (lockCell_.empty()) lockCell_.assign(cost_.size(), 0);
-        lockCell_[index(c)] = 1;
+    /// Navigation locks. A lock's approach is a maintained channel on the line of the chamber, but at chart resolution the chamber and its
+    /// guide walls, gate walkways, cables and bank depth areas are one or two cells wide and seal it, however the grid happens to fall. So
+    /// stamping records each chamber's axis as a corridor (a segment and a half-width, in metres), and once every chart is stamped
+    /// openLockCorridors makes every cell in a corridor that is not land passable (cost 5: a lockage means waiting for the lockmaster).
+    void addLockCorridor(LatLon a, LatLon b, double halfWidthM) { corridors_.push_back({a, b, halfWidthM}); }
+    void setLand(Cell c, bool on) {
+        if (landCell_.empty()) { if (!on) return; landCell_.assign(cost_.size(), 0); }
+        landCell_[index(c)] = on ? 1 : 0;
     }
-    void setShoalDeep(Cell c, bool on) {
-        if (shoalDeep_.empty()) { if (!on) return; shoalDeep_.assign(cost_.size(), 0); }
-        shoalDeep_[index(c)] = on ? 1 : 0;
-    }
-    /// Shoreline construction (guide walls, piers) over water. Normally a wall; within reach of a lock chamber the guide walls of the
-    /// approach are one or two cells apart at chart resolution and sealed the channel, so openLockApproaches lets them through too.
-    void setWall(Cell c, bool on) {
-        if (wallCell_.empty()) { if (!on) return; wallCell_.assign(cost_.size(), 0); }
-        wallCell_[index(c)] = on ? 1 : 0;
-    }
-    void openLockApproaches(double reachM);
+    void openLockCorridors();
     void clearHazardShut(Cell c) {
         if (!hazardShut_.empty()) hazardShut_[index(c)] = 0;
     }
@@ -192,9 +184,9 @@ private:
     double cellSizeDeg_;
     double cellSizeLonDeg_;
     std::vector<float> cost_;
-    std::vector<uint8_t> wallCell_;   // empty until a shoreline construction cell over water is set
-    std::vector<uint8_t> lockCell_;   // empty until a lock chamber cell is set
-    std::vector<uint8_t> shoalDeep_;  // empty until a shoal-to-the-bank depth area with deep water inside is set
+    struct LockCorridor { LatLon a, b; double halfWidthM; };
+    std::vector<LockCorridor> corridors_;
+    std::vector<uint8_t> landCell_;   // empty until a land cell is set (the covering chart's own verdict)
     std::vector<uint8_t> hazardShut_;  // empty until a hazard blocks a cell
     std::vector<float> lane_;  // empty until a lane is set
     std::vector<float> marginWeight_;  // empty until applyLaneMargin sets it
