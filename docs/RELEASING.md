@@ -22,7 +22,7 @@ The 29-route benchmark needs the full NOAA chart set (over 2 GB), so it is not i
 
 ## Cutting a release
 
-1. Master is green (CI and CodeQL: the release workflow re-runs CI on the tagged commit but does not check CodeQL), and the benchmark comparison has been checked for anything that got worse.
+1. Master is green (CI and CodeQL: the release workflow re-runs CI on the tagged commit but does not check CodeQL), and the benchmark comparison has been checked for anything that got worse. Never tag from a branch: only from master.
 2. Give the human the plain-language summary and the management checklist, and wait for an explicit go (Rule 6).
 3. From master: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
@@ -48,5 +48,9 @@ workflows). On another system, build it from source (see the README).
 
 ## Branch protection
 
-Nothing enforces "merge only when green" except discipline: `master` has no branch protection or ruleset. Requiring the `CI` and `CodeQL`
-checks is a repository setting the owner can turn on.
+`master` is protected. Every change goes in through a pull request, and these checks must pass before GitHub allows the merge (admins
+included): lint, build and test on g++ and clang++, tests under the sanitizers, the OpenCPN plugin build, and CodeQL (`Analyze (C++)`).
+Force-pushes to `master` and deleting it are blocked. The informational version job is not required (it only runs on master). CodeRabbit is
+not required either, because its free review limit can leave a PR without a review. To change any of this: Settings, Branches.
+
+The release workflow re-runs CI on the tagged commit, but not CodeQL, so before tagging check that CodeQL is green on master.
