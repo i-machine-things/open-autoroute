@@ -569,6 +569,23 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
                     unsafeM, lengthM, cautionM, areasM, narrowInM, narrowNearOutM, gatesNear, gatesMissed, laneRuns.size(), withFlow, crossings, wrongWayM, worstOff, snapStartM, snapEndM, secs);
         result.summaryLine = sb;
     };
+    // The same measurements as numbers, for a front end that words its own report (planning and checking alike).
+    for (const auto& [id, ac] : areasCrossed) {
+        const AreaNote& n = areaLayer.notes[id];
+        result.areasCrossed.push_back({n.kind, n.text, n.factor, ac.m, ac.stretches, ac.at});
+    }
+    RouteCheck& rc = result.check;
+    rc.lengthM = nm * 1852.0;
+    rc.unsafeM = unsafeM;
+    for (const Spot& sp : unsafeSpots) rc.unsafe.push_back({sp.at, sp.alongM});
+    rc.cautionM = cautionM;
+    rc.cautionStretches = cautionStretches;
+    rc.narrowInM = narrowInM;
+    rc.narrowNearOutM = narrowNearOutM;
+    rc.gatesNear = gatesNear;
+    rc.gatesMissed = gatesMissed;
+    for (const LaneRun& r : laneRuns) rc.lanes.push_back({r.at, r.alongM, r.lengthM, r.thetaSum / r.n, r.lane});
+    rc.closestShoreM = clearances.empty() ? -1.0 : clearances.front();
     if (evaluating) {
         emitTo(checkOut, "unsafe by the chart rules: %.0f m of %.0f m (%.1f%%) in %zu stretch(es)\n", unsafeM, nm * 1852.0,
                     100.0 * unsafeM / (nm * 1852.0), unsafeSpots.size());
@@ -627,10 +644,6 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     result.chartsUsed = used;
     result.snapStartM = snapStartM;
     result.snapEndM = snapEndM;
-    for (const auto& [id, ac] : areasCrossed) {
-        const AreaNote& n = areaLayer.notes[id];
-        result.areasCrossed.push_back({n.kind, n.text, n.factor, ac.m, ac.stretches, ac.at});
-    }
     result.grid = std::make_shared<CostGrid>(std::move(grid));
     return result;
 }
