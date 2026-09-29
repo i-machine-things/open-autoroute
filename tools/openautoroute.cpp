@@ -68,7 +68,7 @@ std::vector<LatLon> readGpxPoints(const std::string& path) {
 
 void usage(const char* argv0) {
     std::fprintf(stderr,
-                 "usage: %s --enc DIR (--from LAT,LON --to LAT,LON | --eval ROUTE.gpx) [--draft M=1.5] [--clearance M=1.0]\n"
+                 "usage: %s --enc DIR (--from LAT,LON [--via LAT,LON]... --to LAT,LON | --eval ROUTE.gpx) [--draft M=1.5] [--clearance M=1.0]\n"
                  "          [--cell-m M=30] [--margin-m M=500] [--margin-weight W=10] [--no-tss] [--length-m L=12] [--air-draft-m H] [--under-sail] [--lane-use F] [--lane-margin-m M=1500] [--lane-margin-weight W=12] [--caution F] [--simplify T=0.05] [--min-leg-m M=460] [--summary] [--map LAT,LON,CELLS] [-o route.gpx]\n", argv0);
 }
 
@@ -147,6 +147,7 @@ void writePicture(const std::string& path, const CostGrid& grid, const std::vect
 int main(int argc, char** argv) {
     std::string encDir, evalPath, outPath = "route.gpx", routeName, startName = "START", endName = "END", picturePath;
     LatLon from{}, to{}, mapAt{};
+    std::vector<LatLon> via;
     int mapRadius = 0;
     bool trace = false, timing = false;
     bool haveFrom = false, haveTo = false, applyTss = true, underSail = false;
@@ -167,6 +168,11 @@ int main(int argc, char** argv) {
         else if (a == "--enc" && hasVal) encDir = argv[++i];
         else if (a == "--from" && hasVal) haveFrom = parseLatLon(argv[++i], from);
         else if (a == "--to" && hasVal) haveTo = parseLatLon(argv[++i], to);
+        else if (a == "--via" && hasVal) {   // repeatable: points the route must pass through, in the order given
+            LatLon p{};
+            if (!parseLatLon(argv[++i], p)) { usage(argv[0]); return 2; }
+            via.push_back(p);
+        }
         else if (a == "--eval" && hasVal) evalPath = argv[++i];
         else if (a == "--draft" && hasVal) draft = std::atof(argv[++i]);
         else if (a == "--clearance" && hasVal) clearance = std::atof(argv[++i]);
@@ -216,6 +222,7 @@ int main(int argc, char** argv) {
     if (!encDir.empty()) req.encDirs.push_back(encDir);
     req.from = from;
     req.to = to;
+    req.via = via;
     req.draftM = draft;
     req.clearanceM = clearance;
     req.cellM = cellM;

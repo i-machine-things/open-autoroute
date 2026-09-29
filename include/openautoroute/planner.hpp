@@ -19,6 +19,7 @@ namespace oar {
 struct PlanRequest {
     std::vector<std::string> encDirs;   // folders searched recursively for ENC base cells (.000); a front end passes the chart folders it already knows
     LatLon from{}, to{};
+    std::vector<LatLon> via;            // points the route must pass through, in order, between from and to (a drawn route's turns)
     std::vector<LatLon> evalRoute;      // if two or more points: score this route instead of planning one (from/to are taken from it)
     double draftM = 1.5, clearanceM = 1.0;
     double lengthM = 12.0;
@@ -65,6 +66,30 @@ struct AreaCrossing {
     LatLon at{};
 };
 
+/// What a route passes through, measured by sampling along it about once per grid cell. Filled on a plan and on a check (evalRoute).
+struct RouteCheck {
+    struct Spot {
+        LatLon at{};
+        double alongM = 0.0;   // distance from the start
+    };
+    struct LaneTransit {
+        LatLon at{};
+        double alongM = 0.0, lengthM = 0.0;
+        double offFlowDeg = 0.0;   // mean angle to the lane's flow: 0 with it, 90 square across, 180 against it (wrong way)
+        float laneDeg = 0.0f;      // the lane's direction of flow
+    };
+    double lengthM = 0.0;
+    double unsafeM = 0.0;             // over land, too shallow, on a charted hazard, or off the charts
+    std::vector<Spot> unsafe;         // where each separate unsafe stretch starts
+    double cautionM = 0.0;            // inside precautionary areas
+    int cautionStretches = 0;
+    double narrowInM = 0.0;           // inside a narrow charted channel
+    double narrowNearOutM = 0.0;      // running close outside one (within 1.5 km, not in any channel)
+    int gatesNear = 0, gatesMissed = 0;   // buoy gates (paired lateral marks) near the route, and those it does not pass between
+    std::vector<LaneTransit> lanes;   // each stretch inside a traffic lane
+    double closestShoreM = -1.0;      // closest approach to blocked water, not counting 1 km at each end; negative if not measured
+};
+
 struct PlanResult {
     int status = 0;                 // 0 planned (or scored), 1 no route or cancelled, 2 the request itself was unusable
     std::string failReason;         // machine-readable when status is not 0: "disconnected_water", "no_route", "cancelled", ...
@@ -74,7 +99,13 @@ struct PlanResult {
     double nm = 0.0, straightNm = 0.0;
     int chartsUsed = 0;
     double snapStartM = 0.0, snapEndM = 0.0;  // how far the endpoints were moved to reach safe water
+    std::vector<double> snapViaM;             // the same for each via point, in order
+    std::vector<size_t> pointIndex;           // where from, each via point and to are in `route` (planning only)
+    std::vector<bool> pointMoved;             // for each of those points: true if its own cell was not usable and it was moved
+    int failedLeg = -1;                       // on "no_route" with via points: the leg with no route (leg i leaves point i; from is 0)
     std::vector<AreaCrossing> areasCrossed;   // dearest first
+    RouteCheck check;               // the same measurements as numbers, for a front end that words its own report
+    std::string checkReport;        // the human-readable report on what the route crosses (the same lines `out` receives at the end)
     std::string summaryLine;        // one machine-readable line ("SUMMARY found=1 ..." or "SUMMARY found=0 reason=..."), for scripts
     std::shared_ptr<CostGrid> grid; // the router's view of the water, for drawing a picture
 };
@@ -98,6 +129,8 @@ std::vector<std::pair<std::string, std::string>> findEncCells(const std::string&
 /// multiple of 10 m that does. A front end uses this so a long passage never asks for more memory than the machine has (the planner
 /// itself refuses a grid over 25 million cells).
 double suggestedCellM(LatLon from, LatLon to, double preferredM = 30.0, double maxCells = 6e6);
+/// The same for a route through several points (start, via points, end).
+double suggestedCellM(const std::vector<LatLon>& points, double preferredM = 30.0, double maxCells = 6e6);
 
 /// Plan (or, with `evalRoute`, score) a route. Never throws for chart or routing problems; those come back in `status` and `failReason`.
 PlanResult planRoute(const PlanRequest& request, const PlanHooks& hooks = {});
