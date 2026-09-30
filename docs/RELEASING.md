@@ -29,7 +29,7 @@ The 29-route benchmark needs the full NOAA chart set (over 2 GB), so it is not i
 The workflow refuses the tag unless it is a milestone in `ROADMAP.md` (`vX.Y.0`, and the previous milestone is already released) or the
 next patch of a milestone that is already released and still current (once `vX.(Y+1).0` is out, `vX.Y` is closed: no backports), and its
 commit is on master. Leading zeros (`v0.1.01`) are refused. Versions below 1.0 are published as pre-releases.
-The release has two files with self-explaining names: `openautoroute-cli-vX.Y.Z-linux-x86_64.tar.gz` (the command-line tool) and two plugin packages, `openautoroute-opencpn-plugin-vX.Y.Z-debian13-x86_64.tar.gz` and `...-debian12-x86_64.tar.gz` (Options, Plugins, Import plugin). OpenCPN refuses a plugin package whose target system does not match the computer ("Incompatible import plugin detected"), so the same binary is packaged for each system it is meant for; a Debian 12 package is also accepted on Ubuntu 24.04. All of it is built in a Debian 12 container, with checksums, and notes made from the roadmap milestone (or, for
+The release has the command-line tool (`openautoroute-cli-vX.Y.Z-linux-x86_64.tar.gz`) and plugin packages for Linux, Windows and macOS (Options, Plugins, Import plugin). OpenCPN refuses a plugin package whose target system does not match the computer ("Incompatible import plugin detected"), so the same binary is packaged for each system it is meant for; a Debian 12 package is also accepted on Ubuntu 24.04. **The Windows and macOS packages are unverified**: they build clean in CI, but nobody has yet imported either one into a real OpenCPN install on that platform — see "Plugin package" below. All of it is built with checksums, and notes made from the roadmap milestone (or, for
 a patch, the milestone it patches) plus the changes since the previous release. They are built on Debian 12, so they need glibc 2.36 or
 newer (the tool links libstdc++ statically; the plugin also needs wxWidgets 3.2). On another system, build from source. The tool reports
 its version with `openautoroute --version`.
@@ -43,10 +43,25 @@ prints the release notes in the job summary. Rehearse before the first real tag.
 
 ## Plugin package
 
-The plugin package is built on Debian 12 with wxWidgets 3.2 against OpenCPN's plugin header for release 5.14 (pinned by commit in the
-workflows). OpenCPN matches a package's target system exactly (a Debian package must match the Debian major version; a Debian 12 package is
-also accepted on Ubuntu 24.04), so to support another system add another package line in `release.yml`. Otherwise build from source (see
-the README).
+The plugin package is built with wxWidgets 3.2 against OpenCPN's plugin header for release 5.14 (pinned by commit in the workflows), once
+per target system, in `release.yml`'s `build`/`build_windows`/`build_macos` jobs:
+
+- **Linux** (`build`): Debian 12 container, wxWidgets from apt. OpenCPN matches a package's target system exactly (a Debian package must
+  match the Debian major version; a Debian 12 package is also accepted on Ubuntu 24.04). Verified: the maintainer has imported this one
+  into a real OpenCPN 5.14 install and confirmed it loads and plans a route.
+- **Windows** (`build_windows`): `windows-latest`, 32-bit (`win32`/`x86`) — OpenCPN's own official Windows builds are 32-bit, and a
+  plugin's ABI must match the host app. wxWidgets and the C++ runtime are both linked statically (`vcpkg`'s `x86-windows-static` triplet,
+  `CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`), so the package has no external DLLs to bundle. The MSVC toolset is pinned (`-T v143`)
+  because a plugin built with a newer one can crash on load against OpenCPN's own bundled runtime
+  ([OpenCPN/OpenCPN#5399](https://github.com/OpenCPN/OpenCPN/issues/5399)) — copied from a working reference
+  ([nohal/dashboardsk_pi](https://github.com/nohal/dashboardsk_pi)'s `windows.yml`), not verified against this project's own build.
+  **Unverified**: builds clean, never imported into a real Windows OpenCPN.
+- **macOS** (`build_macos`): `macos-latest` (Apple Silicon), wxWidgets via Homebrew. Not code-signed or notarized, same as OpenCPN's own
+  installer — macOS will warn about an unidentified developer; that's expected, not a build defect. **Unverified**: builds clean, never
+  imported into a real macOS OpenCPN.
+
+To support another system, add another package line (Linux) or another job (Windows/macOS) in `release.yml`. Otherwise build from source
+(see the README).
 
 ## OpenCPN plugin catalog
 
