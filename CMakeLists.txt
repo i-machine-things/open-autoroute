@@ -29,8 +29,11 @@ add_test(NAME core COMMAND test_core)
 add_executable(s57_scan tools/s57_scan.cpp)
 target_link_libraries(s57_scan PRIVATE openautoroute_core)
 
+# Shared release version: the CLI tool reports it via --version, and the OpenCPN plugin (below) reports it to OpenCPN's
+# Plugin Manager. A release build sets it from the tag; local builds default to "dev".
+set(OAR_VERSION "dev" CACHE STRING "Version reported by openautoroute --version and by the OpenCPN plugin")
+
 # Command-line router: ENC cells in, GPX route out (import into OpenCPN to check it).
-set(OAR_VERSION "dev" CACHE STRING "Version reported by openautoroute --version (a release build sets it from the tag)")
 add_executable(openautoroute tools/openautoroute.cpp)
 target_compile_definitions(openautoroute PRIVATE OAR_VERSION="${OAR_VERSION}")
 target_link_libraries(openautoroute PRIVATE openautoroute_core)

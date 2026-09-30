@@ -48,6 +48,17 @@ workflows). OpenCPN matches a package's target system exactly (a Debian package 
 also accepted on Ubuntu 24.04), so to support another system add another package line in `release.yml`. Otherwise build from source (see
 the README).
 
+## OpenCPN plugin catalog
+
+Every release also generates one schema-valid catalog metadata XML per packaged target (`plugin/catalog_metadata.sh`,
+run once per target in `release.yml`'s Package step), validated against the live `ocpn-plugin.xsd` from
+[OpenCPN/plugins](https://github.com/OpenCPN/plugins) and shipped as a release artifact alongside the plugin
+tarballs. `plugin/catalog-icon.svg` is the icon a catalog PR needs.
+
+This does **not** submit the plugin to the catalog by itself. Getting listed (start on the `Alpha` branch, for
+experimental plugins) needs a separate pull request against `OpenCPN/plugins` that adds these files under its
+`metadata/` directory — see its `README.md` and `TESTING.md`. That PR is future work, not yet done.
+
 ## Branch protection
 
 `master` is protected. Every change goes in through a pull request, and these checks must pass before GitHub allows the merge (admins
