@@ -32,7 +32,7 @@ jobs:
             echo "::endgroup::"
           done
       - name: Shell scripts
-        run: shellcheck -S warning benchmarks/*.sh plugin/package.sh scripts/*.sh
+        run: shellcheck -S warning benchmarks/*.sh plugin/package.sh plugin/catalog_metadata.sh scripts/*.sh
       - name: Workflow files are valid YAML
         run: python3 -c "import sys, yaml; [yaml.safe_load(open(f)) for f in sys.argv[1:]]" .github/workflows/*.yml
 

@@ -86,7 +86,8 @@ jobs:
       - name: Tools and dependencies
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates git build-essential cmake libwxgtk3.2-dev libgl-dev libglu1-mesa-dev
+          apt-get install -y --no-install-recommends ca-certificates git build-essential cmake libwxgtk3.2-dev libgl-dev libglu1-mesa-dev \
+                              libxml2-utils
       - uses: actions/checkout@v4
       - name: OpenCPN plugin API header (the release the plugin targets)
         uses: actions/checkout@v4
@@ -95,6 +96,13 @@ jobs:
           ref: 0cd62032bc17ff004ce47f6b5dbdcccf88348400   # OpenCPN tag upstream/5.14.2+dfsg, pinned by commit (tags can move)
           path: ocpn
           sparse-checkout: include
+      - name: OpenCPN plugin-catalog schema (to validate the catalog metadata this release generates)
+        uses: actions/checkout@v4
+        with:
+          repository: OpenCPN/plugins
+          ref: master
+          path: ocpn-plugins-catalog
+          sparse-checkout: ocpn-plugin.xsd
       - name: Build the command-line tool and the plugin
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOAR_BUILD_PLUGIN=ON -DOCPN_INCLUDE_DIR="$PWD/ocpn/include" \
@@ -111,6 +119,13 @@ jobs:
           # such as PeppermintOS), and for Debian 12, which OpenCPN also accepts on Ubuntu 24.04. Other systems build from source (README).
           for v in 12 13; do
             VERSION="${TAG#v}" TARGET=debian-x86_64 TARGET_VERSION=$v plugin/package.sh build/plugin/libopenautoroute_pi.so dist
+            pkg="dist/openautoroute-opencpn-plugin-$TAG-debian$v-x86_64.tar.gz"
+            url="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/$(basename "$pkg")"
+            VERSION="${TAG#v}" TARGET=debian-x86_64 TARGET_VERSION=$v plugin/catalog_metadata.sh "$pkg" "$url" dist
+          done
+          # Catches a schema drift or a mistake in catalog_metadata.sh now, not when a PR to OpenCPN/plugins is rejected.
+          for f in dist/openautoroute_pi-*.xml; do
+            xmllint --noout --schema ocpn-plugins-catalog/ocpn-plugin.xsd "$f"
           done
           (cd dist && sha256sum * > SHA256SUMS)
           ls -l dist
