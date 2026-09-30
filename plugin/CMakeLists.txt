@@ -19,13 +19,14 @@ if(MSVC)
   # "resolve this from whatever process loads me" mechanism: every opencpn_plugin_120 base-class method,
   # InsertPlugInTool, PlugIn_Waypoint, GetHostApi and friends are implemented inside OpenCPN.exe itself,
   # and MSVC's linker needs an actual import library for them, not just the header declaring them.
-  # OpenCPN publishes exactly this as a prebuilt artifact: https://github.com/OpenCPN/opencpn-libs,
-  # api-20/msvc-wx32/opencpn.lib (api-20 matches this plugin's own opencpn_plugin_120 base class; its
-  # numbered classes are frozen ABI checkpoints by design, so a lib built from an older OpenCPN release
-  # still resolves them). Found the same way as the other two platform fixes: the Windows build actually
+  # OpenCPN publishes exactly this as a prebuilt artifact: https://github.com/OpenCPN/opencpn-libs.
+  # All its api-NN/msvc-wx32/opencpn.lib files are built from the same OpenCPN 5.11 commit but export
+  # progressively larger symbol sets as NN increases; api-20 (matching this plugin's own
+  # opencpn_plugin_120 base class) was missing GetHostApi/HostApi121, so api-22 is used instead for its
+  # larger export set. Found the same way as the other platform fixes: the Windows build actually
   # failing in CI with a wall of unresolved externals once it got past compiling.
   if(NOT OCPN_API_LIB)
-    message(FATAL_ERROR "Set -DOCPN_API_LIB to opencpn-libs/api-20/msvc-wx32/opencpn.lib")
+    message(FATAL_ERROR "Set -DOCPN_API_LIB to opencpn-libs/api-22/msvc-wx32/opencpn.lib")
   endif()
   target_link_libraries(openautoroute_pi PRIVATE "${OCPN_API_LIB}")
 else()

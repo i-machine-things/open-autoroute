@@ -157,7 +157,7 @@ jobs:
           repository: OpenCPN/opencpn-libs
           ref: main   # this repo's default branch is "main", unlike OpenCPN/OpenCPN and OpenCPN/plugins' "master"
           path: opencpn-libs
-          sparse-checkout: api-20
+          sparse-checkout: api-22
       - name: Strip the tag's leading "v" once, so later steps don't need shell-specific string slicing
         shell: bash
         run: echo "OAR_VER=${TAG#v}" >> "$GITHUB_ENV"
@@ -174,13 +174,18 @@ jobs:
           arch: win32
       - name: Build the plugin
         shell: cmd
-        # -T v143 pins the MSVC toolset: a plugin built with a newer one can crash on load against OpenCPN's
-        # own bundled (older) C++ runtime (OpenCPN/OpenCPN#5399) -- this exact pin is unverified against
-        # OpenCPN 5.14 specifically, copied from a working reference (nohal/dashboardsk_pi's windows.yml).
+        # No -T toolset pin: an earlier attempt pinned -T v143 to guard against OpenCPN/OpenCPN#5399
+        # (a plugin built with a newer MSVC toolset crashing against OpenCPN's own bundled, older,
+        # DYNAMIC C++ runtime) -- copied from a reference (nohal/dashboardsk_pi) that links wx
+        # dynamically. That risk doesn't apply here: this plugin links the CRT statically
+        # (CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded), so it carries its own complete runtime and shares
+        # none of it with OpenCPN.exe at load time. The pin was actively harmful instead: it forced our
+        # object files onto a different MSVC sub-toolset than vcpkg used to build wx (unpinned), which
+        # surfaced as unresolved internal MSVC STL symbols at link time.
         run: |
-          cmake -S . -B build -A win32 -T v143 -DCMAKE_BUILD_TYPE=Release -DOAR_BUILD_PLUGIN=ON ^
+          cmake -S . -B build -A win32 -DCMAKE_BUILD_TYPE=Release -DOAR_BUILD_PLUGIN=ON ^
                 -DOCPN_INCLUDE_DIR=%CD%\ocpn\include -DOAR_VERSION=%OAR_VER% ^
-                -DOCPN_API_LIB=%CD%\opencpn-libs\api-20\msvc-wx32\opencpn.lib ^
+                -DOCPN_API_LIB=%CD%\opencpn-libs\api-22\msvc-wx32\opencpn.lib ^
                 -DCMAKE_TOOLCHAIN_FILE=%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake ^
                 -DVCPKG_TARGET_TRIPLET=x86-windows-static -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
           cmake --build build --config Release
