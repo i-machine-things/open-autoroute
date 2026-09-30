@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Standalone copy of the glyph makeIcon() draws at runtime in openautoroute_pi.cpp (same coordinates and
+     colours), for the OpenCPN plugin catalog PR, which needs an icon file on disk (SVG preferred). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <polyline points="6,25 13,12 20,19 26,6" fill="none" stroke="#1E5AC8" stroke-width="3"/>
+  <circle cx="6" cy="25" r="4" fill="#1EA03C" stroke="#000000" stroke-width="1"/>
+  <circle cx="26" cy="6" r="4" fill="#DC2828" stroke="#000000" stroke-width="1"/>
+</svg>
