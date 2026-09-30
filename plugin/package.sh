@@ -19,7 +19,7 @@ cat > "$TMP/$TOP/metadata.xml" <<XML
   <version>$VERSION</version>
   <release>1</release>
   <summary>Plan a safe route between two points from NOAA S-57 charts</summary>
-  <api-version>1.18</api-version>
+  <api-version>1.20</api-version>  <!-- must match GetAPIVersionMinor() in openautoroute_pi.cpp: the ABI class OpenCPN casts this plugin to -->
   <open-source>yes</open-source>
   <is-imported>yes</is-imported>
   <author>open-autoroute contributors</author>
