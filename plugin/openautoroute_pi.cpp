@@ -68,7 +68,11 @@ std::shared_ptr<HostApi121> hostApi() {
 template <typename F>
 void forEachWaypoint(const HostApi121::Route& route, F f) {
     if (!route.pWaypointList) return;
-    for (auto* node = route.pWaypointList->GetFirst(); node; node = node->GetNext()) f(*node->GetData());
+    // Not `auto*`: wxList::GetFirst() returns a raw node pointer on wxWidgets 3.2 (Linux) but the
+    // compatibility_iterator wrapper class on 3.3.x (macOS's current Homebrew formula) -- `auto*`
+    // pointer deduction only compiles against the former. `auto` works against both, since
+    // compatibility_iterator overloads -> and operator bool() for exactly this use.
+    for (auto node = route.pWaypointList->GetFirst(); node; node = node->GetNext()) f(*node->GetData());
 }
 
 std::vector<LatLon> routePoints(const HostApi121::Route& route) {
