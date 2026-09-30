@@ -21,5 +21,12 @@ else()
   # omits it there); only Linux/BSD and macOS .dylibs use the prefix.
   set_target_properties(openautoroute_pi PROPERTIES PREFIX "lib")
 endif()
+if(APPLE)
+  # opencpn_plugin_120, PlugIn_Waypoint_ExV2 and friends are base classes OpenCPN's own executable
+  # implements, not this header-only SDK -- a plugin is only ever dlopen()'d by a running OpenCPN,
+  # which resolves them then. Linux's ELF .so permits that unresolved at link time by default;
+  # macOS's ld does not unless told to expect it. Found by the macOS build actually failing in CI.
+  target_link_options(openautoroute_pi PRIVATE -undefined dynamic_lookup)
+endif()
 # Linux/BSD only: the plugin's own symbols (create_pi, destroy_pi) are exported by DECL_EXP; everything else stays private.
 install(TARGETS openautoroute_pi LIBRARY DESTINATION lib/opencpn)
