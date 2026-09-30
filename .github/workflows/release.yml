@@ -144,6 +144,8 @@ jobs:
     # UNVERIFIED: nobody has yet imported this package into a real Windows OpenCPN install (see docs/RELEASING.md).
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: OpenCPN plugin API header (the release the plugin targets)
         uses: actions/checkout@v4
         with:
@@ -151,6 +153,7 @@ jobs:
           ref: 0cd62032bc17ff004ce47f6b5dbdcccf88348400   # OpenCPN tag upstream/5.14.2+dfsg, pinned by commit (tags can move)
           path: ocpn
           sparse-checkout: include
+          persist-credentials: false
       - name: OpenCPN's prebuilt Windows import library (headers alone aren't enough to link against a DLL -- see CMakeLists.txt)
         uses: actions/checkout@v4
         with:
@@ -158,6 +161,7 @@ jobs:
           ref: main   # this repo's default branch is "main", unlike OpenCPN/OpenCPN and OpenCPN/plugins' "master"
           path: opencpn-libs
           sparse-checkout: api-22
+          persist-credentials: false
       - name: Strip the tag's leading "v" once, so later steps don't need shell-specific string slicing
         shell: bash
         run: echo "OAR_VER=${TAG#v}" >> "$GITHUB_ENV"
@@ -168,7 +172,7 @@ jobs:
         shell: bash
         run: '"$VCPKG_INSTALLATION_ROOT/vcpkg" install wxwidgets:x86-windows-static'
       - name: Set up the MSVC Developer Command Prompt (32-bit)
-        uses: seanmiddleditch/gha-setup-vsdevenv@v3
+        uses: seanmiddleditch/gha-setup-vsdevenv@8c6bbf80998779f2bba87b1452832e561b65fd57   # v3
         with:
           host_arch: x86
           arch: win32
@@ -212,6 +216,8 @@ jobs:
     # UNVERIFIED: nobody has yet imported this package into a real macOS OpenCPN install (see docs/RELEASING.md).
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: OpenCPN plugin API header (the release the plugin targets)
         uses: actions/checkout@v4
         with:
@@ -219,6 +225,7 @@ jobs:
           ref: 0cd62032bc17ff004ce47f6b5dbdcccf88348400   # OpenCPN tag upstream/5.14.2+dfsg, pinned by commit (tags can move)
           path: ocpn
           sparse-checkout: include
+          persist-credentials: false
       - name: wxWidgets 3.2 via Homebrew
         run: brew install wxwidgets
       - name: Build the plugin

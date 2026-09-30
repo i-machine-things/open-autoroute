@@ -14,12 +14,14 @@ number?** Everything past that (planning an actual route) is a nice bonus, not r
      you open it, macOS will say it's from an "unidentified developer" and refuse to run it — this is normal
      and OpenCPN's own site mentions it. Right-click the app, choose **Open**, then confirm **Open** again in
      the dialog that pops up. You only have to do this once.
-2. **The plugin package** — a `.tar.gz` file. Get it from the release page:
-   `https://github.com/i-machine-things/open-autoroute/releases/tag/v0.1.4`
-   - Windows: `openautoroute-opencpn-plugin-v0.1.4-windows-x86.tar.gz`
-   - macOS: `openautoroute-opencpn-plugin-v0.1.4-macos-arm64.tar.gz`
+2. **The plugin package** — a `.tar.gz` file. Get it from the
+   [releases page](https://github.com/i-machine-things/open-autoroute/releases): pick the release you're testing, then
+   download the asset matching your platform and that release's version (`vX.Y.Z`):
+   - Windows: `openautoroute-opencpn-plugin-vX.Y.Z-windows-x86.tar.gz`
+   - macOS: `openautoroute-opencpn-plugin-vX.Y.Z-macos-arm64.tar.gz`
 
-   Don't unzip it — OpenCPN reads the `.tar.gz` file directly.
+   Don't unzip it — OpenCPN reads the `.tar.gz` file directly. Wherever this doc mentions a version number below, use
+   the one from whichever release you actually downloaded.
 
 ## Import and check the version (the part that matters)
 
@@ -30,7 +32,7 @@ number?** Everything past that (planning an actual route) is a nice bonus, not r
    message.** That's the main failure we're checking for, and exactly what we can't test ourselves.
 5. If it imports, find **Auto-route** in the plugin list and make sure its checkbox is ticked (enabled).
 6. Click on the **Auto-route** entry to see its details, or check the version shown in the plugin list.
-   **It should say `0.1.4`.** If it says `0.0` or is blank, that's also worth reporting — it means a fix
+   **It should match the release's version** (the `vX.Y.Z` from the download). If it says `0.0` or is blank, that's also worth reporting — it means a fix
    that was supposed to land didn't actually take effect on your platform.
 
 That's the critical check. Screenshot whatever OpenCPN shows at this point (success or an error) and send it

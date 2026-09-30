@@ -50,11 +50,14 @@ per target system, in `release.yml`'s `build`/`build_windows`/`build_macos` jobs
   match the Debian major version; a Debian 12 package is also accepted on Ubuntu 24.04). Verified: the maintainer has imported this one
   into a real OpenCPN 5.14 install and confirmed it loads and plans a route.
 - **Windows** (`build_windows`): `windows-latest`, 32-bit (`win32`/`x86`) — OpenCPN's own official Windows builds are 32-bit, and a
-  plugin's ABI must match the host app. wxWidgets and the C++ runtime are both linked statically (`vcpkg`'s `x86-windows-static` triplet,
-  `CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`), so the package has no external DLLs to bundle. The MSVC toolset is pinned (`-T v143`)
-  because a plugin built with a newer one can crash on load against OpenCPN's own bundled runtime
-  ([OpenCPN/OpenCPN#5399](https://github.com/OpenCPN/OpenCPN/issues/5399)) — copied from a working reference
-  ([nohal/dashboardsk_pi](https://github.com/nohal/dashboardsk_pi)'s `windows.yml`), not verified against this project's own build.
+  plugin's ABI must match the host app. wxWidgets is linked via `vcpkg`'s `x86-windows-static` triplet and the MSVC CRT is linked
+  statically (`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`) — intended to leave the package with no external runtime DLLs to bundle, though
+  that's an inference from the build flags, not something confirmed by running on a real machine. The MSVC toolset is deliberately **not**
+  pinned: an earlier attempt pinned `-T v143`, copied from a working reference
+  ([nohal/dashboardsk_pi](https://github.com/nohal/dashboardsk_pi)'s `windows.yml`) to guard against a plugin built with a newer toolset
+  crashing against OpenCPN's own bundled runtime ([OpenCPN/OpenCPN#5399](https://github.com/OpenCPN/OpenCPN/issues/5399)) — but that
+  reference links wx dynamically, where the risk applies; forcing the pin here instead caused real link errors (it put our object files on
+  a different MSVC sub-toolset than vcpkg used to build wx, unpinned).
   **Unverified**: builds clean, never imported into a real Windows OpenCPN.
 - **macOS** (`build_macos`): `macos-latest` (Apple Silicon), wxWidgets via Homebrew. Not code-signed or notarized, same as OpenCPN's own
   installer — macOS will warn about an unidentified developer; that's expected, not a build defect. **Unverified**: builds clean, never
