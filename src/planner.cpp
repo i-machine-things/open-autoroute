@@ -61,8 +61,16 @@ std::map<int, Snap> nearestPerBody(const CostGrid& g, const WaterBodies& bodies,
 }
 
 
+// __attribute__((format(printf, ...))) is a GCC/Clang extension MSVC does not understand at all
+// (not just ignore -- it is a hard parse error), so it is guarded rather than used directly.
+#if defined(__GNUC__) || defined(__clang__)
+#define OAR_PRINTF_CHECK(fmt_index, first_arg) __attribute__((format(printf, fmt_index, first_arg)))
+#else
+#define OAR_PRINTF_CHECK(fmt_index, first_arg)
+#endif
+
 // printf into a message for the caller's hook (nothing happens if the caller has no hook).
-void emitTo(const std::function<void(const std::string&)>& hook, const char* fmt, ...) __attribute__((format(printf, 2, 3)));
+void emitTo(const std::function<void(const std::string&)>& hook, const char* fmt, ...) OAR_PRINTF_CHECK(2, 3);
 void emitTo(const std::function<void(const std::string&)>& hook, const char* fmt, ...) {
     if (!hook) return;
     va_list ap, ap2;

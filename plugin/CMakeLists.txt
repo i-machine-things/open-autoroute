@@ -11,8 +11,15 @@ include(${wxWidgets_USE_FILE})
 add_library(openautoroute_pi MODULE openautoroute_pi.cpp)
 target_include_directories(openautoroute_pi PRIVATE ${OCPN_INCLUDE_DIR})
 target_compile_definitions(openautoroute_pi PRIVATE ${wxWidgets_DEFINITIONS} OAR_VERSION="${OAR_VERSION}")
-target_compile_options(openautoroute_pi PRIVATE -Wall -Wextra -fvisibility=hidden)
 target_link_libraries(openautoroute_pi PRIVATE openautoroute_core ${wxWidgets_LIBRARIES})
-set_target_properties(openautoroute_pi PROPERTIES PREFIX "lib" POSITION_INDEPENDENT_CODE ON)
+set_target_properties(openautoroute_pi PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(MSVC)
+  target_compile_options(openautoroute_pi PRIVATE /W4)
+else()
+  target_compile_options(openautoroute_pi PRIVATE -Wall -Wextra -fvisibility=hidden)
+  # Windows DLLs are never "lib"-prefixed by convention (and CMake's own MODULE default already
+  # omits it there); only Linux/BSD and macOS .dylibs use the prefix.
+  set_target_properties(openautoroute_pi PROPERTIES PREFIX "lib")
+endif()
 # Linux/BSD only: the plugin's own symbols (create_pi, destroy_pi) are exported by DECL_EXP; everything else stays private.
 install(TARGETS openautoroute_pi LIBRARY DESTINATION lib/opencpn)
