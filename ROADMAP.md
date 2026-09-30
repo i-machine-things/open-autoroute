@@ -33,8 +33,9 @@ OpenCPN already has a mature plugin for this: **Weather Routing** plans isochron
 
 * **Handoff to Weather Routing:** open-autoroute's own hazard/COLREGs-aware route becomes the input Weather Routing plans against for wind and boat performance, instead of a second GRIB/point-of-sail engine built from scratch. Exact mechanism — an ordinary Route Manager route Weather Routing can already read as a hint or constraint, versus a more direct call between the two plugins — is still to be scoped when this milestone starts.
 * **Boat performance stays with Weather Routing:** its own polar files and performance modeling remain the source of truth; open-autoroute does not build a separate polar database or ORC VPP integration.
+* **Ocean-crossing trigger:** a scoped exception to "no chart coverage is unsafe, block" (see `docs/S57_OBJECTS.md`'s `M_COVR` handling) — a genuine gap in ENC coverage along the great-circle path (mid-Pacific, mid-Atlantic) means there is no hazard to route around, not an unknown one, so that stretch hands straight to Weather Routing instead of blocking. Scoped by actual coverage, not a named-region list: the Great Lakes are fully chart-covered, have real shipping lanes and islands, and keep their own COLREGs handling (Inland Rule 9) — they never hit this trigger. A coastal gap in coverage still blocks as today; this exception is only for a stretch with no coverage on either side of it either, wide enough that it cannot be a survey gap next to charted water.
 
-**Done when (proposed):** a route planned by open-autoroute is handed to Weather Routing, which produces a weather-optimized version of it (tacks, gybes, timing) without open-autoroute duplicating any of that math itself.
+**Done when (proposed):** a route planned by open-autoroute is handed to Weather Routing, which produces a weather-optimized version of it (tacks, gybes, timing) without open-autoroute duplicating any of that math itself, and a route crossing a genuine ENC coverage gap (a real ocean crossing) hands that stretch to Weather Routing instead of reporting no route.
 
 ### `v0.4.0` — Weather-Routed Result Re-Check
 
