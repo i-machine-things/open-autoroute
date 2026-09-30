@@ -11,7 +11,11 @@ OUT=${3:-.}
 VERSION=${VERSION:?set VERSION=X.Y.Z}
 TARGET=${TARGET:-debian-x86_64}
 TARGET_VERSION=${TARGET_VERSION:-13}
-CHECKSUM=$(sha256sum "$TARBALL" | cut -d' ' -f1)
+# Not `sha256sum ... | cut ...`: this is /bin/sh (no pipefail), so a failed sha256sum would leave
+# CHECKSUM empty and cut would still exit 0, letting set -e miss it and writing XML with an empty
+# tarball-checksum. Capturing sha256sum's own output and exit status directly catches that.
+SHA_OUTPUT=$(sha256sum "$TARBALL") || { echo "sha256sum failed for $TARBALL" >&2; exit 1; }
+CHECKSUM=${SHA_OUTPUT%% *}
 OUTFILE="$OUT/openautoroute_pi-$VERSION-$TARGET-$TARGET_VERSION-x86_64.xml"
 mkdir -p "$OUT"
 # Field order matches ocpn-plugin.xsd exactly (it is a strict xs:sequence): name, version, release, summary,
