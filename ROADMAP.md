@@ -78,7 +78,7 @@ These come from real findings: independent reviews of the code, the gaps listed 
 **Data freshness and datum**
 
 * Apply ENC update files (`.001` and later) and show each cell's edition and issue date. Only base cells are read today, so a new wreck added by an update is missed.
-* Tide and datum: height of tide, low-water datum on the Great Lakes, and squat. Depths are at chart datum with no allowance today. Check the depth units of each cell.
+* Tide and datum: height of tide, low-water datum on the Great Lakes, and squat. Depths are at chart datum with no allowance today. Check the depth units of each cell. Reuse the same tide-prediction data source existing OpenCPN plugins already consume (Admiralty Tide Tables, UKtides, TideFinder) rather than building harmonic-constituent prediction from scratch — those are display tools reading their own database, not something with a callable API, so this means sharing the data source, not calling the plugin; confirm which when this is actually picked up.
 
 **Rules of the road**
 
@@ -104,7 +104,7 @@ These come from real findings: independent reviews of the code, the gaps listed 
 **Currents and flow** (formerly the last roadmap entry; mostly superseded by the `v0.3.0` handoff)
 
 * Weather Routing already factors ocean currents into its isochrone routing, including a wind-vs-current dangerous-seas constraint — riding or avoiding current for speed is its job once `v0.3.0`'s handoff exists, not a pathfinding weight to duplicate here.
-* What could still belong here is safety-only, not speed-optimization: USGS river flow gauges or NOAA CO-OPS tidal streams strong enough to be hazardous for a given vessel at a given state, flagged the same way `WEDKLP`/`SNDWAV`/`WATTUR` already are.
+* What could still belong here is safety-only, not speed-optimization: USGS river flow gauges or NOAA CO-OPS tidal streams strong enough to be hazardous for a given vessel at a given state, flagged the same way `WEDKLP`/`SNDWAV`/`WATTUR` already are. Weather Routing's current-awareness is ocean/GRIB-scale; the actual hazard case is a narrow pass running hard on a tide stage, which is what plugins like NCDF Tidal Currents, oTcurrent and frcurrents specialize in predicting — reuse that same data rather than building tidal-current prediction from scratch. Deception Pass, already one of this project's own known-failing benchmark routes below, is exactly this case.
 
 ---
 
