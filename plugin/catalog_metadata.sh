@@ -11,12 +11,13 @@ OUT=${3:-.}
 VERSION=${VERSION:?set VERSION=X.Y.Z}
 TARGET=${TARGET:-debian-x86_64}
 TARGET_VERSION=${TARGET_VERSION:-13}
+TARGET_ARCH=${TARGET_ARCH:-x86_64}
 # Not `sha256sum ... | cut ...`: this is /bin/sh (no pipefail), so a failed sha256sum would leave
 # CHECKSUM empty and cut would still exit 0, letting set -e miss it and writing XML with an empty
 # tarball-checksum. Capturing sha256sum's own output and exit status directly catches that.
 SHA_OUTPUT=$(sha256sum "$TARBALL") || { echo "sha256sum failed for $TARBALL" >&2; exit 1; }
 CHECKSUM=${SHA_OUTPUT%% *}
-OUTFILE="$OUT/openautoroute_pi-$VERSION-$TARGET-$TARGET_VERSION-x86_64.xml"
+OUTFILE="$OUT/openautoroute_pi-$VERSION-$TARGET-$TARGET_VERSION-$TARGET_ARCH.xml"
 mkdir -p "$OUT"
 # Field order matches ocpn-plugin.xsd exactly (it is a strict xs:sequence): name, version, release, summary,
 # api-version, open-source, author, source, description, target, target-version, target-arch, tarball-url,
@@ -34,7 +35,7 @@ cat > "$OUTFILE" <<XML
   <description>Plans a route between two points using the open-autoroute engine and adds it to the Route Manager. A planning aid only; not for navigation.</description>
   <target>$TARGET</target>
   <target-version>$TARGET_VERSION</target-version>
-  <target-arch>x86_64</target-arch>
+  <target-arch>$TARGET_ARCH</target-arch>
   <tarball-url>$URL</tarball-url>
   <tarball-checksum>$CHECKSUM</tarball-checksum>
   <info-url>https://github.com/i-machine-things/open-autoroute</info-url>
