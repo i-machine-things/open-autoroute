@@ -11,9 +11,20 @@
 
 using namespace oar;
 
+#ifndef OAR_VERSION
+#define OAR_VERSION "dev"
+#endif
+
 namespace {
 
 constexpr double kFeetToM = 0.3048;
+
+// Splits "0.1.1" into (0, 1) for GetPlugInVersionMajor/Minor; a non-numeric build (OAR_VERSION="dev") reports (0, 0).
+void parsePluginVersion(int& major, int& minor) {
+    major = 0;
+    minor = 0;
+    std::sscanf(OAR_VERSION, "%d.%d", &major, &minor);
+}
 
 // A route glyph drawn at run time, so the plugin needs no data files: a dashed line through two ends.
 wxBitmap makeIcon() {
@@ -748,8 +759,16 @@ int openautoroute_pi::GetAPIVersionMajor() {
 // Must match the base class this plugin is built on (opencpn_plugin_120), not the newest API the header describes: OpenCPN casts the plugin
 // to the class named by this number and calls it incompatible when the cast fails.
 int openautoroute_pi::GetAPIVersionMinor() { return 20; }
-int openautoroute_pi::GetPlugInVersionMajor() { return 0; }
-int openautoroute_pi::GetPlugInVersionMinor() { return 0; }   // pre-release: no version numbers until the first release
+int openautoroute_pi::GetPlugInVersionMajor() {
+    int major, minor;
+    parsePluginVersion(major, minor);
+    return major;
+}
+int openautoroute_pi::GetPlugInVersionMinor() {
+    int major, minor;
+    parsePluginVersion(major, minor);
+    return minor;
+}
 wxBitmap* openautoroute_pi::GetPlugInBitmap() {
     wxLogMessage("open-autoroute plugin: GetPlugInBitmap");
     return &icon_;

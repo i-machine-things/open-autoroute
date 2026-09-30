@@ -10,7 +10,7 @@ include(${wxWidgets_USE_FILE})
 
 add_library(openautoroute_pi MODULE openautoroute_pi.cpp)
 target_include_directories(openautoroute_pi PRIVATE ${OCPN_INCLUDE_DIR})
-target_compile_definitions(openautoroute_pi PRIVATE ${wxWidgets_DEFINITIONS})
+target_compile_definitions(openautoroute_pi PRIVATE ${wxWidgets_DEFINITIONS} OAR_VERSION="${OAR_VERSION}")
 target_compile_options(openautoroute_pi PRIVATE -Wall -Wextra -fvisibility=hidden)
 target_link_libraries(openautoroute_pi PRIVATE openautoroute_core ${wxWidgets_LIBRARIES})
 set_target_properties(openautoroute_pi PROPERTIES PREFIX "lib" POSITION_INDEPENDENT_CODE ON)
