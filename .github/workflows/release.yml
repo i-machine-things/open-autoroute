@@ -155,7 +155,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: OpenCPN/opencpn-libs
-          ref: master
+          ref: main   # this repo's default branch is "main", unlike OpenCPN/OpenCPN and OpenCPN/plugins' "master"
           path: opencpn-libs
           sparse-checkout: api-20
       - name: Strip the tag's leading "v" once, so later steps don't need shell-specific string slicing
