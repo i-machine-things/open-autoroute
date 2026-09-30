@@ -27,32 +27,38 @@ Everything about moving routes and live data between the router and other equipm
 
 **Done when (proposed):** a planned route appears on a legacy plotter over its serial input without touching a memory card, live position and wind from a real instrument feed reach the router through the same layer, and at least one planned route has been checked and followed on the water with a real plotter and autopilot.
 
-### `v0.3.0` — Weather & Point-of-Sail Router
+### `v0.3.0` — Weather Routing Handoff
 
-* **GRIB2 Weather Integration:** Ingest wind vectors and wave heights for point-of-sail routing and motor vs. sail recommendations.  
-* **Tack/Gybe Waypoint Generation:** Automatically generate optimized tacking and gybing legs based on true wind angles.
+OpenCPN already has a mature plugin for this: **Weather Routing** plans isochrone routes from GRIB wind against a boat's own polar (CSV or XML), counts tacks and sail changes, and estimates voyage time. Reimplementing GRIB ingestion and tack/gybe math here would just be a worse copy of it. README.md already draws this boundary (Weather Routing's own manual warns its routes may not "see" normal navigation hazards) — this milestone is the other half of it: open-autoroute owns whether a path is safe and rule-compliant, Weather Routing owns how to sail it fastest.
 
-**Done when (proposed):** a route can be planned with a GRIB wind and wave forecast, and the tack and gybe legs it produces match hand-worked ones on at least three test passages.
+* **Handoff to Weather Routing:** open-autoroute's own hazard/COLREGs-aware route becomes the input Weather Routing plans against for wind and boat performance, instead of a second GRIB/point-of-sail engine built from scratch. Exact mechanism — an ordinary Route Manager route Weather Routing can already read as a hint or constraint, versus a more direct call between the two plugins — is still to be scoped when this milestone starts.
+* **Boat performance stays with Weather Routing:** its own polar files and performance modeling remain the source of truth; open-autoroute does not build a separate polar database or ORC VPP integration.
 
-### `v0.4.0` — Polar Performance Library
+**Done when (proposed):** a route planned by open-autoroute is handed to Weather Routing, which produces a weather-optimized version of it (tacks, gybes, timing) without open-autoroute duplicating any of that math itself.
 
-* **Polar Database:** Integrate preset boat polars and ORC VPP database profiles to map vessel performance curves directly into the routing engine.
+### `v0.4.0` — Weather-Routed Result Re-Check
 
-**Done when (proposed):** a boat is chosen by name or polar file, and the planned time on a test passage is within a stated tolerance of the polar-predicted time.
+Closes the gap Weather Routing's own manual admits to: its routes aren't checked against navigation hazards. `v0.1.0`'s Route Context Menu already checks an existing OpenCPN route against open-autoroute's rules without changing it — this milestone is applying that same, already-built checker to whatever Weather Routing produces from `v0.3.0`'s handoff, not building a new one.
+
+* **Re-check after weather routing:** run the existing hazard/COLREGs check against a Weather-Routing-optimized route, flagging anything it introduces (a tack through a TSS, a gybe over a shoal) that the safety layer would not have allowed on its own.
+
+**Done when (proposed):** a Weather-Routing-produced route can be checked the same way an OpenCPN route is checked today, and at least one real case is found where weather-optimized tacking crossed a hazard or restriction the safety layer would have avoided.
 
 ### `v0.5.0` — Adaptive Self-Tuning Engine
 
 * **Live Telemetry Use:** Use the live NMEA 0183 / Signal K data that the communications layer (`v0.2.0`) delivers (wind speed/direction, Speed Through Water, engine RPM, fuel flow).  
-* **Dynamic Auto-Tuning:** Provide user-selectable options for dynamic polar auto-tuning and real-time fuel range modeling.
+* **Dynamic Auto-Tuning:** Feed live telemetry to Weather Routing for its own dynamic polar auto-tuning (`v0.3.0`'s handoff, not a polar open-autoroute owns), plus real-time fuel range modeling here.
 
-**Done when (proposed):** live wind, speed through water and fuel flow can feed the router, and its tuned polar is closer to logged performance than the preset one on a recorded trip.
+**Done when (proposed):** live wind, speed through water and fuel flow can feed the router, that data can reach Weather Routing for its own polar auto-tuning (once `v0.3.0`'s handoff exists), and real-time fuel range modeling is closer to logged performance than a static estimate.
 
-### `v0.6.0` — Standalone Cross-Platform App Release
+### `v0.6.0` — Standalone Route-Planning App
 
-* **Flutter Framework:** Launch the standalone, hardware-accelerated cross-platform application for Android, iOS, Windows, macOS, and Linux.  
-* **Online NOAA Sync:** Connect the standalone app directly to live NOAA hydrographic data repositories and online chart distribution networks.
+Not a chart plotter — OpenCPN already is one, official and full-featured, on every platform this could target except iOS (OpenCPN's own FAQ: the App Store restricts it; the only current workaround is VNC into a Raspberry Pi). This is a focused planning tool instead: load charts, plan a route, export it. No live chart display, no position tracking, no AIS — those stay OpenCPN's job everywhere OpenCPN already runs.
 
-**Done when (proposed):** the app installs and plans a route on Android and one desktop system, using charts it downloaded itself.
+* **Flutter Framework:** A cross-platform planning app (Android, iOS, Windows, macOS, Linux) on the same core as the plugin. Cross-platform because Flutter builds all of them from one codebase, not because each platform needs its own competing chart plotter — iOS is the actual gap being filled; the rest are a convenience for planning without installing OpenCPN.
+* **Online NOAA Sync:** Download the charts a planned route needs, directly, without a separate chart-management step.
+
+**Done when (proposed):** the app installs and plans a route on iOS and one other platform, using charts it downloaded itself, with no live chart-display or tracking feature creeping into scope.
 
 ---
 
@@ -94,9 +100,10 @@ These come from real findings: independent reviews of the code, the gaps listed 
 * Draw the route options and progress on the chart, a preferences page, listing in OpenCPN's plugin catalogue, and builds for other systems and OpenCPN versions; an automated test that loads the plugin, which needs a running OpenCPN.
 * Low priority idea: send a route to a Garmin plotter over NMEA 2000 by posing as another Garmin plotter and using Garmin's plotter-to-plotter "Clone User Data" transfer. That transfer uses Garmin-proprietary messages that have not been decoded publicly (canboat has none for it), and the GPSMAP 400/500 series does not receive the standard NMEA 2000 route messages, so the format would have to be captured and worked out first. Only worth it if the serial (GRMN) route upload in `v0.2.0` fails.
 
-**Currents and flow** (formerly the last roadmap entry)
+**Currents and flow** (formerly the last roadmap entry; mostly superseded by the `v0.3.0` handoff)
 
-* Incorporate USGS river flow gauges, NOAA CO-OPS tidal streams and discharge current matrices into pathfinding weight calculations.
+* Weather Routing already factors ocean currents into its isochrone routing, including a wind-vs-current dangerous-seas constraint — riding or avoiding current for speed is its job once `v0.3.0`'s handoff exists, not a pathfinding weight to duplicate here.
+* What could still belong here is safety-only, not speed-optimization: USGS river flow gauges or NOAA CO-OPS tidal streams strong enough to be hazardous for a given vessel at a given state, flagged the same way `WEDKLP`/`SNDWAV`/`WATTUR` already are.
 
 ---
 
