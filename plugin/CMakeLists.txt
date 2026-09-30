@@ -27,6 +27,11 @@ if(APPLE)
   # which resolves them then. Linux's ELF .so permits that unresolved at link time by default;
   # macOS's ld does not unless told to expect it. Found by the macOS build actually failing in CI.
   target_link_options(openautoroute_pi PRIVATE -undefined dynamic_lookup)
+  # CMake's MODULE library type defaults to a .so suffix even on Apple (only SHARED targets default
+  # to .dylib there) -- but OpenCPN's own macOS plugin layout expects a real .dylib (see package_macos.sh
+  # and https://github.com/leamas/opencpn/wiki/Tarballs). Found the same way: the build succeeded but
+  # produced libopenautoroute_pi.so, which the packaging step then couldn't find as a .dylib.
+  set_target_properties(openautoroute_pi PROPERTIES SUFFIX ".dylib")
 endif()
 # Linux/BSD only: the plugin's own symbols (create_pi, destroy_pi) are exported by DECL_EXP; everything else stays private.
 install(TARGETS openautoroute_pi LIBRARY DESTINATION lib/opencpn)
