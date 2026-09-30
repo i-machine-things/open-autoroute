@@ -74,7 +74,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
 
   build:
-    name: Build release artifacts (in a Debian 12 container)
+    name: Build release artifacts (Linux, in a Debian 12 container)
     needs: [validate, checks]
     runs-on: ubuntu-24.04
     # Built on Debian 12 (older glibc, wxWidgets 3.2), so the binaries run on newer systems too. OpenCPN accepts a plugin package only when
@@ -131,13 +131,124 @@ jobs:
           ls -l dist
       - uses: actions/upload-artifact@v4
         with:
-          name: release-artifacts
+          name: release-artifacts-linux
+          path: dist/*
+          if-no-files-found: error
+
+  build_windows:
+    name: Build release artifacts (Windows)
+    needs: [validate, checks]
+    runs-on: windows-latest
+    env:
+      TAG: ${{ needs.validate.outputs.tag }}
+    # UNVERIFIED: nobody has yet imported this package into a real Windows OpenCPN install (see docs/RELEASING.md).
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: OpenCPN plugin API header (the release the plugin targets)
+        uses: actions/checkout@v4
+        with:
+          repository: OpenCPN/OpenCPN
+          ref: 0cd62032bc17ff004ce47f6b5dbdcccf88348400   # OpenCPN tag upstream/5.14.2+dfsg, pinned by commit (tags can move)
+          path: ocpn
+          sparse-checkout: include
+          persist-credentials: false
+      - name: OpenCPN's prebuilt Windows import library (headers alone aren't enough to link against a DLL -- see CMakeLists.txt)
+        uses: actions/checkout@v4
+        with:
+          repository: OpenCPN/opencpn-libs
+          ref: main   # this repo's default branch is "main", unlike OpenCPN/OpenCPN and OpenCPN/plugins' "master"
+          path: opencpn-libs
+          sparse-checkout: api-22
+          persist-credentials: false
+      - name: Strip the tag's leading "v" once, so later steps don't need shell-specific string slicing
+        shell: bash
+        run: echo "OAR_VER=${TAG#v}" >> "$GITHUB_ENV"
+      # OpenCPN's own official Windows builds are 32-bit, and a plugin's ABI must match the host app it
+      # loads into (ocpn-plugin.xsd's target-arch enum notes this: opencpn/OpenCPN#2027). wxwidgets:x86-windows-static
+      # links both wx and the CRT statically, so the built plugin has no external runtime DLLs to bundle.
+      - name: wxWidgets 3.2 (static, 32-bit) via vcpkg
+        shell: bash
+        run: '"$VCPKG_INSTALLATION_ROOT/vcpkg" install wxwidgets:x86-windows-static'
+      - name: Set up the MSVC Developer Command Prompt (32-bit)
+        uses: seanmiddleditch/gha-setup-vsdevenv@8c6bbf80998779f2bba87b1452832e561b65fd57   # v3
+        with:
+          host_arch: x86
+          arch: win32
+      - name: Build the plugin
+        shell: cmd
+        # No -T toolset pin: an earlier attempt pinned -T v143 to guard against OpenCPN/OpenCPN#5399
+        # (a plugin built with a newer MSVC toolset crashing against OpenCPN's own bundled, older,
+        # DYNAMIC C++ runtime) -- copied from a reference (nohal/dashboardsk_pi) that links wx
+        # dynamically. That risk doesn't apply here: this plugin links the CRT statically
+        # (CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded), so it carries its own complete runtime and shares
+        # none of it with OpenCPN.exe at load time. The pin was actively harmful instead: it forced our
+        # object files onto a different MSVC sub-toolset than vcpkg used to build wx (unpinned), which
+        # surfaced as unresolved internal MSVC STL symbols at link time.
+        run: |
+          cmake -S . -B build -A win32 -DCMAKE_BUILD_TYPE=Release -DOAR_BUILD_PLUGIN=ON ^
+                -DOCPN_INCLUDE_DIR=%CD%\ocpn\include -DOAR_VERSION=%OAR_VER% ^
+                -DOCPN_API_LIB=%CD%\opencpn-libs\api-22\msvc-wx32\opencpn.lib ^
+                -DCMAKE_TOOLCHAIN_FILE=%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake ^
+                -DVCPKG_TARGET_TRIPLET=x86-windows-static -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          cmake --build build --config Release
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p dist
+          VERSION="$OAR_VER" plugin/package_windows.sh build/plugin/Release/openautoroute_pi.dll dist
+          pkg="dist/openautoroute-opencpn-plugin-$TAG-windows-x86.tar.gz"
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/$(basename "$pkg")"
+          VERSION="$OAR_VER" TARGET=msvc TARGET_VERSION=143 TARGET_ARCH=x86 plugin/catalog_metadata.sh "$pkg" "$url" dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-windows
+          path: dist/*
+          if-no-files-found: error
+
+  build_macos:
+    name: Build release artifacts (macOS)
+    needs: [validate, checks]
+    runs-on: macos-latest   # Apple Silicon (arm64) as of this writing
+    env:
+      TAG: ${{ needs.validate.outputs.tag }}
+    # UNVERIFIED: nobody has yet imported this package into a real macOS OpenCPN install (see docs/RELEASING.md).
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: OpenCPN plugin API header (the release the plugin targets)
+        uses: actions/checkout@v4
+        with:
+          repository: OpenCPN/OpenCPN
+          ref: 0cd62032bc17ff004ce47f6b5dbdcccf88348400   # OpenCPN tag upstream/5.14.2+dfsg, pinned by commit (tags can move)
+          path: ocpn
+          sparse-checkout: include
+          persist-credentials: false
+      - name: wxWidgets 3.2 via Homebrew
+        run: brew install wxwidgets
+      - name: Build the plugin
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOAR_BUILD_PLUGIN=ON -DOCPN_INCLUDE_DIR="$PWD/ocpn/include" \
+                -DOAR_VERSION="${TAG#v}"
+          cmake --build build -j"$(sysctl -n hw.ncpu)"
+      - name: Package
+        run: |
+          mkdir -p dist
+          VERSION="${TAG#v}" plugin/package_macos.sh build/plugin/libopenautoroute_pi.dylib dist
+          pkg="dist/openautoroute-opencpn-plugin-$TAG-macos-arm64.tar.gz"
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/$(basename "$pkg")"
+          VERSION="${TAG#v}" TARGET=darwin-arm64 TARGET_VERSION=14 TARGET_ARCH=arm64 plugin/catalog_metadata.sh "$pkg" "$url" dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-macos
           path: dist/*
           if-no-files-found: error
 
   rehearsal:
     name: Rehearsal (nothing is published)
-    needs: [validate, build]
+    needs: [validate, build, build_windows, build_macos]
     if: needs.validate.outputs.dry == 'true'
     runs-on: ubuntu-24.04
     steps:
@@ -149,7 +260,7 @@ jobs:
 
   publish:
     name: Publish the GitHub release
-    needs: [validate, build]
+    needs: [validate, build, build_windows, build_macos]
     if: needs.validate.outputs.dry == 'false'
     runs-on: ubuntu-24.04
     permissions:
@@ -163,7 +274,8 @@ jobs:
           fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
-          name: release-artifacts
+          pattern: release-artifacts-*
+          merge-multiple: true
           path: dist
       - name: Release notes
         run: scripts/release_notes.sh "$TAG" > notes.md

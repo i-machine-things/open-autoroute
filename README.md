@@ -98,6 +98,12 @@ mkdir -p ~/.local/lib/opencpn && cp build_pi/plugin/libopenautoroute_pi.so ~/.lo
 
 Then restart OpenCPN and enable "Auto-route" under Options, Plugins. It is early: a planning aid, not for navigation.
 
+Prebuilt plugin packages (Options, Plugins, Import plugin — no build needed) are on the
+[releases page](https://github.com/i-machine-things/open-autoroute/releases) for Linux, Windows and macOS.
+The Linux ones are tested against a real OpenCPN install; **the Windows and macOS ones are not yet** — they
+build cleanly but nobody has confirmed they actually load. See
+[docs/TESTING_WINDOWS_MACOS.md](docs/TESTING_WINDOWS_MACOS.md) if you'd like to help check.
+
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for the planned milestones, from the core router through weather, polars, live instrument data, the standalone app and currents, and for the regions the router is meant to be tested against.
