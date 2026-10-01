@@ -68,14 +68,31 @@ To support another system, add another package line (Linux) or another job (Wind
 
 ## OpenCPN plugin catalog
 
-Every release also generates one schema-valid catalog metadata XML per packaged target (`plugin/catalog_metadata.sh`,
-run once per target in `release.yml`'s Package step), validated against the live `ocpn-plugin.xsd` from
+Every release generates one schema-valid catalog metadata XML per packaged target (`plugin/catalog_metadata.sh`, run
+once per target in `release.yml`'s Package step), validated against the live `ocpn-plugin.xsd` from
 [OpenCPN/plugins](https://github.com/OpenCPN/plugins) and shipped as a release artifact alongside the plugin
-tarballs. `plugin/catalog-icon.svg` is the icon a catalog PR needs.
+tarballs. The Windows and macOS metadata say so in their own `description` field until someone confirms those
+builds load in a real OpenCPN install — only the Debian ones are confirmed as of `v0.1.4`.
 
-This does **not** submit the plugin to the catalog by itself. Getting listed (start on the `Alpha` branch, for
-experimental plugins) needs a separate pull request against `OpenCPN/plugins` that adds these files under its
-`metadata/` directory — see its `README.md` and `TESTING.md`. That PR is future work, not yet done.
+**This generation step does not update the live catalog by itself.** There is no tracking, no webhook, no
+subscription to this repo's releases — `OpenCPN/plugins`' own README is explicit that both new plugins *and
+updates* only land via a pull request against it that touches files under its `metadata/` directory. The initial
+submission (targeting `Alpha`, for experimental plugins) is
+[OpenCPN/plugins#1420](https://github.com/OpenCPN/plugins/pull/1420). There's a semi-automated path some plugins
+use ("frontend2": CI uploads metadata to Cloudsmith, something downstream opens the PR) but it's built around
+Cloudsmith as the distribution backend; this project ships plain GitHub Releases, so it doesn't apply here.
+
+**To update the catalog listing after a new release:**
+1. Download that release's `openautoroute_pi-*.xml` files from its GitHub Releases page.
+2. `i-machine-things/plugins` (forked from `OpenCPN/plugins`) already exists — fetch it, branch off `Alpha`.
+3. Add the new XML files to `metadata/` (same filenames as last time, now with the new version baked in; old
+   versions' files can be left in place or removed — check what other plugins in that directory actually do).
+4. Push the branch, open a PR from `i-machine-things/plugins:<branch>` to `OpenCPN/plugins:Alpha`.
+
+No icon file is needed despite what `OpenCPN/plugins`' own wiki docs suggest — a repo-wide search turned up zero
+`.svg`/`.png` files anywhere in it, across what must be hundreds of plugin entries; empirical practice doesn't
+match that doc. `plugin/catalog-icon.svg` still lives in this repo regardless (useful on its own merits), it's
+just not part of what actually gets submitted upstream.
 
 ## Branch protection
 
