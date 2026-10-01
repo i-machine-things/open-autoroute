@@ -19,6 +19,15 @@ SHA_OUTPUT=$(sha256sum "$TARBALL") || { echo "sha256sum failed for $TARBALL" >&2
 CHECKSUM=${SHA_OUTPUT%% *}
 OUTFILE="$OUT/openautoroute_pi-$VERSION-$TARGET-$TARGET_VERSION-$TARGET_ARCH.xml"
 mkdir -p "$OUT"
+# Only the debian-x86_64 (Linux) build has actually been imported into a real OpenCPN and confirmed
+# to load and plan a route. Windows and macOS build clean in CI but that's never been confirmed on
+# real hardware -- say so in the catalog listing itself, not just the bundled package metadata, so
+# an Alpha tester picking one of those up knows before they try it, not after.
+DESCRIPTION="Plans a route between two points using the open-autoroute engine and adds it to the Route Manager. A planning aid only; not for navigation."
+case "$TARGET" in
+  debian-*) ;;
+  *) DESCRIPTION="$DESCRIPTION UNVERIFIED on real hardware for this platform: builds clean in CI, but nobody has yet confirmed it loads in a real OpenCPN install. Please report back if you try it." ;;
+esac
 # Field order matches ocpn-plugin.xsd exactly (it is a strict xs:sequence): name, version, release, summary,
 # api-version, open-source, author, source, description, target, target-version, target-arch, tarball-url,
 # tarball-checksum, info-url. api-version must match GetAPIVersionMinor() in openautoroute_pi.cpp.
@@ -32,7 +41,7 @@ cat > "$OUTFILE" <<XML
   <open-source>yes</open-source>
   <author>open-autoroute contributors</author>
   <source>https://github.com/i-machine-things/open-autoroute</source>
-  <description>Plans a route between two points using the open-autoroute engine and adds it to the Route Manager. A planning aid only; not for navigation.</description>
+  <description>$DESCRIPTION</description>
   <target>$TARGET</target>
   <target-version>$TARGET_VERSION</target-version>
   <target-arch>$TARGET_ARCH</target-arch>
