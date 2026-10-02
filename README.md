@@ -100,8 +100,10 @@ Then restart OpenCPN and enable "Auto-route" under Options, Plugins. It is early
 
 Prebuilt plugin packages (Options, Plugins, Import plugin — no build needed) are on the
 [releases page](https://github.com/i-machine-things/open-autoroute/releases) for Linux, Windows and macOS.
-The Linux ones are tested against a real OpenCPN install; **the Windows and macOS ones are not yet** — they
-build cleanly but nobody has confirmed they actually load. See
+The Linux ones are tested against a real OpenCPN install. Windows remains unverified. On 2026-10-02,
+a corrected local macOS ARM package was confirmed to import in OpenCPN 5.14.0; the released v0.1.4
+macOS package fails import. The fix uses the `darwin-wx32` target, wxWidgets 3.2, and OpenCPN's bundled
+frameworks rather than requiring Homebrew at runtime. The corrected release package still needs testing. See
 [docs/TESTING_WINDOWS_MACOS.md](docs/TESTING_WINDOWS_MACOS.md) if you'd like to help check.
 
 ## Roadmap

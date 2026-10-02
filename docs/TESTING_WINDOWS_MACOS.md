@@ -1,7 +1,9 @@
 # Testing the Windows and macOS plugin packages
 
-These two packages have never been tried on a real Windows or Mac computer — they build without errors, but
-that only proves the code compiles, not that OpenCPN can actually load them. This is what we need checked.
+Windows packages remain unverified. The released v0.1.4 macOS ARM package fails import with
+"Incompatible import plugin detected". A corrected local ARM build, labelled `0.1.4-local`, was confirmed
+to import in OpenCPN 5.14.0 on 2026-10-02. The corrected release artifact still needs this check;
+local import success does not establish routing safety or compatibility with every Mac.
 
 The one thing that actually matters: **does OpenCPN accept the plugin, and does it show the right version
 number?** Everything past that (planning an actual route) is a nice bonus, not required.
