@@ -29,7 +29,7 @@ The 29-route benchmark needs the full NOAA chart set (over 2 GB), so it is not i
 The workflow refuses the tag unless it is a milestone in `ROADMAP.md` (`vX.Y.0`, and the previous milestone is already released) or the
 next patch of a milestone that is already released and still current (once `vX.(Y+1).0` is out, `vX.Y` is closed: no backports), and its
 commit is on master. Leading zeros (`v0.1.01`) are refused. Versions below 1.0 are published as pre-releases.
-The release has the command-line tool (`openautoroute-cli-vX.Y.Z-linux-x86_64.tar.gz`) and plugin packages for Linux, Windows and macOS (Options, Plugins, Import plugin). OpenCPN refuses a plugin package whose target system does not match the computer ("Incompatible import plugin detected"), so the same binary is packaged for each system it is meant for; a Debian 12 package is also accepted on Ubuntu 24.04. **The Windows and macOS packages are unverified**: they build clean in CI, but nobody has yet imported either one into a real OpenCPN install on that platform — see "Plugin package" below. All of it is built with checksums, and notes made from the roadmap milestone (or, for
+The release has the command-line tool (`openautoroute-cli-vX.Y.Z-linux-x86_64.tar.gz`) and plugin packages for Linux, Windows and macOS (Options, Plugins, Import plugin). OpenCPN refuses a plugin package whose target system does not match the computer ("Incompatible import plugin detected"), so the same binary is packaged for each system it is meant for; a Debian 12 package is also accepted on Ubuntu 24.04. **Windows remains unverified; macOS has a confirmed local import fix**, but the corrected release artifact still needs testing — see "Plugin package" below. All of it is built with checksums, and notes made from the roadmap milestone (or, for
 a patch, the milestone it patches) plus the changes since the previous release. They are built on Debian 12, so they need glibc 2.36 or
 newer (the tool links libstdc++ statically; the plugin also needs wxWidgets 3.2). On another system, build from source. The tool reports
 its version with `openautoroute --version`.
@@ -59,9 +59,12 @@ per target system, in `release.yml`'s `build`/`build_windows`/`build_macos` jobs
   reference links wx dynamically, where the risk applies; forcing the pin here instead caused real link errors (it put our object files on
   a different MSVC sub-toolset than vcpkg used to build wx, unpinned).
   **Unverified**: builds clean, never imported into a real Windows OpenCPN.
-- **macOS** (`build_macos`): `macos-latest` (Apple Silicon), wxWidgets via Homebrew. Not code-signed or notarized, same as OpenCPN's own
-  installer — macOS will warn about an unidentified developer; that's expected, not a build defect. **Unverified**: builds clean, never
-  imported into a real macOS OpenCPN.
+- **macOS** (`build_macos`): `macos-latest` (Apple Silicon), explicitly using Homebrew's `wxwidgets@3.2`
+  and `wx-config-3.2`. Metadata uses `darwin-wx32` with `target-arch=arm64`. Packaging rejects other
+  wxWidgets versions, rewrites wxWidgets references to OpenCPN's bundled frameworks, and renews the
+  dylib's ad-hoc signature; no Homebrew runtime is required. It is not Developer ID signed or notarized.
+  A corrected local ARM build was confirmed to import in OpenCPN 5.14.0 on 2026-10-02.
+  The released v0.1.4 package fails import; the corrected release artifact remains unverified.
 
 To support another system, add another package line (Linux) or another job (Windows/macOS) in `release.yml`. Otherwise build from source
 (see the README).
@@ -72,7 +75,8 @@ Every release generates one schema-valid catalog metadata XML per packaged targe
 once per target in `release.yml`'s Package step), validated against the live `ocpn-plugin.xsd` from
 [OpenCPN/plugins](https://github.com/OpenCPN/plugins) and shipped as a release artifact alongside the plugin
 tarballs. The Windows and macOS metadata say so in their own `description` field until someone confirms those
-builds load in a real OpenCPN install — only the Debian ones are confirmed as of `v0.1.4`.
+release builds load in a real OpenCPN install — only the Debian ones are confirmed as of `v0.1.4`.
+The macOS local-build confirmation above does not yet verify a corrected release artifact.
 
 **This generation step does not update the live catalog by itself.** There is no tracking, no webhook, no
 subscription to this repo's releases — `OpenCPN/plugins`' own README is explicit that both new plugins *and

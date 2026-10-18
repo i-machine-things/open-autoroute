@@ -213,7 +213,7 @@ jobs:
     runs-on: macos-latest   # Apple Silicon (arm64) as of this writing
     env:
       TAG: ${{ needs.validate.outputs.tag }}
-    # UNVERIFIED: nobody has yet imported this package into a real macOS OpenCPN install (see docs/RELEASING.md).
+    # Local ARM import confirmed; the corrected release artifact still needs testing (see docs/RELEASING.md).
     steps:
       - uses: actions/checkout@v4
         with:
@@ -227,11 +227,11 @@ jobs:
           sparse-checkout: include
           persist-credentials: false
       - name: wxWidgets 3.2 via Homebrew
-        run: brew install wxwidgets
+        run: brew install wxwidgets@3.2
       - name: Build the plugin
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DOAR_BUILD_PLUGIN=ON -DOCPN_INCLUDE_DIR="$PWD/ocpn/include" \
-                -DOAR_VERSION="${TAG#v}"
+                -DOAR_VERSION="${TAG#v}" -DwxWidgets_CONFIG_EXECUTABLE="$(brew --prefix wxwidgets@3.2)/bin/wx-config-3.2"
           cmake --build build -j"$(sysctl -n hw.ncpu)"
       - name: Package
         run: |
@@ -239,7 +239,7 @@ jobs:
           VERSION="${TAG#v}" plugin/package_macos.sh build/plugin/libopenautoroute_pi.dylib dist
           pkg="dist/openautoroute-opencpn-plugin-$TAG-macos-arm64.tar.gz"
           url="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/$(basename "$pkg")"
-          VERSION="${TAG#v}" TARGET=darwin-arm64 TARGET_VERSION=14 TARGET_ARCH=arm64 plugin/catalog_metadata.sh "$pkg" "$url" dist
+          VERSION="${TAG#v}" TARGET=darwin-wx32 TARGET_VERSION=14 TARGET_ARCH=arm64 plugin/catalog_metadata.sh "$pkg" "$url" dist
       - uses: actions/upload-artifact@v4
         with:
           name: release-artifacts-macos
