@@ -1,0 +1,112 @@
+# Keeps the OpenCPN/plugins catalog PR in sync with this project's releases (see docs/RELEASING.md, "OpenCPN plugin catalog").
+# Catalog metadata is per-version (version string + checksum baked into each file), so this never points at "latest" -- it
+# regenerates the metadata for whichever release triggered the run and replaces whatever this project last submitted.
+#
+# Two jobs, split so a human reviews a concrete diff before anything touches the upstream-facing PR:
+#   1. prepare -- downloads the release's catalog metadata and diffs it against what's currently on the catalog fork branch.
+#      Runs unattended, read-only, no credentials with write access to anything.
+#   2. push -- takes that diff and pushes it to the catalog fork branch, updating the live PR against OpenCPN/plugins.
+#      Gated on the `catalog-update` environment's required reviewer (see docs/RELEASING.md for one-time setup); the run
+#      pauses here and only proceeds after an explicit approval in the Actions UI.
+name: Update OpenCPN catalog metadata
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to sync (e.g. v0.1.6)'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Fetch metadata and show what would change
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      branch: ${{ steps.branch.outputs.branch }}
+    steps:
+      - id: tag
+        env:
+          EVENT: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          tag="$RELEASE_TAG"
+          [ "$EVENT" = workflow_dispatch ] && tag="$INPUT_TAG"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - id: branch
+        env:
+          # The branch on i-machine-things/plugins that carries the catalog submission for this project. Update this
+          # repo variable once the current catalog PR merges and a new one is opened for the next update (see
+          # docs/RELEASING.md) -- the workflow always targets whatever this is currently set to.
+          VAR_BRANCH: ${{ vars.CATALOG_FORK_BRANCH }}
+        run: |
+          branch="${VAR_BRANCH:-add-open-autoroute}"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+      - name: Download this release's catalog metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          mkdir new-metadata
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.xml' --dir new-metadata
+          ls -l new-metadata
+      - name: Current metadata on the catalog fork branch
+        env:
+          BRANCH: ${{ steps.branch.outputs.branch }}
+        run: |
+          git clone --depth 1 --branch "$BRANCH" https://github.com/i-machine-things/plugins.git fork-current
+          mkdir -p current-metadata
+          cp fork-current/metadata/openautoroute_pi-*.xml current-metadata/ 2>/dev/null || echo "(none found -- first submission)"
+      - name: What this run would change
+        run: |
+          {
+            echo '```diff'
+            diff -u <(cat current-metadata/*.xml 2>/dev/null) <(cat new-metadata/*.xml) || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: catalog-metadata
+          path: new-metadata/*.xml
+
+  push:
+    name: Push to the catalog fork branch (manual gate)
+    needs: prepare
+    runs-on: ubuntu-24.04
+    environment: catalog-update
+    permissions:
+      contents: read
+    env:
+      BRANCH: ${{ needs.prepare.outputs.branch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: i-machine-things/plugins
+          ref: ${{ env.BRANCH }}
+          token: ${{ secrets.CATALOG_PUSH_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: catalog-metadata
+          path: new-metadata
+      - name: Replace this project's catalog metadata with the new release's
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          rm -f metadata/openautoroute_pi-*.xml
+          cp new-metadata/*.xml metadata/
+          rm -rf new-metadata
+          git add metadata/openautoroute_pi-*.xml
+          if git diff --cached --quiet; then
+            echo "No metadata changes for $TAG -- nothing to push."
+            exit 0
+          fi
+          git config user.name "open-autoroute release automation"
+          git config user.email "actions@users.noreply.github.com"
+          git commit -m "Update open-autoroute catalog metadata to $TAG"
+          git push origin "HEAD:$BRANCH"
