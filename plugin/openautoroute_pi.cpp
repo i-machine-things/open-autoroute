@@ -19,11 +19,12 @@ namespace {
 
 constexpr double kFeetToM = 0.3048;
 
-// Splits "0.1.1" into (0, 1) for GetPlugInVersionMajor/Minor; a non-numeric build (OAR_VERSION="dev") reports (0, 0).
-void parsePluginVersion(int& major, int& minor) {
+// Splits "0.1.1" into (0, 1, 1) for GetPlugInVersionMajor/Minor/Patch; a non-numeric build (OAR_VERSION="dev") reports (0, 0, 0).
+void parsePluginVersion(int& major, int& minor, int& patch) {
     major = 0;
     minor = 0;
-    std::sscanf(OAR_VERSION, "%d.%d", &major, &minor);
+    patch = 0;
+    std::sscanf(OAR_VERSION, "%d.%d.%d", &major, &minor, &patch);
 }
 
 // A route glyph drawn at run time, so the plugin needs no data files: a dashed line through two ends.
@@ -764,14 +765,20 @@ int openautoroute_pi::GetAPIVersionMajor() {
 // to the class named by this number and calls it incompatible when the cast fails.
 int openautoroute_pi::GetAPIVersionMinor() { return 20; }
 int openautoroute_pi::GetPlugInVersionMajor() {
-    int major, minor;
-    parsePluginVersion(major, minor);
+    int major, minor, patch;
+    parsePluginVersion(major, minor, patch);
     return major;
 }
 int openautoroute_pi::GetPlugInVersionMinor() {
-    int major, minor;
-    parsePluginVersion(major, minor);
+    int major, minor, patch;
+    parsePluginVersion(major, minor, patch);
     return minor;
+}
+// OpenCPN's plugin list builds the version from Major/Minor/Patch (API 1.17 and up); without this the patch shows as 0.
+int openautoroute_pi::GetPlugInVersionPatch() {
+    int major, minor, patch;
+    parsePluginVersion(major, minor, patch);
+    return patch;
 }
 wxBitmap* openautoroute_pi::GetPlugInBitmap() {
     wxLogMessage("open-autoroute plugin: GetPlugInBitmap");
