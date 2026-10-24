@@ -12,6 +12,12 @@
 # 24.08 -> ...; verified against a locally installed OpenCPN 5.14.2 as of this writing, which
 # reports Sdk 25.08).
 id: org.opencpn.OpenCPN.Plugin.openautoroute
+# Flathub's org.opencpn.OpenCPN.yaml declares this extension point with no version/versions key,
+# so Flatpak matches it to the app's own installed branch -- "stable" for a normal install. Must
+# stay "stable" (and flatpak/Makefile must export the same branch) or the extension builds and
+# installs without error but never actually mounts into OpenCPN (found by checking Flathub's own
+# manifest after a local install+uninstall round-trip didn't visibly load the plugin).
+branch: stable
 runtime: org.opencpn.OpenCPN
 runtime-version: stable
 sdk: org.freedesktop.Sdk//25.08

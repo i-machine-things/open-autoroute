@@ -23,4 +23,5 @@ To build and install:
       make install     # exports and installs into your user Flatpak OpenCPN
       make uninstall    # removes it again
 
-Rebuilding after a source change: `make -C flatpak clean build install`.
+Rebuilding after a source change: commit it first (the manifest's `git` source clones `HEAD`,
+so uncommitted edits are silently not picked up), then `make -C flatpak clean build install`.

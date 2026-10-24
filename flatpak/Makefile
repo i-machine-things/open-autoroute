@@ -7,7 +7,7 @@ build:
 	flatpak-builder --force-clean --keep-build-dirs app $(PLUGIN).yaml
 
 install:
-	flatpak build-export repo app master
+	flatpak build-export repo app stable
 	flatpak install --user --reinstall -y $(CURDIR)/repo $(PLUGIN)
 
 uninstall:
