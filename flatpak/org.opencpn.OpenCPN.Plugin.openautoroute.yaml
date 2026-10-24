@@ -1,0 +1,65 @@
+# Flatpak build for OpenCPN running as a Flatpak (see #54): OpenCPN's Flatpak identifies as
+# target "flatpak", not "debian-x86_64"/etc, so it rejects every package plugin/package.sh builds
+# and needs its own build that extends the org.opencpn.OpenCPN Flatpak itself. Modeled on
+# radar_pi's manifest (github.com/opencpn-radar-pi/radar_pi/flatpak), the reference the issue
+# points at for this pattern.
+#
+# Build with: flatpak-builder --force-clean build-flatpak flatpak/org.opencpn.OpenCPN.Plugin.openautoroute.yaml
+# (or `cmake --build build --target flatpak`/`make -C flatpak`). Needs flatpak-builder, and
+# org.opencpn.OpenCPN + the matching org.freedesktop.Sdk already installed locally -- flatpak
+# does not fetch them on its own, and the Sdk version below must match whatever
+# `flatpak info org.opencpn.OpenCPN` reports as "Sdk" right now (it has moved before: 22.08 ->
+# 24.08 -> ...; verified against a locally installed OpenCPN 5.14.2 as of this writing, which
+# reports Sdk 25.08).
+id: org.opencpn.OpenCPN.Plugin.openautoroute
+runtime: org.opencpn.OpenCPN
+runtime-version: stable
+sdk: org.freedesktop.Sdk//25.08
+build-extension: true
+separate-locales: false
+appstream-compose: false
+# No finish-args: unlike radar_pi (which needs device access for radar hardware), this plugin
+# only does route planning against local charts already loaded by OpenCPN, so it needs no
+# permissions beyond what OpenCPN's own sandbox already grants it as a loaded plugin.
+
+modules:
+  # wxWidgets' "gl" component (required by plugin/CMakeLists.txt -- OpenCPN's plugin base class
+  # declares GL-related virtual methods even though this plugin does no GL rendering of its own)
+  # needs GLU to link. The non-flatpak Linux build gets it from apt (libglu1-mesa-dev, see
+  # ci.yml/release.yml); the flatpak sandbox has no apt access, so it's built from source instead.
+  # Copied from opencpn-libs/flatpak/glu.yaml, the upstream OpenCPN plugin template's own snippet
+  # for exactly this (see the opencpn-libs submodule added alongside this manifest).
+  - name: glu
+    config-opts:
+      - --disable-shared
+      - --enable-static
+      - --prefix=/app/extensions/openautoroute
+    sources:
+      - type: archive
+        url: https://mesa.freedesktop.org/archive/glu/glu-9.0.1.tar.xz
+        sha256: fb5a4c2dd6ba6d1c21ab7c05129b0769544e1d68e1e3b0ffecb18e73c93055bc
+    cleanup:
+      - /include
+      - /lib/*.a
+      - /lib/*.la
+      - /lib/pkgconfig
+
+  - name: openautoroute
+    buildsystem: cmake
+    builddir: true
+    config-opts:
+      - -DCMAKE_INSTALL_PREFIX=/app/extensions/openautoroute
+      - -DCMAKE_BUILD_TYPE:STRING=Release
+      - -DOAR_BUILD_PLUGIN=ON
+      # /run/build/<module-name> is where flatpak-builder's sandbox mounts this module's source
+      # tree (same convention as radar_pi's own bundled-gl include path). opencpn-libs is a git
+      # submodule of this repo, so it comes along with the "git" source below automatically
+      # (flatpak-builder checks out submodules unless disable-submodules is set).
+      - -DOCPN_INCLUDE_DIR=/run/build/openautoroute/opencpn-libs/api-22
+      - -DwxWidgets_CONFIG_EXECUTABLE=/app/bin/wx-config
+    build-options:
+      strip: true
+    sources:
+      - type: git
+        url: ..
+        branch: HEAD
