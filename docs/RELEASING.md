@@ -98,7 +98,9 @@ PR** (`.github/workflows/catalog_update.yml`, triggered by `release: published`,
    checks out `i-machine-things/plugins` at that branch, replaces the `openautoroute_pi-*.xml` files, and pushes
    — which updates the live PR against `OpenCPN/plugins` immediately, so there's no second gate after this.
 
-One-time setup, done once per repo (already done for this one):
+One-time setup, done once per repo. Until the secret below is set, `push` will fail (or, if GitHub queues it
+before the environment has any secret at all, never get a usable token) — don't approve a run expecting it to
+reach the catalog branch until `CATALOG_PUSH_TOKEN` is confirmed in place:
 - A `catalog-update` environment (Settings → Environments) with Allan as a required reviewer.
 - A secret on that environment, `CATALOG_PUSH_TOKEN`: a fine-grained PAT scoped only to `i-machine-things/plugins`
   with Contents: Read and write. The default `GITHUB_TOKEN` can't push to a different repo, so this always has to

@@ -67,7 +67,7 @@ jobs:
         run: |
           {
             echo '```diff'
-            diff -u <(cat current-metadata/*.xml 2>/dev/null) <(cat new-metadata/*.xml) || true
+            diff -ru current-metadata new-metadata || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
@@ -101,7 +101,9 @@ jobs:
           rm -f metadata/openautoroute_pi-*.xml
           cp new-metadata/*.xml metadata/
           rm -rf new-metadata
-          git add metadata/openautoroute_pi-*.xml
+          # A path-limited `git add` stages removals within that path too (since git 2.0), so a renamed
+          # metadata file (e.g. a corrected `target`) drops its old filename instead of leaving it behind.
+          git add metadata/
           if git diff --cached --quiet; then
             echo "No metadata changes for $TAG -- nothing to push."
             exit 0

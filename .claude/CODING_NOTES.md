@@ -84,6 +84,12 @@ This note was created based on issues encountered with PyInstaller executables r
 - **Don't set required status-check contexts before the repo has CI that produces them.** A required context that never reports a status permanently blocks merges. `ci.yml` isn't part of the bootstrap file set (it needs per-project tailoring — see "tailor or language-agnostic" above), so bootstrap-time protection only sets what's safe without knowing future job names (no force-push, no deletion, enforced for admins); add required checks once that repo's own CI is customized and green.
 - **Avoid `required_pull_request_reviews` on a solo-maintained repo.** GitHub won't let an author approve their own PR, so requiring even 1 approval with no other reviewer deadlocks every merge. Rely on required status checks (which do block direct pushes too, since a bare push's commit never gets the PR-triggered check runs) instead of an approval-count gate.
 
+## Git Automation in CI Scripts
+
+- **`rm -f` then a globbed `git add <glob>` never stages the deletion.** The shell expands the glob against files present on disk *after* the `rm`, so a removed/renamed name is never passed to `git add` at all. Use `git add <dir>/` (path-limited add stages removals too, since git 2.0) instead of re-globbing.
+- **A `diff` over concatenated file contents hides renames.** `diff <(cat a/*) <(cat b/*)` shows no difference when a file is renamed with identical content. Use `diff -ru dir_a dir_b` so filenames (added/removed/renamed) appear in the output, not just content changes.
+- **Don't claim a secret/credential is "already set up" in committed docs.** A PR description can state current status, but evergreen docs describing a one-time setup go stale (or lie) the moment one step is still pending — say what's required, not that it's done.
+
 ## C++ Input Validation & Output Formats
 
 - **Validate public-API inputs.** Reject negative penalties and distances, non-finite coordinates and out-of-range cells by throwing or returning false; never assume callers pass sane values.
