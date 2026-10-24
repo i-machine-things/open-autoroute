@@ -27,6 +27,7 @@ public:
     int GetAPIVersionMinor() override;
     int GetPlugInVersionMajor() override;
     int GetPlugInVersionMinor() override;
+    int GetPlugInVersionPatch() override;
     wxBitmap* GetPlugInBitmap() override;
     wxString GetCommonName() override;
     wxString GetShortDescription() override;
