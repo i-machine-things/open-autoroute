@@ -96,6 +96,7 @@ This note was created based on issues encountered with PyInstaller executables r
 - **Per-job state must not leak into another job.** State kept from the last route job (its waypoints) is only valid for that job type; check the job before using it in a message, or a plain plan can name waypoints from an earlier route.
 - **Several inputs can map to one output index.** When matching user waypoints to planned points by index, place every waypoint whose index matches (loop, not if): two waypoints in one grid cell share a point, and a single test drops all later ones.
 - **Decide "moved" from the planner's cell test, not a distance.** Snapping to a neighbour cell can be under one cell size, so a distance threshold keeps a point on land. The planner reports pointMoved per point; use it for both the position and the notice.
+- **A Flatpak plugin extension must export on the branch the host app's own `add-extensions` matching expects.** No `version`/`versions` key on the extension point (Flathub's org.opencpn.OpenCPN.yaml has none) means Flatpak matches it to the app's own installed branch ("stable"), not flatpak-builder's default ("master"). Found via CodeRabbit on #55.
 
 ## Testing
 
