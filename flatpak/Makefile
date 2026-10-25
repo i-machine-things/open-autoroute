@@ -41,7 +41,8 @@ check-sdk:
 	}
 
 build: check-sdk
-	flatpak-builder --force-clean --keep-build-dirs app $(PLUGIN).yaml
+	sed 's/@OAR_VERSION@/$(VERSION)/' $(PLUGIN).yaml > $(PLUGIN).generated.yaml
+	flatpak-builder --force-clean --keep-build-dirs app $(PLUGIN).generated.yaml
 
 package: build
 	@test -n "$(ARCH)" || { echo "Could not detect org.opencpn.OpenCPN's arch -- is it installed? (flatpak info org.opencpn.OpenCPN)" >&2; exit 1; }
@@ -50,6 +51,6 @@ package: build
 		../plugin/package.sh app/files/lib/opencpn/libopenautoroute_pi.so .
 
 clean:
-	rm -rf app .flatpak-builder *.tar.gz
+	rm -rf app .flatpak-builder *.tar.gz $(PLUGIN).generated.yaml
 
 .PHONY: all check-sdk build package clean

@@ -127,7 +127,6 @@ jobs:
           for f in dist/openautoroute_pi-*.xml; do
             xmllint --noout --schema ocpn-plugins-catalog/ocpn-plugin.xsd "$f"
           done
-          (cd dist && sha256sum * > SHA256SUMS)
           ls -l dist
       - uses: actions/upload-artifact@v4
         with:
@@ -261,17 +260,35 @@ jobs:
       - name: flatpak, flatpak-builder, org.opencpn.OpenCPN and its matching Sdk (see flatpak/README.md)
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder libxml2-utils
           sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
           sudo flatpak install -y flathub org.opencpn.OpenCPN
           sdk=$(flatpak info --show-sdk org.opencpn.OpenCPN)
           sudo flatpak install -y flathub "org.freedesktop.Sdk//${sdk##*/}"
+      - name: OpenCPN plugin-catalog schema (to validate the catalog metadata this release generates)
+        uses: actions/checkout@v4
+        with:
+          repository: OpenCPN/plugins
+          ref: master
+          path: ocpn-plugins-catalog
+          sparse-checkout: ocpn-plugin.xsd
+          persist-credentials: false
       - name: Build and package the plugin (make -C flatpak)
         run: make -C flatpak VERSION="${TAG#v}"
-      - name: Stage the package
+      - name: Stage the package and its catalog metadata
         run: |
           mkdir -p dist
-          mv flatpak/openautoroute-opencpn-plugin-*.tar.gz dist/
+          src=$(ls flatpak/openautoroute-opencpn-plugin-*.tar.gz)
+          mv "$src" dist/
+          pkg="dist/$(basename "$src")"
+          # Same detection flatpak/Makefile's own package target uses, so the catalog entry names the
+          # same target/target-version/target-arch the tarball was actually built and labeled for.
+          target_arch=$(flatpak info --show-ref org.opencpn.OpenCPN | cut -d/ -f3)
+          target_version=$(flatpak info --show-runtime org.opencpn.OpenCPN | sed 's#.*/##')
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/$(basename "$pkg")"
+          VERSION="${TAG#v}" TARGET="flatpak-$target_arch" TARGET_VERSION="$target_version" TARGET_ARCH="$target_arch" \
+            plugin/catalog_metadata.sh "$pkg" "$url" dist
+          xmllint --noout --schema ocpn-plugins-catalog/ocpn-plugin.xsd dist/openautoroute_pi-*.xml
           ls -l dist
       - uses: actions/upload-artifact@v4
         with:
@@ -310,6 +327,8 @@ jobs:
           pattern: release-artifacts-*
           merge-multiple: true
           path: dist
+      - name: Checksums (after every platform's artifact has been merged into dist/, not before)
+        run: (cd dist && sha256sum * > SHA256SUMS)
       - name: Release notes
         run: scripts/release_notes.sh "$TAG" > notes.md
       - name: Create the release

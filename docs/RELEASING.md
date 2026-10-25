@@ -79,9 +79,9 @@ To support another system, add another package line (Linux) or another job (Wind
 ## OpenCPN plugin catalog
 
 Every release generates one schema-valid catalog metadata XML per packaged target (`plugin/catalog_metadata.sh`, run
-once per target in `release.yml`'s Package step), validated against the live `ocpn-plugin.xsd` from
-[OpenCPN/plugins](https://github.com/OpenCPN/plugins) and shipped as a release artifact alongside the plugin
-tarballs. The Windows and macOS metadata say so in their own `description` field until someone confirms those
+once per target in `release.yml`'s Package step, including `build_flatpak`), validated against the live
+`ocpn-plugin.xsd` from [OpenCPN/plugins](https://github.com/OpenCPN/plugins) and shipped as a release artifact
+alongside the plugin tarballs. The Windows, macOS and Flatpak metadata say so in their own `description` field until someone confirms those
 release builds load in a real OpenCPN install — only the Debian ones are confirmed as of `v0.1.4`.
 The macOS local-build confirmation above does not yet verify a corrected release artifact.
 
