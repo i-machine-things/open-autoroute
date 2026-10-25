@@ -12,17 +12,19 @@ PLUGIN = org.opencpn.OpenCPN.Plugin.openautoroute
 VERSION ?= 0.0.0-dev
 ARCH := x86_64
 # Must match the running OpenCPN Flatpak's own baked-in target version (see `opencpn-cmd print-abi`
-# or `flatpak info org.opencpn.OpenCPN`'s Runtime line) -- it has moved before (22.08 -> 24.08 ->
+# or `flatpak info --show-runtime org.opencpn.OpenCPN`) -- it has moved before (22.08 -> 24.08 ->
 # 25.08), and OpenCPN's own compatibility check only compares the leading digits, but keep this
-# accurate rather than relying on that leniency.
-TARGET_VERSION := $(shell flatpak info org.opencpn.OpenCPN 2>/dev/null | awk '/^ *Runtime:/ {print $$2}' | sed 's#.*/##')
+# accurate rather than relying on that leniency. --show-runtime/--show-sdk print the plain ref
+# (org.freedesktop.Platform/x86_64/25.08), not the translatable "Runtime:"/"Sdk:" label `flatpak
+# info`'s human-readable output uses, so this doesn't break under a non-English LANG.
+TARGET_VERSION := $(shell flatpak info --show-runtime org.opencpn.OpenCPN 2>/dev/null | sed 's#.*/##')
 # The Sdk is a separate value from the Runtime above -- they're usually the same number but are not
 # guaranteed to be (OpenCPN could in principle be built with a newer Sdk against an older Platform
 # runtime). check-sdk compares the manifest's own pinned sdk: line (what flatpak-builder actually
 # builds against) with what's really installed, so a stale pin fails loudly instead of silently
 # building against the wrong wxWidgets ABI.
 SDK_PINNED := $(shell awk -F'//' '/^sdk:/ {print $$2}' $(PLUGIN).yaml)
-SDK_INSTALLED := $(shell flatpak info org.opencpn.OpenCPN 2>/dev/null | awk '/^ *Sdk:/ {print $$2}' | sed 's#.*/##')
+SDK_INSTALLED := $(shell flatpak info --show-sdk org.opencpn.OpenCPN 2>/dev/null | sed 's#.*/##')
 
 all: package
 
