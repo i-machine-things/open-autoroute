@@ -16,6 +16,7 @@ open-autoroute has its own versioning rule (it replaces the template's commit-co
 | `ci.yml` | every PR and every push to master | lint (warnings as errors on gcc and clang, shellcheck, workflow YAML), tests on gcc and clang, tests under the sanitizers, the OpenCPN plugin build, and (on master) what the next version would be |
 | `codeql.yml` | every PR, push to master, and weekly | GitHub's CodeQL security scan of the C++ code |
 | `release.yml` | a `vX.Y.Z` tag is pushed, or by hand as a rehearsal | validates the tag, runs `ci.yml` on that commit, builds the tool and the plugin package, publishes the release |
+| `catalog_update.yml` | a release is published, or by hand | diffs the release's catalog metadata against the open catalog PR branch, then (after a required reviewer approves) pushes it — see "OpenCPN plugin catalog" below |
 
 The 29-route benchmark needs the full NOAA chart set (over 2 GB), so it is not in CI. For any routing change run `benchmarks/run.sh` and
 `benchmarks/compare.sh` by hand and read the result.
@@ -86,12 +87,37 @@ submission (targeting `Alpha`, for experimental plugins) is
 use ("frontend2": CI uploads metadata to Cloudsmith, something downstream opens the PR) but it's built around
 Cloudsmith as the distribution backend; this project ships plain GitHub Releases, so it doesn't apply here.
 
-**To update the catalog listing after a new release:**
+**Keeping the catalog PR in sync is automated, with a manual gate before anything reaches the upstream-facing
+PR** (`.github/workflows/catalog_update.yml`, triggered by `release: published`, i.e. every tag push once
+`release.yml` finishes):
+1. `prepare` runs unattended: downloads the new release's `openautoroute_pi-*.xml` files, diffs them against
+   whatever is currently on the catalog fork branch (`vars.CATALOG_FORK_BRANCH`, defaulting to
+   `add-open-autoroute`), and posts that diff to the run's job summary. Nothing with write access runs yet.
+2. `push` needs the `catalog-update` environment's required reviewer to approve the run in the Actions UI before
+   it does anything — this is the point where the diff from step 1 should actually be read. Once approved, it
+   checks out `i-machine-things/plugins` at that branch, replaces the `openautoroute_pi-*.xml` files, and pushes
+   — which updates the live PR against `OpenCPN/plugins` immediately, so there's no second gate after this.
+
+One-time setup, done once per repo. Until the secret below is set, `push` will fail (or, if GitHub queues it
+before the environment has any secret at all, never get a usable token) — don't approve a run expecting it to
+reach the catalog branch until `CATALOG_PUSH_TOKEN` is confirmed in place:
+- A `catalog-update` environment (Settings → Environments) with Allan as a required reviewer.
+- A secret on that environment, `CATALOG_PUSH_TOKEN`: a fine-grained PAT scoped only to `i-machine-things/plugins`
+  with Contents: Read and write. The default `GITHUB_TOKEN` can't push to a different repo, so this always has to
+  be a real PAT — generate and set it directly (`gh secret set --env catalog-update CATALOG_PUSH_TOKEN --repo
+  i-machine-things/open-autoroute`), never by pasting it into a chat or commit.
+- The `CATALOG_FORK_BRANCH` repo variable, set to whichever branch currently carries the open catalog PR. Once
+  that PR merges and a *new* PR is opened for the next update (same manual steps as below, just for a fresh
+  branch), update this variable to point at the new branch before the next release.
+
+**To do it by hand instead** (first submission, or if the automation is ever down):
 1. Download that release's `openautoroute_pi-*.xml` files from its GitHub Releases page.
-2. `i-machine-things/plugins` (forked from `OpenCPN/plugins`) already exists — fetch it, branch off `Alpha`.
-3. Add the new XML files to `metadata/` (same filenames as last time, now with the new version baked in; old
-   versions' files can be left in place or removed — check what other plugins in that directory actually do).
-4. Push the branch, open a PR from `i-machine-things/plugins:<branch>` to `OpenCPN/plugins:Alpha`.
+2. `i-machine-things/plugins` (forked from `OpenCPN/plugins`) already exists — fetch it, branch off `Alpha` (or
+   check out the existing catalog branch, if one is still open).
+3. Replace the `openautoroute_pi-*.xml` files in `metadata/` with the new ones (filenames can change between
+   versions — e.g. a corrected `target`; always remove every old `openautoroute_pi-*.xml` first rather than
+   assuming the name matches).
+4. Push the branch, open (or update) a PR from `i-machine-things/plugins:<branch>` to `OpenCPN/plugins:Alpha`.
 
 No icon file is needed despite what `OpenCPN/plugins`' own wiki docs suggest — a repo-wide search turned up zero
 `.svg`/`.png` files anywhere in it, across what must be hundreds of plugin entries; empirical practice doesn't
