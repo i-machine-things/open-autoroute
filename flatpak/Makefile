@@ -16,10 +16,25 @@ ARCH := x86_64
 # 25.08), and OpenCPN's own compatibility check only compares the leading digits, but keep this
 # accurate rather than relying on that leniency.
 TARGET_VERSION := $(shell flatpak info org.opencpn.OpenCPN 2>/dev/null | awk '/^ *Runtime:/ {print $$2}' | sed 's#.*/##')
+# The Sdk is a separate value from the Runtime above -- they're usually the same number but are not
+# guaranteed to be (OpenCPN could in principle be built with a newer Sdk against an older Platform
+# runtime). check-sdk compares the manifest's own pinned sdk: line (what flatpak-builder actually
+# builds against) with what's really installed, so a stale pin fails loudly instead of silently
+# building against the wrong wxWidgets ABI.
+SDK_PINNED := $(shell awk -F'//' '/^sdk:/ {print $$2}' $(PLUGIN).yaml)
+SDK_INSTALLED := $(shell flatpak info org.opencpn.OpenCPN 2>/dev/null | awk '/^ *Sdk:/ {print $$2}' | sed 's#.*/##')
 
 all: package
 
-build:
+check-sdk:
+	@test -n "$(SDK_INSTALLED)" || { echo "Could not detect org.opencpn.OpenCPN's Sdk -- is it installed? (flatpak info org.opencpn.OpenCPN)" >&2; exit 1; }
+	@[ "$(SDK_INSTALLED)" = "$(SDK_PINNED)" ] || { \
+		echo "$(PLUGIN).yaml pins Sdk $(SDK_PINNED) but org.opencpn.OpenCPN reports Sdk $(SDK_INSTALLED)." >&2; \
+		echo "Update the manifest's sdk: line (see flatpak/README.md) and install org.freedesktop.Sdk//$(SDK_INSTALLED) before building." >&2; \
+		exit 1; \
+	}
+
+build: check-sdk
 	flatpak-builder --force-clean --keep-build-dirs app $(PLUGIN).yaml
 
 package: build
@@ -30,4 +45,4 @@ package: build
 clean:
 	rm -rf app .flatpak-builder *.tar.gz
 
-.PHONY: all build package clean
+.PHONY: all check-sdk build package clean
