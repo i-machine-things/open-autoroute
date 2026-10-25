@@ -29,6 +29,11 @@ The same warning applies here, more strongly. A chart is a picture of what was s
 
 It reads about 60 of the 146 object classes in the NOAA data: depth and land, obstructions, wrecks and rocks, unsurveyed areas, restricted, military and security areas, dumping grounds, piers and other structures, buoys and beacons (for channels and danger marks), bridges and overhead cables (checked against an air draft, which you can set with `--air-draft-m` or leave to be estimated from the vessel length), and navigation locks. The rest is still ignored, notably quality-of-data zones, leading lines and recommended tracks, and marks other than lateral and cardinal ones. Depths are at chart datum with no tide, and there is no weather or current. Cell update files (`.001` and later) are not applied. It does not know whether US Inland Rules or the international rules apply where you are, and it assumes the international ones. [docs/S57_OBJECTS.md](docs/S57_OBJECTS.md) lists every chart object class, what it is for and whether it is used.
 
+## Screenshots
+
+<!-- Drop image files into docs/screenshots/ and tell Claude the filenames + a one-line caption for
+     each; they'll be wired in here in order. -->
+
 ## Building
 
 You need a C++17 compiler. With CMake:
