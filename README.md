@@ -31,8 +31,17 @@ It reads about 60 of the 146 object classes in the NOAA data: depth and land, ob
 
 ## Screenshots
 
-<!-- Drop image files into docs/screenshots/ and tell Claude the filenames + a one-line caption for
-     each; they'll be wired in here in order. -->
+Planning a route: set start and end points, vessel draft, length and clearance, and plan.
+
+![Route planning dialog, with the result summary after planning a route](docs/screenshots/main-ui.png)
+
+The planned route on the chart, following the channel and standing off shoals and marks:
+
+![A planned route drawn on an OpenCPN chart](docs/screenshots/generated-route.png)
+
+Right-click an existing route to re-plan it through its own waypoints, or check it against the same rules without changing it:
+
+![OpenCPN's route context menu, showing Auto-route this route and Check this route](docs/screenshots/auto-route-this-route.png)
 
 ## Building
 
