@@ -11,6 +11,7 @@ compile_commands.json
 flatpak/app/
 flatpak/.flatpak-builder/
 flatpak/*.tar.gz
+flatpak/*.generated.yaml
 
 # Isolated worktrees created by review agents
 .claude/worktrees/

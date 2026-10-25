@@ -61,6 +61,12 @@ modules:
       - -DCMAKE_INSTALL_PREFIX=/app/extensions/openautoroute
       - -DCMAKE_BUILD_TYPE:STRING=Release
       - -DOAR_BUILD_PLUGIN=ON
+      # @OAR_VERSION@ is substituted by flatpak/Makefile before this manifest reaches flatpak-builder
+      # (which has no templating of its own -- see its `build` target). Without this, CMakeLists.txt's
+      # OAR_VERSION cache var defaults to "dev", and the plugin would report that literal string as its
+      # version in OpenCPN's Plugin Manager instead of the real release version -- the same class of bug
+      # #52 fixed for the other platform targets. Found by CodeRabbit on #57.
+      - -DOAR_VERSION=@OAR_VERSION@
       # /run/build/<module-name> is where flatpak-builder's sandbox mounts this module's source
       # tree (same convention as radar_pi's own bundled-gl include path). opencpn-libs is a git
       # submodule of this repo, so it comes along with the "git" source below automatically
