@@ -1,22 +1,26 @@
-# Flatpak build for OpenCPN running as a Flatpak (see #54): OpenCPN's Flatpak identifies as
-# target "flatpak", not "debian-x86_64"/etc, so it rejects every package plugin/package.sh builds
-# and needs its own build that extends the org.opencpn.OpenCPN Flatpak itself. Modeled on
-# radar_pi's manifest (github.com/opencpn-radar-pi/radar_pi/flatpak), the reference the issue
-# points at for this pattern.
+# flatpak-builder manifest used ONLY to compile the plugin in a sandbox with OpenCPN's own bundled
+# wxWidgets ABI available (via `runtime: org.opencpn.OpenCPN` below) -- not to produce an installable
+# Flatpak ref. flatpak/Makefile's `package` target takes the .so this produces and repackages it as
+# a normal plugin tarball (target=flatpak-x86_64) that OpenCPN's own Options > Plugins > "Import
+# plugin..." button accepts directly; see flatpak/README.md and #54.
 #
-# Build with: flatpak-builder --force-clean build-flatpak flatpak/org.opencpn.OpenCPN.Plugin.openautoroute.yaml
-# (or `cmake --build build --target flatpak`/`make -C flatpak`). Needs flatpak-builder, and
+# An earlier version of this file shipped the plugin as a Flatpak extension of org.opencpn.OpenCPN
+# (`build-extension: true` + `flatpak install`). That path is abandoned -- OpenCPN's merge-dirs
+# wiring for the extension point never actually linked it into /app/lib/opencpn in testing, and it
+# needed a separate `flatpak install`/Discover step the normal plugin-import flow doesn't need. See
+# .claude/CODING_NOTES.md. `build-extension: true` is kept below only because it happens to be how
+# this sandboxed build was verified working (it affects where flatpak-builder's build sandbox maps
+# /app during the build, which the config-opts below rely on) -- the resulting build is never
+# exported or installed as a Flatpak ref, so its extension-point semantics (branch matching, etc.)
+# no longer apply.
+#
+# Build with: `make -C flatpak` (or `make flatpak` from the repo root). Needs flatpak-builder, and
 # org.opencpn.OpenCPN + the matching org.freedesktop.Sdk already installed locally -- flatpak
 # does not fetch them on its own, and the Sdk version below must match whatever
 # `flatpak info org.opencpn.OpenCPN` reports as "Sdk" right now (it has moved before: 22.08 ->
 # 24.08 -> ...; verified against a locally installed OpenCPN 5.14.2 as of this writing, which
 # reports Sdk 25.08).
 id: org.opencpn.OpenCPN.Plugin.openautoroute
-# Flathub's org.opencpn.OpenCPN.yaml declares this extension point with no version/versions key,
-# so Flatpak matches it to the app's own installed branch -- "stable" for a normal install. Must
-# stay "stable" (and flatpak/Makefile must export the same branch) or the extension builds and
-# installs without error but never actually mounts into OpenCPN (found by checking Flathub's own
-# manifest after a local install+uninstall round-trip didn't visibly load the plugin).
 branch: stable
 runtime: org.opencpn.OpenCPN
 runtime-version: stable

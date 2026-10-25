@@ -5,12 +5,13 @@ cmake-build-*/
 *.so
 compile_commands.json
 
-# flatpak-builder's own build/export output (see flatpak/Makefile). It caches relative to the
-# cwd it's invoked from, so this covers both `make -C flatpak` and the top-level `flatpak` target.
+# flatpak-builder's own build output, and the packaged plugin tarball it produces (see
+# flatpak/Makefile). Caches relative to the cwd it's invoked from, so this covers both
+# `make -C flatpak` and the top-level `flatpak` target.
 flatpak/app/
-flatpak/repo/
 flatpak/.flatpak-builder/
 /.flatpak-builder/
+flatpak/*.tar.gz
 
 # Isolated worktrees created by review agents
 .claude/worktrees/
