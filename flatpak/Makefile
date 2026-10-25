@@ -10,7 +10,11 @@
 # sandboxed build is installed or exported as a Flatpak ref.
 PLUGIN = org.opencpn.OpenCPN.Plugin.openautoroute
 VERSION ?= 0.0.0-dev
-ARCH := x86_64
+# Detected, not hardcoded -- flatpak-builder always builds for the host's own arch, so a hardcoded
+# x86_64 here would silently mislabel the package (wrong metadata.xml target-arch, wrong filename)
+# on any other arch (e.g. aarch64) instead of failing. `flatpak info --show-ref` prints
+# app/<id>/<arch>/<branch>; cut out the arch field.
+ARCH := $(shell flatpak info --show-ref org.opencpn.OpenCPN 2>/dev/null | cut -d/ -f3)
 # Must match the running OpenCPN Flatpak's own baked-in target version (see `opencpn-cmd print-abi`
 # or `flatpak info --show-runtime org.opencpn.OpenCPN`) -- it has moved before (22.08 -> 24.08 ->
 # 25.08), and OpenCPN's own compatibility check only compares the leading digits, but keep this
@@ -40,6 +44,7 @@ build: check-sdk
 	flatpak-builder --force-clean --keep-build-dirs app $(PLUGIN).yaml
 
 package: build
+	@test -n "$(ARCH)" || { echo "Could not detect org.opencpn.OpenCPN's arch -- is it installed? (flatpak info org.opencpn.OpenCPN)" >&2; exit 1; }
 	@test -n "$(TARGET_VERSION)" || { echo "Could not detect org.opencpn.OpenCPN's runtime version -- is it installed? (flatpak info org.opencpn.OpenCPN)" >&2; exit 1; }
 	VERSION=$(VERSION) TARGET=flatpak-$(ARCH) TARGET_VERSION=$(TARGET_VERSION) \
 		../plugin/package.sh app/files/lib/opencpn/libopenautoroute_pi.so .
