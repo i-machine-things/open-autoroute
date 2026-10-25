@@ -114,6 +114,10 @@ Then restart OpenCPN and enable "Auto-route" under Options, Plugins. It is early
 
 Prebuilt plugin packages (Options, Plugins, Import plugin — no build needed) are on the
 [releases page](https://github.com/i-machine-things/open-autoroute/releases) for Linux, Windows and macOS.
+
+### Flatpak OpenCPN
+
+OpenCPN's Flatpak build rejects those packages outright (see [#54](https://github.com/i-machine-things/open-autoroute/issues/54)) because it identifies itself with its own compatibility target, not `debian-x86_64`/etc. `make flatpak` builds a plain plugin tarball for that target instead — import it the same way, via Options, Plugins, Import plugin. See `flatpak/README.md`. Verified to build and import locally; not yet covered by CI.
 The Linux ones are tested against a real OpenCPN install. Windows remains unverified. On 2026-10-02,
 a corrected local macOS ARM package was confirmed to import in OpenCPN 5.14.0; the released v0.1.4
 macOS package fails import. The fix uses the `darwin-wx32` target, wxWidgets 3.2, and OpenCPN's bundled

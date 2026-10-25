@@ -52,3 +52,16 @@ option(OAR_BUILD_PLUGIN "Build the OpenCPN plugin" OFF)
 if(OAR_BUILD_PLUGIN)
   add_subdirectory(plugin)
 endif()
+
+# Packages the plugin for a Flatpak OpenCPN (see #54): flatpak/ holds the manifest and the real
+# build/package targets (flatpak-builder manages its own build directory, so this is a thin
+# top-level alias to `make -C flatpak`, not a CMake-managed build). Produces a plain plugin tarball
+# importable via OpenCPN's own Options > Plugins > "Import plugin..." button -- see flatpak/README.md.
+# Needs flatpak-builder, and org.opencpn.OpenCPN + its matching org.freedesktop.Sdk already
+# installed (see flatpak/*.yaml).
+add_custom_target(flatpak
+  COMMAND make -C "${CMAKE_SOURCE_DIR}/flatpak"
+  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+  COMMENT "Packaging the plugin for Flatpak OpenCPN (see flatpak/README.md)"
+  VERBATIM
+)

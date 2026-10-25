@@ -11,8 +11,20 @@ TARGET_VERSION=${TARGET_VERSION:-13}
 label=${VERSION#0.0.0-}; [ "$label" = dev ] || label=v$label
 TOP=openautoroute-opencpn-plugin-$label-${TARGET%%-*}$TARGET_VERSION-${TARGET#*-}
 TMP=$(mktemp -d)
-mkdir -p "$TMP/$TOP/usr/lib/opencpn"
-cp "$LIB" "$TMP/$TOP/usr/lib/opencpn/libopenautoroute_pi.so"
+# OpenCPN's tarball importer maps install paths differently per host: its Debian/Ubuntu path
+# (linux_entry_set_install_path in gui/src/plugin_handler.cpp) strips a leading usr/ (and usr/local/)
+# before matching "lib"/"share"/"bin", but its Flatpak path (flatpak_entry_set_install_path) does not
+# strip anything -- it expects lib/opencpn/<file> directly under the top-level dir. A flatpak-target
+# tarball built with the usr/ prefix silently drops the .so during import (no error, just absent from
+# the plugin list) because that function rejects any path whose first segment isn't a known key (bin/
+# lib/lib64/share). Found by importing via OpenCPN's own "Import plugin" button and the plugin never
+# appearing, then reading OpenCPN's extraction code directly.
+case "$TARGET" in
+  flatpak*) LIBDIR="$TMP/$TOP/lib/opencpn" ;;
+  *) LIBDIR="$TMP/$TOP/usr/lib/opencpn" ;;
+esac
+mkdir -p "$LIBDIR"
+cp "$LIB" "$LIBDIR/libopenautoroute_pi.so"
 cat > "$TMP/$TOP/metadata.xml" <<XML
 <plugin version="1">
   <name>Auto-route</name>

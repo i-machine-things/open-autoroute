@@ -23,4 +23,9 @@ test: build/test_core
 clean:
 	rm -rf build
 
-.PHONY: all test clean
+# Forwards to flatpak/Makefile (see flatpak/README.md) so the documented `make flatpak` works from
+# the repo root, the same as `cmake --build build --target flatpak` does for the CMake build.
+flatpak:
+	$(MAKE) -C flatpak
+
+.PHONY: all test clean flatpak
