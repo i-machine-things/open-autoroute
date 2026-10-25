@@ -12,7 +12,8 @@ already understands an arbitrary `TARGET`, so there is no separate packaging for
 
 Status: builds and imports successfully via OpenCPN's own Options > Plugins > "Import plugin..."
 button against a real Flatpak OpenCPN 5.14.2 (confirmed: plugin appears in the plugin list after
-import); not yet wired into CI or the release pipeline.
+import). Now built by `release.yml`'s `build_flatpak` job and published as a release asset; that
+CI-built package itself hasn't yet been re-confirmed by import (only the manually-built one was).
 
 An earlier version of this build shipped the plugin as a Flatpak extension of `org.opencpn.OpenCPN`
 (`flatpak install` + merge-dirs into the sandbox). That approach is abandoned: OpenCPN's own

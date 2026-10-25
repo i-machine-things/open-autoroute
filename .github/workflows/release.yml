@@ -246,9 +246,42 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  build_flatpak:
+    name: Build release artifacts (Flatpak OpenCPN plugin package)
+    needs: [validate, checks]
+    runs-on: ubuntu-24.04
+    env:
+      TAG: ${{ needs.validate.outputs.tag }}
+    # UNVERIFIED: a manually-built package was confirmed to import into a real Flatpak OpenCPN 5.14.2 (see
+    # flatpak/README.md and #54/#55), but this job's own output has not yet been tested the same way.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: flatpak, flatpak-builder, org.opencpn.OpenCPN and its matching Sdk (see flatpak/README.md)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder
+          sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          sudo flatpak install -y flathub org.opencpn.OpenCPN
+          sdk=$(flatpak info --show-sdk org.opencpn.OpenCPN)
+          sudo flatpak install -y flathub "org.freedesktop.Sdk//${sdk##*/}"
+      - name: Build and package the plugin (make -C flatpak)
+        run: make -C flatpak VERSION="${TAG#v}"
+      - name: Stage the package
+        run: |
+          mkdir -p dist
+          mv flatpak/openautoroute-opencpn-plugin-*.tar.gz dist/
+          ls -l dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-flatpak
+          path: dist/*
+          if-no-files-found: error
+
   rehearsal:
     name: Rehearsal (nothing is published)
-    needs: [validate, build, build_windows, build_macos]
+    needs: [validate, build, build_windows, build_macos, build_flatpak]
     if: needs.validate.outputs.dry == 'true'
     runs-on: ubuntu-24.04
     steps:
@@ -260,7 +293,7 @@ jobs:
 
   publish:
     name: Publish the GitHub release
-    needs: [validate, build, build_windows, build_macos]
+    needs: [validate, build, build_windows, build_macos, build_flatpak]
     if: needs.validate.outputs.dry == 'false'
     runs-on: ubuntu-24.04
     permissions:
