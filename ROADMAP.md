@@ -52,15 +52,6 @@ Closes the gap Weather Routing's own manual admits to: its routes aren't checked
 
 **Done when (proposed):** live wind, speed through water and fuel flow can feed the router, that data can reach Weather Routing for its own polar auto-tuning (once `v0.3.0`'s handoff exists), and real-time fuel range modeling is closer to logged performance than a static estimate.
 
-### `v0.6.0` — Standalone Route-Planning App
-
-Not a chart plotter — OpenCPN already is one, official and full-featured, on every platform this could target except iOS (OpenCPN's own FAQ: the App Store restricts it; the only current workaround is VNC into a Raspberry Pi). This is a focused planning tool instead: load charts, plan a route, export it. No live chart display, no position tracking, no AIS — those stay OpenCPN's job everywhere OpenCPN already runs.
-
-* **Flutter Framework:** A cross-platform planning app (Android, iOS, Windows, macOS, Linux) on the same core as the plugin. Cross-platform because Flutter builds all of them from one codebase, not because each platform needs its own competing chart plotter — iOS is the actual gap being filled; the rest are a convenience for planning without installing OpenCPN.
-* **Online NOAA Sync:** Download the charts a planned route needs, directly, without a separate chart-management step.
-
-**Done when (proposed):** the app installs and plans a route on iOS and one other platform, using charts it downloaded itself, with no live chart-display or tracking feature creeping into scope.
-
 ---
 
 ## Backlog and themes (not scheduled, not numbered)
