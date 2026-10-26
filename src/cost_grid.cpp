@@ -260,7 +260,12 @@ float CostGrid::gateSideFactor(Cell c, double headingDeg) const {
     if (std::isnan(t)) return 1.0f;
     const double diff = (headingDeg - gateAxis_[i]) * 3.14159265358979 / 180.0;
     const double along = std::cos(diff);                       // 1 going with the buoyage direction, -1 against it
-    if (std::fabs(along) < 0.5) return 1.0f;                   // crossing the channel: no side to keep to
+    if (std::fabs(along) < 0.5) {                               // crossing the channel: no side to keep to
+        // A precise gate corridor leaves this free, same as always. The coarser wide-channel preference pairs no
+        // particular marks, so without some cost here a route could swap sides as often as it likes for nothing.
+        if (!gateCrossPenalty_.empty() && gateCrossPenalty_[i]) return static_cast<float>(1.0 + 0.3 * gateSideWeight_);
+        return 1.0f;
+    }
     const double preferred = along > 0 ? 0.8 : 0.2;            // near the starboard outer limit (Rule 9(a)), a fifth of the width in
     const double off = t - preferred;
     return static_cast<float>(1.0 + gateSideWeight_ * 4.0 * off * off);

@@ -765,12 +765,14 @@ void applyChannelSidePreference(CostGrid& grid, const std::vector<LateralMark>& 
     const std::vector<float> dPortSmooth = boxBlur(dPort, grid.cols(), grid.rows(), blurRadiusCells);
     const std::vector<float> dStarSmooth = boxBlur(dStar, grid.cols(), grid.rows(), blurRadiusCells);
 
-    // t: 0 at the port side, 1 at the starboard side, smooth in between. Left NaN far from both a port and a starboard
-    // mark (judged on the raw distance), so the preference never reaches into open water or an unrelated channel that
-    // happens to be nearby.
+    // t: 0 at the port side, 1 at the starboard side, smooth in between. Left NaN unless a port and a starboard mark
+    // are each plausibly on the same channel: close enough on their own (judged on the raw distance) that the pair's
+    // combined span is under `2 * rangeM`. The span check is what matters on a wide reach with sparse marks on one
+    // bank only nearby: a lone close mark is not enough by itself, or the nearest opposite-hand mark across open
+    // water (a different, unrelated channel) could steer the route by a pairing that was never actually charted.
     std::vector<float> t(n, std::numeric_limits<float>::quiet_NaN());
     for (size_t i = 0; i < n; ++i) {
-        if (dPort[i] >= rangeM && dStar[i] >= rangeM) continue;
+        if (dPort[i] + dStar[i] >= 2.0 * rangeM) continue;  // the two nearest marks are too far apart to both be this channel's
         const double sum = static_cast<double>(dPortSmooth[i]) + dStarSmooth[i];
         if (sum < 1.0) continue;  // sitting on a mark itself: no meaningful position to report
         t[i] = static_cast<float>(dPortSmooth[i] / sum);
@@ -794,7 +796,7 @@ void applyChannelSidePreference(CostGrid& grid, const std::vector<LateralMark>& 
             double axis = std::atan2(gx, -gy) * 180.0 / 3.14159265358979 - 90.0;  // bearing (east = +col, north = -row)
             if (axis < 0) axis += 360.0;
             if (axis >= 360.0) axis -= 360.0;
-            grid.setGateCell(cell, t[i], static_cast<float>(axis));
+            grid.setGateCell(cell, t[i], static_cast<float>(axis), true);
         }
     }
 }

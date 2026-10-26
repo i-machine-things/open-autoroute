@@ -483,13 +483,19 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
                 if (grid.isNarrowChannel(hc)) narrowInM += leg / steps;
                 else if (!narrowDist.empty() && narrowDist[static_cast<size_t>(hc.row) * grid.cols() + hc.col] < 1500.0f && !grid.isChannel(hc)) narrowNearOutM += leg / steps;
                 // Rule 9(a): how often the route swaps sides of a marked channel instead of keeping to the starboard one
-                // (see CostGrid::gateT and applyChannelSidePreference; issue #21).
+                // (see CostGrid::gateT and applyChannelSidePreference; issue #21). Leaving marked-channel coverage (even
+                // briefly, between two separate charted channels) resets the tracked side, so a swap only counts within
+                // one continuous marked stretch, never across the gap between two unrelated ones.
                 const float gt = grid.gateT(hc);
                 if (!std::isnan(gt)) {
                     const int s = gt < 0.5f ? -1 : 1;
                     if (channelSide != 0 && s != channelSide) ++sideCrossings;
                     channelSide = s;
+                } else {
+                    channelSide = 0;
                 }
+            } else {
+                channelSide = 0;
             }
             const int32_t areaId = (grid.inBounds(hc) && !areaLayer.id.empty()) ? areaLayer.id[static_cast<size_t>(hc.row) * grid.cols() + hc.col] : -1;
             if (areaId >= 0) {

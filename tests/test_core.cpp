@@ -745,6 +745,9 @@ static void testWideChannelSidePreference() {
     CHECK(!std::isnan(g.gateT({14, 30})));             // reaches the gap between two widely-spaced gates
     CHECK(std::isnan(g.gateT({14, 2})));               // but never outside the charted channel
     CHECK(g.gateSideFactor({14, 2}, 90.0) == 1.0f);
+    // Crossing from one side to the other costs a little here (issue #21's "small penalty for changing sides"), unlike
+    // a precise gate corridor, where it stays free (testKeepToStarboardSide's g.gateSideFactor({30, 20}, 0.0) == 1.0f).
+    CHECK(g.gateSideFactor({14, 30}, 0.0) > 1.0f);
 
     auto meanRow = [&](const std::vector<LatLon>& route) {
         double sum = 0;

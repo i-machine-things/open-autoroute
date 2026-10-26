@@ -28,12 +28,15 @@ for f in "$OLD"/*.txt; do
       if (nv["wrong_way_m"] + 0 > ov["wrong_way_m"] + 0) r = r " wrong-way"
       if (nv["vessel_m"] + 0 < 20 && nv["caution_m"] + 0 > ov["caution_m"] + 0) r = r " more-caution-area"   # ships are meant to use precautionary areas
       # Comparing raw gates_missed alone is noisy: a route that only shifted slightly can pick up extra distant gates
-      # within the 1.5 km "near" radius that it was always going to miss. Only a real regression if it is not just
-      # that more gates came into range (gates_near did not grow too).
-      if (nv["gates_missed"] + 0 > ov["gates_missed"] + 0 && nv["gates"] + 0 <= ov["gates"] + 0) r = r " more-buoy-gates-missed"
+      # within the 1.5 km "near" radius that it was always going to miss too, which would grow the raw count with no
+      # real change in how well it threads the ones it is near. Flag it only when the miss count grew by more than
+      # the near count did, i.e. the hit rate actually got worse.
+      if (nv["gates_missed"] - ov["gates_missed"] > nv["gates"] - ov["gates"]) r = r " more-buoy-gates-missed"
       if (nv["worst_off_deg"] + 0 > ov["worst_off_deg"] + 5) r = r " worse-crossing-angle"
       if (nv["crossings"] + 0 > ov["crossings"] + 0) r = r " more-crossings"
-      if (nv["side_cross"] + 0 > ov["side_cross"] + 0) r = r " more-channel-side-crossings"
+      # side_cross is a newer field: an old summary from before it existed has no key for it at all, which would
+      # read as 0 and flag every route with any crossing as a regression against a baseline that never measured it.
+      if (("side_cross" in ov) && ("side_cross" in nv) && nv["side_cross"] + 0 > ov["side_cross"] + 0) r = r " more-channel-side-crossings"
       print r }')
   if [ -n "$verdict" ]; then echo "REGRESSION $name:$verdict"; bad=1; else echo "changed    $name"; fi
   printf '    old: %s\n    new: %s\n' "$(sed 's/SUMMARY //; s/charts=[0-9]* //; s/snap_[a-z_]*=[0-9]* //g' <<<"$o")" "$(sed 's/SUMMARY //; s/charts=[0-9]* //; s/snap_[a-z_]*=[0-9]* //g' <<<"$n")"
