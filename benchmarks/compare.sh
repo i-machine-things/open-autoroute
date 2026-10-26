@@ -31,7 +31,8 @@ for f in "$OLD"/*.txt; do
       # within the 1.5 km "near" radius that it was always going to miss too, which would grow the raw count with no
       # real change in how well it threads the ones it is near. Flag it only when the miss count grew by more than
       # the near count did, i.e. the hit rate actually got worse.
-      if (nv["gates_missed"] - ov["gates_missed"] > nv["gates"] - ov["gates"]) r = r " more-buoy-gates-missed"
+      if (nv["gates_missed"] + 0 > ov["gates_missed"] + 0 &&
+          nv["gates_missed"] - ov["gates_missed"] > nv["gates"] - ov["gates"]) r = r " more-buoy-gates-missed"
       if (nv["worst_off_deg"] + 0 > ov["worst_off_deg"] + 5) r = r " worse-crossing-angle"
       if (nv["crossings"] + 0 > ov["crossings"] + 0) r = r " more-crossings"
       # side_cross is a newer field: an old summary from before it existed has no key for it at all, which would
