@@ -82,6 +82,13 @@ std::vector<float> CostGrid::distanceToBlockedM() const {
     return chamferM(std::move(d));
 }
 
+std::vector<float> CostGrid::distanceFromMaskM(const std::vector<uint8_t>& seed) const {
+    if (seed.size() != cost_.size()) throw std::invalid_argument("seed mask does not match grid size");
+    std::vector<float> d(cost_.size());
+    for (size_t i = 0; i < d.size(); ++i) d[i] = seed[i] ? 0.0f : 1e30f;
+    return chamferM(std::move(d));
+}
+
 std::vector<float> CostGrid::distanceToLaneM() const {
     std::vector<float> d(cost_.size(), 1e30f);
     for (size_t i = 0; i < d.size(); ++i) {

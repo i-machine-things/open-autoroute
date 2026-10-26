@@ -11,6 +11,34 @@ namespace {
 
 enum : uint8_t { kUnknown = 0, kOpen = 1, kShut = 2 };
 
+// Separable box blur (two passes, closer to a tent than a single box), radius in cells. A nearest-mark distance field is
+// continuous but has a direction crease exactly where the nearest mark switches to the next one along the bank; a 1-cell
+// gradient stencil on the raw field amplifies every such crease into noise. Blurring first trades that noise for a little
+// smoothing of the real signal, which is what applyChannelSidePreference() needs for a stable axis.
+std::vector<float> boxBlur(const std::vector<float>& src, int cols, int rows, int radius) {
+    if (radius <= 0) return src;
+    auto pass = [](const std::vector<float>& in, int outer, int inner, int radius, bool rowMajorStride) {
+        std::vector<float> out(in.size());
+        for (int o = 0; o < outer; ++o) {
+            const size_t base = rowMajorStride ? static_cast<size_t>(o) * inner : static_cast<size_t>(o);
+            const size_t stride = rowMajorStride ? 1 : static_cast<size_t>(outer);
+            double sum = 0.0;
+            int count = 0;
+            for (int k = 0; k <= radius && k < inner; ++k) { sum += in[base + static_cast<size_t>(k) * stride]; ++count; }
+            for (int i = 0; i < inner; ++i) {
+                out[base + static_cast<size_t>(i) * stride] = static_cast<float>(sum / count);
+                const int add = i + radius + 1, rem = i - radius;
+                if (add < inner) { sum += in[base + static_cast<size_t>(add) * stride]; ++count; }
+                if (rem >= 0) { sum -= in[base + static_cast<size_t>(rem) * stride]; --count; }
+            }
+        }
+        return out;
+    };
+    std::vector<float> h = pass(src, rows, cols, radius, true);
+    std::vector<float> v = pass(h, cols, rows, radius, false);
+    return pass(v, rows, cols, radius, true);  // horizontal, vertical, horizontal: close enough to a Gaussian for this
+}
+
 // Scanline even-odd fill over every ring of a feature at once, so hole rings cut out of the exterior for free. Cost is
 // rows x edges instead of cells x edges, which matters for the huge coarse-scale polygons in approach/coastal charts.
 template <typename Fn>
@@ -713,6 +741,62 @@ std::vector<Gate> applyChannelGates(CostGrid& grid, const std::vector<LateralMar
         }
     }
     return out;
+}
+
+void applyChannelSidePreference(CostGrid& grid, const std::vector<LateralMark>& marks, double sideWeight, double rangeM) {
+    if (sideWeight <= 0.0 || rangeM <= 0.0) return;
+    const size_t n = static_cast<size_t>(grid.cols()) * grid.rows();
+    std::vector<uint8_t> portSeed(n, 0), starSeed(n, 0);
+    bool anyPort = false, anyStar = false;
+    for (const LateralMark& m : marks) {
+        const Cell c = grid.cellAt(m.at);
+        if (!grid.inBounds(c)) continue;
+        const size_t i = static_cast<size_t>(c.row) * grid.cols() + c.col;
+        if (m.category == 1) { portSeed[i] = 1; anyPort = true; }
+        else if (m.category == 2) { starSeed[i] = 1; anyStar = true; }
+    }
+    if (!anyPort || !anyStar) return;  // no orientation without a mark of each hand somewhere on the grid
+    const std::vector<float> dPort = grid.distanceFromMaskM(portSeed);
+    const std::vector<float> dStar = grid.distanceFromMaskM(starSeed);
+    // Blurred for the actual t value and its gradient: a raw nearest-mark distance field has a crease wherever the
+    // nearest mark switches to the next one along the bank, which would otherwise make both t and the axis derived
+    // from it ripple along the length of the channel instead of varying smoothly across it.
+    const int blurRadiusCells = std::clamp(static_cast<int>(std::lround(3000.0 / grid.cellSizeM())), 1, 100);
+    const std::vector<float> dPortSmooth = boxBlur(dPort, grid.cols(), grid.rows(), blurRadiusCells);
+    const std::vector<float> dStarSmooth = boxBlur(dStar, grid.cols(), grid.rows(), blurRadiusCells);
+
+    // t: 0 at the port side, 1 at the starboard side, smooth in between. Left NaN far from both a port and a starboard
+    // mark (judged on the raw distance), so the preference never reaches into open water or an unrelated channel that
+    // happens to be nearby.
+    std::vector<float> t(n, std::numeric_limits<float>::quiet_NaN());
+    for (size_t i = 0; i < n; ++i) {
+        if (dPort[i] >= rangeM && dStar[i] >= rangeM) continue;
+        const double sum = static_cast<double>(dPortSmooth[i]) + dStarSmooth[i];
+        if (sum < 1.0) continue;  // sitting on a mark itself: no meaningful position to report
+        t[i] = static_cast<float>(dPortSmooth[i] / sum);
+    }
+    grid.setGateSideWeight(sideWeight);
+    auto at = [&](int c, int r) -> float {
+        if (c < 0 || c >= grid.cols() || r < 0 || r >= grid.rows()) return std::numeric_limits<float>::quiet_NaN();
+        return t[static_cast<size_t>(r) * grid.cols() + c];
+    };
+    for (int r = 0; r < grid.rows(); ++r) {
+        for (int c = 0; c < grid.cols(); ++c) {
+            const Cell cell{c, r};
+            const size_t i = static_cast<size_t>(r) * grid.cols() + c;
+            if (std::isnan(t[i]) || grid.blocked(cell) || !grid.isChannel(cell)) continue;
+            if (!std::isnan(grid.gateT(cell))) continue;  // a real nearby gate already set this precisely; keep it
+            if (!std::isnan(grid.laneDirection(cell)) || grid.isZone(cell) || grid.isCaution(cell)) continue;  // not ours to touch
+            // Gradient of t points from the port side toward the starboard side, the same role (ux, uy) plays in
+            // applyChannelGates(); the same -90 degree rotation turns it into the direction of buoyage.
+            const float gx = at(c + 1, r) - at(c - 1, r), gy = at(c, r + 1) - at(c, r - 1);
+            if (std::isnan(gx) || std::isnan(gy) || std::hypot(gx, gy) < 1e-6) continue;
+            double axis = std::atan2(gx, -gy) * 180.0 / 3.14159265358979 - 90.0;  // bearing (east = +col, north = -row)
+            if (axis < 0) axis += 360.0;
+            if (axis >= 360.0) axis -= 360.0;
+            grid.setGateCell(cell, t[i], static_cast<float>(axis));
+        }
+    }
 }
 
 }  // namespace oar

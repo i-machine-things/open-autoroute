@@ -120,4 +120,18 @@ void collectLateralMarks(const ChartData& chart, std::vector<LateralMark>& out);
 std::vector<Gate> applyChannelGates(CostGrid& grid, const std::vector<LateralMark>& marks, double maxGateM = 500.0,
                                     double outsidePenalty = 8.0, double sideWeight = 1.5, double lateralRangeM = 400.0);
 
+/// Rule 9(a) side preference across a whole charted channel (CostGrid::isChannel), narrow or wide, not only the local corridor
+/// applyChannelGates() finds near a close-paired, chained chain of marks. On a wide river the marks are often too far apart
+/// (across the channel, or along it) to ever pair into a gate, which otherwise leaves a route free to wander from one side to
+/// the other (issue #21). Every port-hand mark seeds a chamfer distance field, every starboard-hand mark seeds another; their
+/// mix `t = dPort / (dPort + dStar)` gives a smooth 0..1 position across the channel (0 at the port side, 1 at the starboard
+/// side), and the local gradient of `t` gives the direction of buoyage, the same way applyChannelGates() derives it from a
+/// single pair of marks. A channel cell keeps whatever applyChannelGates() already set (a real nearby gate is more precise);
+/// otherwise it is set here when a port and a starboard mark are each within `rangeM`, so the preference reaches past a gap
+/// between marks without inventing one far from any real mark. Cells outside a charted channel, and traffic lanes, separation
+/// zones and precautionary areas inside one, are never touched. Call once, after applyChannelGates() and markNarrowChannels(),
+/// and before any margin. Reuses CostGrid::gateSideFactor(), so no-op without both port and starboard marks somewhere nearby.
+void applyChannelSidePreference(CostGrid& grid, const std::vector<LateralMark>& marks, double sideWeight = 1.5,
+                                 double rangeM = 2500.0);
+
 }  // namespace oar

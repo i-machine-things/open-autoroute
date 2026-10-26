@@ -718,6 +718,78 @@ static void testChannelPreference() {
     CHECK(lanes.channelMarginFactor({26, 10}, 0.0) > 1.0f);    // ordinary water in range, running along the edge: charged
 }
 
+static void testWideChannelSidePreference() {
+    // A WIDE channel (about 4.4 km, well past the narrow threshold and past applyChannelGates()'s default 500 m pairing
+    // reach) marked by port-hand buoys along the north bank and starboard-hand buoys along the south bank, spaced about
+    // 2.2 km apart along the channel. Issue #21: the Columbia has stretches exactly like this, where a route is free to
+    // wander from one side to the other because no gate can ever form.
+    const double latStep = 0.001, lonStep = latStep / std::cos(deg2rad(46.0));
+    auto make = [&]() { return CostGrid(90, 60, {46.0, -124.0}, latStep, lonStep); };
+    CostGrid g = make();
+    for (int r = 10; r < 50; ++r)
+        for (int c = 0; c < 90; ++c) g.setChannel({c, r});
+    std::vector<LateralMark> marks;
+    for (int c = 4; c < 86; c += 20) {
+        marks.push_back({g.centre({c, 12}), 1});  // port-hand, north bank
+        marks.push_back({g.centre({c, 47}), 2});  // starboard-hand, south bank
+    }
+    g.markNarrowChannels(600.0);
+    CHECK(!g.isNarrowChannel({40, 30}));  // too wide to be a narrow channel
+
+    // Control: marks this far apart (about 3.9 km across) can never pair into a gate, so the existing mechanism alone
+    // sees nothing here and is a no-op (reproduces the reported bug: no side preference anywhere on this reach).
+    CHECK(applyChannelGates(g, marks, 500.0).empty());
+    CHECK(std::isnan(g.gateT({14, 30})));
+
+    applyChannelSidePreference(g, marks, 3.0, 2500.0);
+    CHECK(!std::isnan(g.gateT({14, 30})));             // reaches the gap between two widely-spaced gates
+    CHECK(std::isnan(g.gateT({14, 2})));               // but never outside the charted channel
+    CHECK(g.gateSideFactor({14, 2}, 90.0) == 1.0f);
+
+    auto meanRow = [&](const std::vector<LatLon>& route) {
+        double sum = 0;
+        int n = 0;
+        for (size_t i = 1; i < route.size(); ++i) {
+            for (int k = 0; k <= 40; ++k) {
+                const double t = k / 40.0;
+                sum += g.cellAt({route[i - 1].lat + t * (route[i].lat - route[i - 1].lat),
+                                 route[i - 1].lon + t * (route[i].lon - route[i - 1].lon)}).row;
+                ++n;
+            }
+        }
+        return sum / n;
+    };
+    const auto east = findRoute(g, g.centre({6, 30}), g.centre({84, 30}));
+    const auto west = findRoute(g, g.centre({84, 30}), g.centre({6, 30}));
+    CHECK(!east.empty() && !west.empty());
+    CHECK(meanRow(east) > 30.5);  // eastbound keeps to the south (right) side, same as a gated narrow channel
+    CHECK(meanRow(west) < 29.5);  // westbound keeps to the north (right) side
+
+    // A cell a real gate has already set precisely is never overwritten by the coarser whole-channel pass.
+    CostGrid precise = make();
+    for (int r = 10; r < 50; ++r)
+        for (int c = 0; c < 90; ++c) precise.setChannel({c, r});
+    precise.setGateCell({14, 30}, 0.5f, 123.0f);
+    applyChannelSidePreference(precise, marks, 3.0, 2500.0);
+    CHECK(precise.gateT({14, 30}) == 0.5f);
+
+    // Traffic separation is never touched, same rule as applyChannelPreference() and applyChannelGates().
+    CostGrid lane = make();
+    for (int r = 10; r < 50; ++r)
+        for (int c = 0; c < 90; ++c) lane.setChannel({c, r});
+    lane.setLaneDirection({14, 30}, 0.0f);
+    applyChannelSidePreference(lane, marks, 3.0, 2500.0);
+    CHECK(std::isnan(lane.gateT({14, 30})));
+
+    // Only a port-hand mark (or only a starboard-hand one) gives no orientation: a no-op, like a lone unpaired mark.
+    CostGrid oneSided = make();
+    for (int r = 10; r < 50; ++r)
+        for (int c = 0; c < 90; ++c) oneSided.setChannel({c, r});
+    std::vector<LateralMark> portOnly{{oneSided.centre({10, 12}), 1}, {oneSided.centre({30, 12}), 1}};
+    applyChannelSidePreference(oneSided, portOnly, 3.0, 2500.0);
+    CHECK(std::isnan(oneSided.gateT({14, 30})));
+}
+
 static void testWaterBodies() {
     // A wall splits a 10x6 basin in two; a diagonal pair of blocked cells must not let water leak through the corner.
     CostGrid g = makeGrid(10, 6);
@@ -1837,6 +1909,7 @@ int main() {
     testChannelGates();
     testKeepToStarboardSide();
     testChannelPreference();
+    testWideChannelSidePreference();
     testWaterBodies();
     testSeparationZoneCrossing();
     testPrecautionaryAreaCost();

@@ -27,9 +27,13 @@ for f in "$OLD"/*.txt; do
       if (nv["blocked_m"] + 0 > ov["blocked_m"] + 0) r = r " blocked-water"
       if (nv["wrong_way_m"] + 0 > ov["wrong_way_m"] + 0) r = r " wrong-way"
       if (nv["vessel_m"] + 0 < 20 && nv["caution_m"] + 0 > ov["caution_m"] + 0) r = r " more-caution-area"   # ships are meant to use precautionary areas
-      if (nv["gates_missed"] + 0 > ov["gates_missed"] + 0) r = r " more-buoy-gates-missed"
+      # Comparing raw gates_missed alone is noisy: a route that only shifted slightly can pick up extra distant gates
+      # within the 1.5 km "near" radius that it was always going to miss. Only a real regression if it is not just
+      # that more gates came into range (gates_near did not grow too).
+      if (nv["gates_missed"] + 0 > ov["gates_missed"] + 0 && nv["gates"] + 0 <= ov["gates"] + 0) r = r " more-buoy-gates-missed"
       if (nv["worst_off_deg"] + 0 > ov["worst_off_deg"] + 5) r = r " worse-crossing-angle"
       if (nv["crossings"] + 0 > ov["crossings"] + 0) r = r " more-crossings"
+      if (nv["side_cross"] + 0 > ov["side_cross"] + 0) r = r " more-channel-side-crossings"
       print r }')
   if [ -n "$verdict" ]; then echo "REGRESSION $name:$verdict"; bad=1; else echo "changed    $name"; fi
   printf '    old: %s\n    new: %s\n' "$(sed 's/SUMMARY //; s/charts=[0-9]* //; s/snap_[a-z_]*=[0-9]* //g' <<<"$o")" "$(sed 's/SUMMARY //; s/charts=[0-9]* //; s/snap_[a-z_]*=[0-9]* //g' <<<"$n")"

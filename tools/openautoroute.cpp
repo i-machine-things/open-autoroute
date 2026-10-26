@@ -152,7 +152,7 @@ int main(int argc, char** argv) {
     bool trace = false, timing = false;
     bool haveFrom = false, haveTo = false, applyTss = true, underSail = false;
     double draft = 1.5, clearance = 1.0, cellM = 30.0, marginM = 500.0, marginWeight = 10.0, lengthM = 12.0, laneUse = -1.0, simplify = 0.05, laneMarginM = 1500.0, laneMarginWeight = 12.0, caution = -1.0, minLegM = 460.0;
-    bool summary = false, useMarks = true, useChannels = true, useHazards = true, useCatalogue = true;
+    bool summary = false, useMarks = true, useChannels = true, useHazards = true, useCatalogue = true, useSidePref = true;
     double airDraftArg = -1.0;
     std::vector<std::string> skipClasses;  // dev switches (--no-marks, --no-boundaries) exist only to compare runs
     for (int i = 1; i < argc; ++i) {
@@ -202,6 +202,7 @@ int main(int argc, char** argv) {
         else if (a == "--timing") timing = true;  // developer: print when each phase starts
         else if (a == "--no-catalogue") useCatalogue = false;  // developer switch: open every cell instead of using CATALOG.031 (to compare speed)
         else if (a == "--no-marks") useMarks = false;  // ignore red/green lateral marks (for comparison)
+        else if (a == "--no-side-pref") useSidePref = false;  // developer switch: keep gate corridors but drop the wide-channel side preference (issue #21)
         else if (a == "--summary") summary = true;  // one machine-readable line at the end, for benchmark scripts
         else if (a == "--simplify" && hasVal) simplify = std::atof(argv[++i]);
         else if (a == "--trace") trace = true;  // developer: with --map, also list the raw path cells in the window with their lane and cost
@@ -240,6 +241,7 @@ int main(int argc, char** argv) {
     req.applyTss = applyTss;
     req.useMarks = useMarks;
     req.useChannels = useChannels;
+    req.useSidePref = useSidePref;
     req.useHazards = useHazards;
     req.useCatalogue = useCatalogue;
     req.skipClasses = skipClasses;

@@ -20,7 +20,7 @@ The same warning applies here, more strongly. A chart is a picture of what was s
 - Finds a route across that grid, then straightens it and thins out the waypoints.
 - Keeps some distance off shores, and follows the basic rules of the road it can read from a chart:
   - **Traffic separation schemes (Rule 10):** lanes are followed in the charted direction, zones are only crossed square-on, precautionary areas are avoided by small craft, and a boat under 20 m or under sail stays out of lanes where it can.
-  - **Narrow channels (Rule 9):** between the dashed limits of a charted narrow channel, and between chains of red and green buoys, keeping to the starboard side.
+  - **Narrow channels (Rule 9):** between the dashed limits of a charted narrow channel, and between chains of red and green buoys, keeping to the starboard side. The starboard-side preference also reaches across a wide charted channel whose marks are too far apart to pair into a gate, so a route does not wander from one side to the other and back.
 - Goes through navigation locks (the chamber, its gates and a short approach corridor are treated as passable) and lists them as a crossing, since a lockage means calling the lockmaster and waiting. Lock size and schedules are not checked.
 - Tells you which restricted or dangerous areas (military and security zones, reserves and sanctuaries, dumping grounds) a route crosses, with the chart's own wording, on screen and in the GPX description. The router only prices most of these, so it can still cross one when the way round is long; read that list before you go.
 - Scores any GPX route against the same rules (`--eval`), so it can be used to check a route from somewhere else.

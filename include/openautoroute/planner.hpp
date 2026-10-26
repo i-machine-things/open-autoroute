@@ -39,6 +39,7 @@ struct PlanRequest {
 
     // Developer switches, used to compare runs; not for a user interface.
     bool useMarks = true, useChannels = true, useHazards = true, useCatalogue = true;   // useCatalogue=false opens every cell, to compare speed
+    bool useSidePref = true;   // useSidePref=false keeps the gate corridors but drops the wide-channel side preference, to compare runs
     std::vector<std::string> skipClasses;
 };
 
@@ -86,6 +87,7 @@ struct RouteCheck {
     double narrowInM = 0.0;           // inside a narrow charted channel
     double narrowNearOutM = 0.0;      // running close outside one (within 1.5 km, not in any channel)
     int gatesNear = 0, gatesMissed = 0;   // buoy gates (paired lateral marks) near the route, and those it does not pass between
+    int sideCrossings = 0;                // times the route swapped sides of a marked channel instead of keeping to starboard (Rule 9(a))
     std::vector<LaneTransit> lanes;   // each stretch inside a traffic lane
     double closestShoreM = -1.0;      // closest approach to blocked water, not counting 1 km at each end; negative if not measured
 };

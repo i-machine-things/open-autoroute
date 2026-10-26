@@ -192,6 +192,7 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     const double caution = req.caution, minLegM = req.minLegM, airDraftArg = req.airDraftM;
     double laneUse = req.laneUse;
     const bool applyTss = req.applyTss, underSail = req.underSail, useMarks = req.useMarks, useChannels = req.useChannels, useHazards = req.useHazards;
+    const bool useSidePref = req.useSidePref;
     const std::vector<std::string>& skipClasses = req.skipClasses;
     std::string routeName = req.routeName;
     const auto startedAt = std::chrono::steady_clock::now();
@@ -321,6 +322,10 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     if (useChannels) {
         grid.markNarrowChannels(600.0);
         grid.applyChannelPreference(1500.0, 6.0);
+        // Rule 9(a) side preference across the whole charted channel, not just the local reach of a chained gate: a wide
+        // river's marks are often too far apart (across it, or along it) to ever pair into a gate, which otherwise leaves
+        // the route free to wander from one side to the other (issue #21).
+        if (useMarks && useSidePref) applyChannelSidePreference(grid, marks, 1.5, 2500.0);
     }
     grid.setLaneUseFactor(laneUse);
     // Leeway: a vessel that avoids lanes also keeps a wide berth from lanes, zones and the ends of lane parts, so it prefers
@@ -447,6 +452,7 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     if (grid.cols() > 0) narrowDist = grid.distanceToNarrowChannelM();
     int cautionStretches = 0;
     bool inCaution = false;
+    int sideCrossings = 0, channelSide = 0;  // -1 port side, +1 starboard side, 0 not in a marked channel yet
     struct Spot { LatLon at; double alongM; };
     std::vector<Spot> unsafeSpots;  // first sample of each separate unsafe stretch
     bool inUnsafe = false;
@@ -476,6 +482,14 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
             if (grid.inBounds(hc)) {
                 if (grid.isNarrowChannel(hc)) narrowInM += leg / steps;
                 else if (!narrowDist.empty() && narrowDist[static_cast<size_t>(hc.row) * grid.cols() + hc.col] < 1500.0f && !grid.isChannel(hc)) narrowNearOutM += leg / steps;
+                // Rule 9(a): how often the route swaps sides of a marked channel instead of keeping to the starboard one
+                // (see CostGrid::gateT and applyChannelSidePreference; issue #21).
+                const float gt = grid.gateT(hc);
+                if (!std::isnan(gt)) {
+                    const int s = gt < 0.5f ? -1 : 1;
+                    if (channelSide != 0 && s != channelSide) ++sideCrossings;
+                    channelSide = s;
+                }
             }
             const int32_t areaId = (grid.inBounds(hc) && !areaLayer.id.empty()) ? areaLayer.id[static_cast<size_t>(hc.row) * grid.cols() + hc.col] : -1;
             if (areaId >= 0) {
@@ -572,10 +586,10 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
         char sb[1200];
         const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count();
         std::snprintf(sb, sizeof sb, "SUMMARY found=1 nm=%.2f straight_nm=%.2f waypoints=%zu charts=%d closest_m=%.0f median_m=%.0f blocked_m=%.0f "
-                    "vessel_m=%.0f caution_m=%.0f restricted_m=%.0f narrow_in_m=%.0f narrow_near_out_m=%.0f gates=%d gates_missed=%d lane_runs=%zu with_flow=%d crossings=%d wrong_way_m=%.0f worst_off_deg=%.0f snap_start_m=%.0f snap_end_m=%.0f "
+                    "vessel_m=%.0f caution_m=%.0f restricted_m=%.0f narrow_in_m=%.0f narrow_near_out_m=%.0f gates=%d gates_missed=%d side_cross=%d lane_runs=%zu with_flow=%d crossings=%d wrong_way_m=%.0f worst_off_deg=%.0f snap_start_m=%.0f snap_end_m=%.0f "
                     "seconds=%.1f", nm, haversineM(from, to) / 1852.0, route.size(), used,
                     clearances.empty() ? -1.0 : clearances.front(), clearances.empty() ? -1.0 : clearances[clearances.size() / 2],
-                    unsafeM, lengthM, cautionM, areasM, narrowInM, narrowNearOutM, gatesNear, gatesMissed, laneRuns.size(), withFlow, crossings, wrongWayM, worstOff, snapStartM, snapEndM, secs);
+                    unsafeM, lengthM, cautionM, areasM, narrowInM, narrowNearOutM, gatesNear, gatesMissed, sideCrossings, laneRuns.size(), withFlow, crossings, wrongWayM, worstOff, snapStartM, snapEndM, secs);
         result.summaryLine = sb;
     };
     // The same measurements as numbers, for a front end that words its own report (planning and checking alike).
@@ -593,6 +607,7 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     rc.narrowNearOutM = narrowNearOutM;
     rc.gatesNear = gatesNear;
     rc.gatesMissed = gatesMissed;
+    rc.sideCrossings = sideCrossings;
     for (const LaneRun& r : laneRuns) rc.lanes.push_back({r.at, r.alongM, r.lengthM, r.thetaSum / r.n, r.lane});
     rc.closestShoreM = clearances.empty() ? -1.0 : clearances.front();
     if (evaluating) {
@@ -604,6 +619,7 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
         }
         emitTo(checkOut, "precautionary areas: %.0f m in %d stretch(es)\n", cautionM, cautionStretches);
         emitTo(checkOut, "narrow channels: %.0f m inside, %.0f m running just outside; buoy gates: %d near the route, %d missed\n", narrowInM, narrowNearOutM, gatesNear, gatesMissed);
+        emitTo(checkOut, "marked channel: swapped sides %d time(s) (Rule 9(a) keeps to the starboard side)\n", sideCrossings);
         emitTo(checkOut, "traffic lanes (Rule 10): %zu lane transit(s): %d with the flow, %d crossing, %d wrong-way (%.0f m)\n",
                     laneRuns.size(), withFlow, crossings, wrongWay, wrongWayM);
         for (size_t i = 0; i < laneRuns.size() && i < 12; ++i) {

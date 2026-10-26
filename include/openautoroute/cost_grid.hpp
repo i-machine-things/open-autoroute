@@ -151,6 +151,9 @@ public:
     /// limit of the channel or fairway which lies on her starboard side as is safe and practicable": t = 0.8 going with the direction of
     /// buoyage, t = 0.2 going against it (where the vessel's own starboard side lies), a fifth of the width in from the limit for leeway. Moves across the channel are not charged.
     float gateSideFactor(Cell c, double headingDeg) const;
+    /// The position set by setGateCell() (0 at the port-hand side, 1 at the starboard-hand side), NaN where none is set. Used to
+    /// measure how often a planned route swaps sides of a marked channel (see chart_grid.hpp applyChannelSidePreference).
+    float gateT(Cell c) const { return gateT_.empty() ? std::numeric_limits<float>::quiet_NaN() : gateT_[index(c)]; }
 
     LatLon centre(Cell c) const;
     /// Cell containing `p`; the result may be out of bounds, check with inBounds().
@@ -168,6 +171,11 @@ public:
     /// Distance in metres from each cell centre to the nearest blocked cell centre (0 for blocked cells; a very large
     /// value everywhere if the grid has no blocked cells). Chamfer approximation, accurate to a few percent.
     std::vector<float> distanceToBlockedM() const;
+
+    /// Distance in metres from each cell centre to the nearest cell marked true in `seed` (0 for a seed cell; a very large value
+    /// everywhere if `seed` is all false). The general form distanceToBlockedM() and friends are built on; `seed` must be one
+    /// entry per cell, row-major.
+    std::vector<float> distanceFromMaskM(const std::vector<uint8_t>& seed) const;
 
     /// Steer routes away from land, shoals and uncharted water: open cells within `rangeM` of a blocked cell get their
     /// cost multiplied by `1 + weight * (1 - d / rangeM)^2`, so the cheapest line keeps well off the shore and, in a
