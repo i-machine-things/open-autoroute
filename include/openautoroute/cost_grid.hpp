@@ -167,6 +167,17 @@ public:
     }
     bool hasSidePreference(Cell c) const { return !sidePreferenceSet_.empty() && sidePreferenceSet_[index(c)] != 0; }
 
+    /// Diagnostic only: a reconstructed position across a wider channel (0 at the port-hand side, 1 at the
+    /// starboard-hand side), set by chart_grid.hpp's computeChannelCenterline(). Unlike gateT(), nothing in CostGrid
+    /// reads this to price a move, so recording it can never change where the router goes — it exists purely so a
+    /// caller can measure whether a planned route still swaps sides of a channel that applyChannelGates() did not
+    /// chain into gates (issue #21's wider reaches). NaN where none is set.
+    void setCenterlineT(Cell c, float t) {
+        if (centerlineT_.empty()) centerlineT_.assign(cost_.size(), std::numeric_limits<float>::quiet_NaN());
+        centerlineT_[index(c)] = t;
+    }
+    float centerlineT(Cell c) const { return centerlineT_.empty() ? std::numeric_limits<float>::quiet_NaN() : centerlineT_[index(c)]; }
+
     LatLon centre(Cell c) const;
     /// Cell containing `p`; the result may be out of bounds, check with inBounds().
     Cell cellAt(LatLon p) const;
@@ -238,6 +249,7 @@ private:
     std::vector<float> gateAxis_;
     float gateSideWeight_ = 0.0f;
     std::vector<uint8_t> sidePreferenceSet_;  // 1 where some Rule 9(a) side preference already applies; see markSidePreferenceSet()
+    std::vector<float> centerlineT_;  // diagnostic only, never read for cost; NaN until computeChannelCenterline() sets a cell
     std::vector<uint8_t> zone_;   // empty until a zone cell is set
     std::vector<float> zoneDir_;
     float laneUseFactor_ = 1.0f;

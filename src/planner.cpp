@@ -315,6 +315,10 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     // Buoyed channels: pair opposite red/green marks into gates so the route stays between them (see applyChannelGates).
     const std::vector<Gate> gates = useMarks ? applyChannelGates(grid, marks, 500.0) : std::vector<Gate>{};
     if (useMarks) emitTo(hooks.out, "%zu channel gates from %zu lateral marks\n", gates.size(), marks.size());
+    // Diagnostic only, never steers the route (see CostGrid::centerlineT()): reconstructs a wider channel's
+    // centreline from the same dot-to-dot mark chains applyBuoyChannelSides() uses, so sideCrossings below can be
+    // measured past the reach of applyChannelGates()'s own close-paired corridors (issue #21).
+    if (useMarks) computeChannelCenterline(grid, marks);
     // Narrow charted channels (fairway or dredged area under 600 m wide, the dashed limits): stay between the limits, like keeping
     // between the lines on a road. Automatic: it acts only within 1.5 km of a charted narrow channel, only on moves running along or
     // cutting across its bends (not on a clean crossing of it), and never on traffic separation.
@@ -454,6 +458,7 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     int cautionStretches = 0;
     bool inCaution = false;
     int sideCrossings = 0, channelSide = 0;  // -1 port side, +1 starboard side, 0 not in a marked channel yet
+    int centerlineCrossings = 0, centerlineSide = 0;  // same, but diagnostic-only, from CostGrid::centerlineT()
     struct Spot { LatLon at; double alongM; };
     std::vector<Spot> unsafeSpots;  // first sample of each separate unsafe stretch
     bool inUnsafe = false;
@@ -497,8 +502,20 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
                 } else {
                     channelSide = 0;
                 }
+                // The same thing, but against the diagnostic-only centreline reconstruction (CostGrid::centerlineT,
+                // computeChannelCenterline), which reaches past the close-paired corridors applyChannelGates() needs
+                // (issue #21). Recorded purely for reporting; nothing here changes the route.
+                const float ct = grid.centerlineT(hc);
+                if (!std::isnan(ct)) {
+                    const int s = ct < 0.5f ? -1 : 1;
+                    if (centerlineSide != 0 && s != centerlineSide) ++centerlineCrossings;
+                    centerlineSide = s;
+                } else {
+                    centerlineSide = 0;
+                }
             } else {
                 channelSide = 0;
+                centerlineSide = 0;
             }
             const int32_t areaId = (grid.inBounds(hc) && !areaLayer.id.empty()) ? areaLayer.id[static_cast<size_t>(hc.row) * grid.cols() + hc.col] : -1;
             if (areaId >= 0) {
@@ -595,10 +612,10 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
         char sb[1200];
         const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count();
         std::snprintf(sb, sizeof sb, "SUMMARY found=1 nm=%.2f straight_nm=%.2f waypoints=%zu charts=%d closest_m=%.0f median_m=%.0f blocked_m=%.0f "
-                    "vessel_m=%.0f caution_m=%.0f restricted_m=%.0f narrow_in_m=%.0f narrow_near_out_m=%.0f gates=%d gates_missed=%d side_cross=%d lane_runs=%zu with_flow=%d crossings=%d wrong_way_m=%.0f worst_off_deg=%.0f snap_start_m=%.0f snap_end_m=%.0f "
+                    "vessel_m=%.0f caution_m=%.0f restricted_m=%.0f narrow_in_m=%.0f narrow_near_out_m=%.0f gates=%d gates_missed=%d side_cross=%d centerline_cross=%d lane_runs=%zu with_flow=%d crossings=%d wrong_way_m=%.0f worst_off_deg=%.0f snap_start_m=%.0f snap_end_m=%.0f "
                     "seconds=%.1f", nm, haversineM(from, to) / 1852.0, route.size(), used,
                     clearances.empty() ? -1.0 : clearances.front(), clearances.empty() ? -1.0 : clearances[clearances.size() / 2],
-                    unsafeM, lengthM, cautionM, areasM, narrowInM, narrowNearOutM, gatesNear, gatesMissed, sideCrossings, laneRuns.size(), withFlow, crossings, wrongWayM, worstOff, snapStartM, snapEndM, secs);
+                    unsafeM, lengthM, cautionM, areasM, narrowInM, narrowNearOutM, gatesNear, gatesMissed, sideCrossings, centerlineCrossings, laneRuns.size(), withFlow, crossings, wrongWayM, worstOff, snapStartM, snapEndM, secs);
         result.summaryLine = sb;
     };
     // The same measurements as numbers, for a front end that words its own report (planning and checking alike).
@@ -617,6 +634,7 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     rc.gatesNear = gatesNear;
     rc.gatesMissed = gatesMissed;
     rc.sideCrossings = sideCrossings;
+    rc.centerlineCrossings = centerlineCrossings;
     for (const LaneRun& r : laneRuns) rc.lanes.push_back({r.at, r.alongM, r.lengthM, r.thetaSum / r.n, r.lane});
     rc.closestShoreM = clearances.empty() ? -1.0 : clearances.front();
     if (evaluating) {
@@ -629,6 +647,7 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
         emitTo(checkOut, "precautionary areas: %.0f m in %d stretch(es)\n", cautionM, cautionStretches);
         emitTo(checkOut, "narrow channels: %.0f m inside, %.0f m running just outside; buoy gates: %d near the route, %d missed\n", narrowInM, narrowNearOutM, gatesNear, gatesMissed);
         emitTo(checkOut, "marked channel: swapped sides %d time(s) (Rule 9(a) keeps to the starboard side)\n", sideCrossings);
+        emitTo(checkOut, "wider channel centreline (diagnostic, not steered): swapped sides %d time(s)\n", centerlineCrossings);
         emitTo(checkOut, "traffic lanes (Rule 10): %zu lane transit(s): %d with the flow, %d crossing, %d wrong-way (%.0f m)\n",
                     laneRuns.size(), withFlow, crossings, wrongWay, wrongWayM);
         for (size_t i = 0; i < laneRuns.size() && i < 12; ++i) {

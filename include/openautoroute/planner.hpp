@@ -87,6 +87,8 @@ struct RouteCheck {
     double narrowNearOutM = 0.0;      // running close outside one (within 1.5 km, not in any channel)
     int gatesNear = 0, gatesMissed = 0;   // buoy gates (paired lateral marks) near the route, and those it does not pass between
     int sideCrossings = 0;                // times the route swapped sides of a marked channel instead of keeping to starboard (Rule 9(a))
+    int centerlineCrossings = 0;          // diagnostic only (never steers the route): the same, against a wider channel's reconstructed
+                                           // centreline past the reach of sideCrossings' own close-paired gates (see CostGrid::centerlineT)
     std::vector<LaneTransit> lanes;   // each stretch inside a traffic lane
     double closestShoreM = -1.0;      // closest approach to blocked water, not counting 1 km at each end; negative if not measured
 };

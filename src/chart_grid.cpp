@@ -941,6 +941,18 @@ void applyBuoyChannelSides(CostGrid& grid, const std::vector<LateralMark>& marks
     }
 }
 
+void computeChannelCenterline(CostGrid& grid, const std::vector<LateralMark>& marks, double rangeM, double maxGapM) {
+    if (marks.empty() || rangeM <= 0.0) return;
+    const std::vector<float> t = markChainSideField(grid, marks, rangeM, maxGapM);
+    for (int r = 0; r < grid.rows(); ++r) {
+        for (int c = 0; c < grid.cols(); ++c) {
+            const size_t i = static_cast<size_t>(r) * grid.cols() + c;
+            if (std::isnan(t[i])) continue;
+            grid.setCenterlineT(Cell{c, r}, t[i]);
+        }
+    }
+}
+
 }  // namespace oar
 
 namespace oar {

@@ -163,4 +163,15 @@ void applyRecommendedTracks(CostGrid& grid, const std::vector<TrackLine>& tracks
 void applyBuoyChannelSides(CostGrid& grid, const std::vector<LateralMark>& marks, double rangeM = 1200.0,
                             double weight = 3.0, double maxGapM = 3000.0);
 
+/// Diagnostic only: the same dot-to-dot reconstruction applyBuoyChannelSides() uses to steer a route, but recorded
+/// for every cell it can reach (CostGrid::setCenterlineT()) rather than turned into cost. Nothing in CostGrid reads
+/// it, so calling this can never change a planned route; it exists so a caller can measure, after the fact, whether
+/// the route still swapped sides of a wider charted channel that applyChannelGates()'s close-paired corridors never
+/// covered (issue #21) — without risking the real zigzag that steering off this same reconstruction produced when
+/// it was tried as a cost pull. Covers every cell within reach of both a port-hand and a starboard-hand chain,
+/// including ones applyChannelGates(), applyRecommendedTracks() or applyBuoyChannelSides() already steer, since this
+/// is independent reporting, not another side-preference mechanism. See CostGrid::centerlineT().
+void computeChannelCenterline(CostGrid& grid, const std::vector<LateralMark>& marks, double rangeM = 1500.0,
+                               double maxGapM = 4000.0);
+
 }  // namespace oar

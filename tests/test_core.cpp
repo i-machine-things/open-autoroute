@@ -844,6 +844,50 @@ static void testBuoyChannelSides() {
     CHECK(std::isnan(none.gateT({14, 30})));
 }
 
+static void testChannelCenterlineDiagnostic() {
+    // Same wide, gate-less reach as testBuoyChannelSides(), but checking computeChannelCenterline(): a user flagged
+    // (issue #21) that a route can still swap sides of a wider channel's centreline even once it is no longer
+    // visibly zigzagging, and every attempt at steering a route off this same dot-to-dot reconstruction had
+    // introduced real zigzag of its own. computeChannelCenterline() records the same reconstructed position but
+    // never feeds it back into cost, so it must be able to report a crossing without ever being able to cause one.
+    const double latStep = 0.001, lonStep = latStep / std::cos(deg2rad(46.0));
+    auto make = [&]() { return CostGrid(90, 60, {46.0, -124.0}, latStep, lonStep); };
+    CostGrid g = make();
+    std::vector<LateralMark> marks;
+    for (int c = 4; c < 86; c += 20) {
+        marks.push_back({g.centre({c, 20}), 1});
+        marks.push_back({g.centre({c, 40}), 2});
+    }
+    CHECK(std::isnan(g.centerlineT({14, 30})));
+    computeChannelCenterline(g, marks, 1500.0, 4000.0);
+    CHECK(!std::isnan(g.centerlineT({14, 30})));  // reaches the gap between the two chains
+    CHECK(std::isnan(g.centerlineT({14, 2})));    // but not well off to one side, past rangeM from both chains
+
+    // Diagnostic only: recording it never changes cost or gateT, unlike applyBuoyChannelSides().
+    CHECK(g.cost({14, 30}) == 1.0f);
+    CHECK(std::isnan(g.gateT({14, 30})));
+
+    // It still records a position even where some other mechanism already has its own precise answer (independent
+    // reporting, not another side-preference mechanism competing for the same cell).
+    CostGrid gated = make();
+    gated.setGateCell({14, 30}, 0.5f, 123.0f);
+    gated.markSidePreferenceSet({14, 30});
+    computeChannelCenterline(gated, marks, 1500.0, 4000.0);
+    CHECK(!std::isnan(gated.centerlineT({14, 30})));
+    CHECK(gated.gateT({14, 30}) == 0.5f);  // and leaves that other mechanism's own answer untouched
+
+    // Only a port-hand mark (or only a starboard-hand one) gives no orientation: a no-op.
+    CostGrid oneSided = make();
+    std::vector<LateralMark> portOnly{{oneSided.centre({10, 20}), 1}, {oneSided.centre({30, 20}), 1}};
+    computeChannelCenterline(oneSided, portOnly);
+    CHECK(std::isnan(oneSided.centerlineT({14, 30})));
+
+    // No marks, or a non-positive rangeM, is a no-op.
+    CostGrid none = make();
+    computeChannelCenterline(none, {});
+    CHECK(std::isnan(none.centerlineT({14, 30})));
+}
+
 static void testWaterBodies() {
     // A wall splits a 10x6 basin in two; a diagonal pair of blocked cells must not let water leak through the corner.
     CostGrid g = makeGrid(10, 6);
@@ -1965,6 +2009,7 @@ int main() {
     testChannelPreference();
     testRecommendedTracks();
     testBuoyChannelSides();
+    testChannelCenterlineDiagnostic();
     testWaterBodies();
     testSeparationZoneCrossing();
     testPrecautionaryAreaCost();

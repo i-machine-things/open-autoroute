@@ -38,6 +38,10 @@ for f in "$OLD"/*.txt; do
       # side_cross is a newer field: an old summary from before it existed has no key for it at all, which would
       # read as 0 and flag every route with any crossing as a regression against a baseline that never measured it.
       if (("side_cross" in ov) && ("side_cross" in nv) && nv["side_cross"] + 0 > ov["side_cross"] + 0) r = r " more-channel-side-crossings"
+      # centerline_cross is diagnostic only (CostGrid::centerlineT, issue #21): nothing steers off it, so a rise here
+      # means some other change shifted the route, not that this metric caused anything. Same missing-field guard as
+      # side_cross, for the same reason.
+      if (("centerline_cross" in ov) && ("centerline_cross" in nv) && nv["centerline_cross"] + 0 > ov["centerline_cross"] + 0) r = r " more-centerline-crossings(diagnostic)"
       print r }')
   if [ -n "$verdict" ]; then echo "REGRESSION $name:$verdict"; bad=1; else echo "changed    $name"; fi
   printf '    old: %s\n    new: %s\n' "$(sed 's/SUMMARY //; s/charts=[0-9]* //; s/snap_[a-z_]*=[0-9]* //g' <<<"$o")" "$(sed 's/SUMMARY //; s/charts=[0-9]* //; s/snap_[a-z_]*=[0-9]* //g' <<<"$n")"
