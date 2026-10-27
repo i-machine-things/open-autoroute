@@ -718,36 +718,87 @@ static void testChannelPreference() {
     CHECK(lanes.channelMarginFactor({26, 10}, 0.0) > 1.0f);    // ordinary water in range, running along the edge: charged
 }
 
-static void testWideChannelSidePreference() {
-    // A WIDE channel (about 4.4 km, well past the narrow threshold and past applyChannelGates()'s default 500 m pairing
-    // reach) marked by port-hand buoys along the north bank and starboard-hand buoys along the south bank, spaced about
-    // 2.2 km apart along the channel. Issue #21: the Columbia has stretches exactly like this, where a route is free to
-    // wander from one side to the other because no gate can ever form.
+static void testRecommendedTracks() {
+    // A straight, due-east recommended track/range line (RECTRC or NAVLNE; applyRecommendedTracks() treats either the
+    // same way) in open water, well outside any gate corridor. Issue #21: on a wide reach where marks are too sparse
+    // or far apart to ever pair into a gate, a charted recommended track is the surveyor's own line to line up on,
+    // and it reaches where scattered marks cannot.
+    const double latStep = 0.001, lonStep = latStep / std::cos(deg2rad(46.0));
+    auto make = [&]() { return CostGrid(90, 150, {46.0, -124.0}, latStep, lonStep); };  // tall enough to test well past a 2.5 km rangeM
+    CostGrid g = make();
+    const TrackLine track{{g.centre({10, 30}), g.centre({80, 30})}, 90.0};  // due east, row 30
+    applyRecommendedTracks(g, {track}, 2500.0, 3.0, 60.0);
+
+    // Rule 9(a): a prudent mariner keeps to the starboard side of the line, not astride it, so the cost peak sits off
+    // to one side (about offsetM away), not on the charted line itself.
+    const float onLine = g.cost({40, 30});
+    const int cellsPerOffset = static_cast<int>(std::lround(60.0 / g.cellSizeM()));
+    const float southOfLine = g.cost({40, 30 + cellsPerOffset});
+    const float northOfLine = g.cost({40, 30 - cellsPerOffset});
+    const float peak = std::max(southOfLine, northOfLine);
+    CHECK(peak > onLine);
+    CHECK(onLine > 1.0f);       // still pulled toward the line itself, just not centred on it
+    CHECK(std::min(southOfLine, northOfLine) < peak);  // only one side gets the full pull, not both
+
+    // Smooth falloff: back to exactly the baseline well out past rangeM, no cliff partway there.
+    CHECK(g.cost({40, 30 + cellsPerOffset + 50}) == 1.0f);
+
+    // No charted direction of travel: nothing to be a side of, so it is a no-op.
+    CostGrid noOrient = make();
+    applyRecommendedTracks(noOrient, {{{g.centre({10, 30}), g.centre({80, 30})}, std::numeric_limits<double>::quiet_NaN()}});
+    CHECK(noOrient.cost({40, 30}) == 1.0f);
+
+    // A cell a real gate has already set precisely is left alone.
+    CostGrid gated = make();
+    gated.setGateCell({40, 30}, 0.5f, 123.0f);
+    gated.markSidePreferenceSet({40, 30});
+    applyRecommendedTracks(gated, {track}, 2500.0, 3.0, 60.0);
+    CHECK(gated.cost({40, 30}) == 1.0f);
+
+    // Traffic separation is never touched, same rule as the other channel functions.
+    CostGrid lane = make();
+    lane.setLaneDirection({40, 30}, 0.0f);
+    applyRecommendedTracks(lane, {track}, 2500.0, 3.0, 60.0);
+    CHECK(lane.cost({40, 30}) == 1.0f);
+
+    // No tracks, or a non-positive rangeM/weight, is a no-op.
+    CostGrid none = make();
+    applyRecommendedTracks(none, {});
+    CHECK(none.cost({40, 30}) == 1.0f);
+    CostGrid offWeight = make();
+    applyRecommendedTracks(offWeight, {track}, 2500.0, 0.0);
+    CHECK(offWeight.cost({40, 30}) == 1.0f);
+
+    // A bend: the offset at the shared vertex is the same point whichever segment approaches it from, so the two
+    // segments' offset lines connect instead of jumping between two independently-offset lines (the zigzag found
+    // testing issue #21's own benchmark route).
+    CostGrid bend = make();
+    const TrackLine bentTrack{{g.centre({10, 20}), g.centre({40, 20}), g.centre({40, 50})}, 90.0};
+    applyRecommendedTracks(bend, {bentTrack}, 2500.0, 3.0, 60.0);
+    CHECK(bend.cost({40, 20}) > 1.0f);  // the bend vertex itself is still comfortably inside the pulled-toward band
+}
+
+static void testBuoyChannelSides() {
+    // A wide reach marked only by scattered buoys, about 2.2 km apart across the channel (too far to ever pair into
+    // a gate) and not charted as a FAIRWY/DRGARE polygon either (applyChannelGates() and applyRecommendedTracks()
+    // both see nothing here, so this is the last resort). A sailor reading this chart would just connect the
+    // same-hand marks dot to dot and stay close to their own starboard chain; that is exactly what this reproduces
+    // (issue #21, the Astoria anchorage).
     const double latStep = 0.001, lonStep = latStep / std::cos(deg2rad(46.0));
     auto make = [&]() { return CostGrid(90, 60, {46.0, -124.0}, latStep, lonStep); };
     CostGrid g = make();
-    for (int r = 10; r < 50; ++r)
-        for (int c = 0; c < 90; ++c) g.setChannel({c, r});
     std::vector<LateralMark> marks;
     for (int c = 4; c < 86; c += 20) {
-        marks.push_back({g.centre({c, 12}), 1});  // port-hand, north bank
-        marks.push_back({g.centre({c, 47}), 2});  // starboard-hand, south bank
+        marks.push_back({g.centre({c, 20}), 1});  // port-hand, north side
+        marks.push_back({g.centre({c, 40}), 2});  // starboard-hand, south side
     }
-    g.markNarrowChannels(600.0);
-    CHECK(!g.isNarrowChannel({40, 30}));  // too wide to be a narrow channel
-
-    // Control: marks this far apart (about 3.9 km across) can never pair into a gate, so the existing mechanism alone
-    // sees nothing here and is a no-op (reproduces the reported bug: no side preference anywhere on this reach).
+    // Control: far enough apart that no gate ever forms.
     CHECK(applyChannelGates(g, marks, 500.0).empty());
     CHECK(std::isnan(g.gateT({14, 30})));
 
-    applyChannelSidePreference(g, marks, 3.0, 2500.0);
-    CHECK(!std::isnan(g.gateT({14, 30})));             // reaches the gap between two widely-spaced gates
-    CHECK(std::isnan(g.gateT({14, 2})));               // but never outside the charted channel
-    CHECK(g.gateSideFactor({14, 2}, 90.0) == 1.0f);
-    // Crossing from one side to the other costs a little here (issue #21's "small penalty for changing sides"), unlike
-    // a precise gate corridor, where it stays free (testKeepToStarboardSide's g.gateSideFactor({30, 20}, 0.0) == 1.0f).
-    CHECK(g.gateSideFactor({14, 30}, 0.0) > 1.0f);
+    applyBuoyChannelSides(g, marks, 1200.0, 3.0, 3000.0);
+    CHECK(!std::isnan(g.gateT({14, 30})));  // reaches the gap between two widely-spaced marks of each hand
+    CHECK(std::isnan(g.gateT({14, 2})));    // but not well off to one side, past rangeM from both chains
 
     auto meanRow = [&](const std::vector<LatLon>& route) {
         double sum = 0;
@@ -765,32 +816,32 @@ static void testWideChannelSidePreference() {
     const auto east = findRoute(g, g.centre({6, 30}), g.centre({84, 30}));
     const auto west = findRoute(g, g.centre({84, 30}), g.centre({6, 30}));
     CHECK(!east.empty() && !west.empty());
-    CHECK(meanRow(east) > 30.5);  // eastbound keeps to the south (right) side, same as a gated narrow channel
-    CHECK(meanRow(west) < 29.5);  // westbound keeps to the north (right) side
+    CHECK(meanRow(east) > 30.5);  // eastbound keeps to the south (starboard) chain
+    CHECK(meanRow(west) < 29.5);  // westbound keeps to the north (starboard) chain
 
-    // A cell a real gate has already set precisely is never overwritten by the coarser whole-channel pass.
-    CostGrid precise = make();
-    for (int r = 10; r < 50; ++r)
-        for (int c = 0; c < 90; ++c) precise.setChannel({c, r});
-    precise.setGateCell({14, 30}, 0.5f, 123.0f);
-    applyChannelSidePreference(precise, marks, 3.0, 2500.0);
-    CHECK(precise.gateT({14, 30}) == 0.5f);
+    // A cell a real gate has already set precisely is left alone.
+    CostGrid gated = make();
+    gated.setGateCell({14, 30}, 0.5f, 123.0f);
+    gated.markSidePreferenceSet({14, 30});
+    applyBuoyChannelSides(gated, marks, 1200.0, 3.0, 3000.0);
+    CHECK(gated.gateT({14, 30}) == 0.5f);
 
-    // Traffic separation is never touched, same rule as applyChannelPreference() and applyChannelGates().
+    // Traffic separation is never touched.
     CostGrid lane = make();
-    for (int r = 10; r < 50; ++r)
-        for (int c = 0; c < 90; ++c) lane.setChannel({c, r});
     lane.setLaneDirection({14, 30}, 0.0f);
-    applyChannelSidePreference(lane, marks, 3.0, 2500.0);
+    applyBuoyChannelSides(lane, marks, 1200.0, 3.0, 3000.0);
     CHECK(std::isnan(lane.gateT({14, 30})));
 
-    // Only a port-hand mark (or only a starboard-hand one) gives no orientation: a no-op, like a lone unpaired mark.
+    // Only a port-hand mark (or only a starboard-hand one) gives no orientation: a no-op.
     CostGrid oneSided = make();
-    for (int r = 10; r < 50; ++r)
-        for (int c = 0; c < 90; ++c) oneSided.setChannel({c, r});
-    std::vector<LateralMark> portOnly{{oneSided.centre({10, 12}), 1}, {oneSided.centre({30, 12}), 1}};
-    applyChannelSidePreference(oneSided, portOnly, 3.0, 2500.0);
+    std::vector<LateralMark> portOnly{{oneSided.centre({10, 20}), 1}, {oneSided.centre({30, 20}), 1}};
+    applyBuoyChannelSides(oneSided, portOnly);
     CHECK(std::isnan(oneSided.gateT({14, 30})));
+
+    // No marks, or a non-positive rangeM/weight, is a no-op.
+    CostGrid none = make();
+    applyBuoyChannelSides(none, {});
+    CHECK(std::isnan(none.gateT({14, 30})));
 }
 
 static void testWaterBodies() {
@@ -1912,7 +1963,8 @@ int main() {
     testChannelGates();
     testKeepToStarboardSide();
     testChannelPreference();
-    testWideChannelSidePreference();
+    testRecommendedTracks();
+    testBuoyChannelSides();
     testWaterBodies();
     testSeparationZoneCrossing();
     testPrecautionaryAreaCost();

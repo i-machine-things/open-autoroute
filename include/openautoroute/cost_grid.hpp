@@ -137,31 +137,35 @@ public:
 
     /// Position across a buoyed channel for a cell near a red/green gate: t runs 0 at the port-hand mark to 1 at the starboard-hand
     /// mark, and `axisDeg` is the direction of buoyage (the way a vessel "returning from sea" travels). Used by gateSideFactor().
-    /// `crossPenalty` marks a cell set from the wide-channel side preference (applyChannelSidePreference), not a precise gate: see
-    /// gateSideFactor() for what it changes. applyChannelGates() leaves it false, so a real gate corridor is unaffected.
-    void setGateCell(Cell c, float t, float axisDeg, bool crossPenalty = false) {
+    void setGateCell(Cell c, float t, float axisDeg) {
         if (gateT_.empty()) {
             gateT_.assign(cost_.size(), std::numeric_limits<float>::quiet_NaN());
             gateAxis_.assign(cost_.size(), 0.0f);
-            gateCrossPenalty_.assign(cost_.size(), 0);
         }
         gateT_[index(c)] = t;
         gateAxis_[index(c)] = axisDeg;
-        gateCrossPenalty_[index(c)] = crossPenalty ? 1 : 0;
     }
     void setGateSideWeight(double w) { gateSideWeight_ = w < 0.0 ? 0.0f : static_cast<float>(w); }
     /// Rule 9: in a narrow channel keep to the starboard (right-hand) side. Cost multiplier (>= 1) for a move on `headingDeg` through
     /// `c`: 1 outside gate corridors, otherwise growing with distance from the preferred side. Rule 9(a) says to keep "as near to the outer
     /// limit of the channel or fairway which lies on her starboard side as is safe and practicable": t = 0.8 going with the direction of
     /// buoyage, t = 0.2 going against it (where the vessel's own starboard side lies), a fifth of the width in from the limit for leeway.
-    /// Moves across a precise gate corridor are not charged (Rule 9 does not forbid crossing to reach the other bank). A cell set by
-    /// the coarser wide-channel preference instead charges a small, fixed surcharge for crossing: nothing there pairs two particular
-    /// marks the way a gate does, so without it each crossing is free and a route can swap sides as often as it likes for no extra
-    /// cost at all (issue #21's "a small penalty for changing sides").
+    /// Moves across the channel are not charged.
     float gateSideFactor(Cell c, double headingDeg) const;
     /// The position set by setGateCell() (0 at the port-hand side, 1 at the starboard-hand side), NaN where none is set. Used to
-    /// measure how often a planned route swaps sides of a marked channel (see chart_grid.hpp applyChannelSidePreference).
+    /// measure how often a planned route swaps sides of a buoyed gate corridor (see chart_grid.hpp applyChannelGates).
     float gateT(Cell c) const { return gateT_.empty() ? std::numeric_limits<float>::quiet_NaN() : gateT_[index(c)]; }
+
+    /// Marks that some Rule 9(a) side preference already applies to this cell (a precise gate, a recommended track or
+    /// range line, or a dot-to-dot buoy chain). The more precise mechanisms (applyChannelGates(), then
+    /// applyRecommendedTracks()) call this as they go so a coarser one running after them (applyRecommendedTracks()
+    /// deferring to applyChannelGates(), a buoy chain deferring to both) never stacks a second, independent pull on
+    /// top of the first and pulls the route two different ways in the same cell (found testing issue #21).
+    void markSidePreferenceSet(Cell c) {
+        if (sidePreferenceSet_.empty()) sidePreferenceSet_.assign(cost_.size(), 0);
+        sidePreferenceSet_[index(c)] = 1;
+    }
+    bool hasSidePreference(Cell c) const { return !sidePreferenceSet_.empty() && sidePreferenceSet_[index(c)] != 0; }
 
     LatLon centre(Cell c) const;
     /// Cell containing `p`; the result may be out of bounds, check with inBounds().
@@ -232,8 +236,8 @@ private:
     std::vector<float> chanAxis_;    // degrees, direction of the nearest narrow channel edge
     std::vector<float> gateT_;      // NaN outside gate corridors; empty until a gate is applied
     std::vector<float> gateAxis_;
-    std::vector<uint8_t> gateCrossPenalty_;  // 1 where gateT_ came from the coarser wide-channel preference, not a precise gate
     float gateSideWeight_ = 0.0f;
+    std::vector<uint8_t> sidePreferenceSet_;  // 1 where some Rule 9(a) side preference already applies; see markSidePreferenceSet()
     std::vector<uint8_t> zone_;   // empty until a zone cell is set
     std::vector<float> zoneDir_;
     float laneUseFactor_ = 1.0f;

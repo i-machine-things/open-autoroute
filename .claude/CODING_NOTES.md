@@ -132,6 +132,7 @@ This note was created based on issues encountered with PyInstaller executables r
 - **Rule 9(b), 10(j): under 20 m or under sail must not impede.** Stay out of the way of vessels confined to a channel or lane. Under Rule 3, a sailboat with its engine on is power-driven.
 - **Direction of buoyage from CATLAM, not from guessing.** Port-hand (1) is on the left going with the buoyage; the vector port to starboard rotated 90 degrees anticlockwise is the direction.
 - **A nearest-mark distance field has direction creases; blur before taking its gradient.** applyChannelSidePreference's port-vs-starboard chamfer fields flip direction at every mark-to-mark Voronoi edge; a 1-cell gradient turns that into wrong-way noise and route zigzag. Box-blur each field (~3 km radius) first. Found while fixing #21 (wide-channel wandering).
+- **Every Rule 9(a) mechanism past applyChannelGates() (side fields, RECTRC/NAVLNE offset tracks, buoy chains) caused real zigzag, hidden by `--picture`, only caught live in OpenCPN (#21).** applyChannelGates() alone is proven clean; verify any new one live.
 
 ### Rule 10 traffic separation (verified paragraphs)
 

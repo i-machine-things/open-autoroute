@@ -120,18 +120,47 @@ void collectLateralMarks(const ChartData& chart, std::vector<LateralMark>& out);
 std::vector<Gate> applyChannelGates(CostGrid& grid, const std::vector<LateralMark>& marks, double maxGateM = 500.0,
                                     double outsidePenalty = 8.0, double sideWeight = 1.5, double lateralRangeM = 400.0);
 
-/// Rule 9(a) side preference across a whole charted channel (CostGrid::isChannel), narrow or wide, not only the local corridor
-/// applyChannelGates() finds near a close-paired, chained chain of marks. On a wide river the marks are often too far apart
-/// (across the channel, or along it) to ever pair into a gate, which otherwise leaves a route free to wander from one side to
-/// the other (issue #21). Every port-hand mark seeds a chamfer distance field, every starboard-hand mark seeds another; their
-/// mix `t = dPort / (dPort + dStar)` gives a smooth 0..1 position across the channel (0 at the port side, 1 at the starboard
-/// side), and the local gradient of `t` gives the direction of buoyage, the same way applyChannelGates() derives it from a
-/// single pair of marks. A channel cell keeps whatever applyChannelGates() already set (a real nearby gate is more precise);
-/// otherwise it is set here when a port and a starboard mark are each within `rangeM`, so the preference reaches past a gap
-/// between marks without inventing one far from any real mark. Cells outside a charted channel, and traffic lanes, separation
-/// zones and precautionary areas inside one, are never touched. Call once, after applyChannelGates() and markNarrowChannels(),
-/// and before any margin. Reuses CostGrid::gateSideFactor(), so no-op without both port and starboard marks somewhere nearby.
-void applyChannelSidePreference(CostGrid& grid, const std::vector<LateralMark>& marks, double sideWeight = 1.5,
-                                 double rangeM = 2500.0);
+/// A charted recommended track or range/leading line (RECTRC, NAVLNE): the line a prudent mariner actually lines up
+/// on, surveyed and drawn by the chart maker rather than reconstructed from scattered marks. Kept as its raw
+/// polyline (two points for a range line between a pair of shore marks, more for a recommended track that bends)
+/// plus its charted direction of travel (ORIENT, degrees true), when the chart gives one.
+struct TrackLine {
+    std::vector<LatLon> points;
+    double orientDeg = std::numeric_limits<double>::quiet_NaN();
+};
+
+/// Append every RECTRC and NAVLNE line of a chart to `out`. A line with fewer than two points is skipped (nothing
+/// to follow).
+void collectRecommendedTracks(const ChartData& chart, std::vector<TrackLine>& out);
+
+/// Rule 9(a) outside a chained gate corridor: pull a route to run `offsetM` off a charted recommended track or range
+/// line, on the side a vessel travelling in the charted ORIENT direction keeps to starboard, the same way a vessel
+/// keeps to the starboard side of a buoyed channel rather than straddling its centreline. A line with no ORIENT is
+/// skipped outright (no known direction to be a side of). Cost rises smoothly off that offset line, levelling off at
+/// `1 + weight`, and is back to exactly 1 (no bias at all) by `rangeM` out, with no cliff at the edge. A cell
+/// applyChannelGates() already set precisely is left alone. A recommended track or range line is more direct than
+/// reconstructing an axis from scattered marks the way applyChannelGates() does when marks pair closely enough, and
+/// it reaches into the wide, open reaches that have no lateral marks close enough to pair at all (issue #21's
+/// Astoria anchorage, among others; applyBuoyChannelSides() below covers the rest). Traffic lanes, separation zones
+/// and precautionary areas are left alone, same as the lateral-mark functions. Call once, after the charts are
+/// stamped. No-op without at least one track with a known ORIENT, or non-positive rangeM/weight.
+void applyRecommendedTracks(CostGrid& grid, const std::vector<TrackLine>& tracks, double rangeM = 600.0,
+                             double weight = 6.0, double offsetM = 60.0);
+
+/// Rule 9(a) outside a gate corridor and beyond the reach of any recommended track or range line: the last resort for
+/// a stretch with only scattered marks and nothing else to go on. Not a gate (applyChannelGates() needs a port and a
+/// starboard mark close across the channel from each other, which a wide reach's marks often never are) and not a
+/// reconstructed channel width (that was tried for issue #21 and reliably produced a zigzag the pathfinder could
+/// exploit; see .claude/CODING_NOTES.md): instead, exactly the way a sailor reads the chart, connect every port-hand
+/// mark to its nearest other port-hand mark, dot to dot, to lay out the left bank; do the same for every starboard-
+/// hand mark to lay out the right bank. A gap wider than `maxGapM` to the nearest next mark of the same hand ends
+/// that chain rather than bridging two unrelated clusters into one false line. Cost pulls a route toward the
+/// starboard-hand chain's own side, within `rangeM`, the same shape as CostGrid::gateSideFactor() and for the same
+/// reason (Rule 9(a): "as near to the... limit... on her starboard side as is safe and practicable"); a cell
+/// applyChannelGates() or applyRecommendedTracks() already set precisely is left alone, same as between those two.
+/// Needs at least one mark of each hand; a lone, unpaired chain (only port-hand marks found, say) is left alone, same
+/// as a channel with only one bank charted gives no orientation to work from. Call last, after the other two.
+void applyBuoyChannelSides(CostGrid& grid, const std::vector<LateralMark>& marks, double rangeM = 1200.0,
+                            double weight = 3.0, double maxGapM = 3000.0);
 
 }  // namespace oar

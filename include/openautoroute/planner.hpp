@@ -39,7 +39,6 @@ struct PlanRequest {
 
     // Developer switches, used to compare runs; not for a user interface.
     bool useMarks = true, useChannels = true, useHazards = true, useCatalogue = true;   // useCatalogue=false opens every cell, to compare speed
-    bool useSidePref = true;   // useSidePref=false keeps the gate corridors but drops the wide-channel side preference, to compare runs
     std::vector<std::string> skipClasses;
 };
 

@@ -134,6 +134,7 @@ const char* classOf(uint16_t objl) {
         case 82: return "MARCUL";
         case 83: return "MIPARE";
         case 84: return "MORFAC";
+        case 85: return "NAVLNE";
         case 86: return "OBSTRN";
         case 87: return "OFSPLF";
         case 88: return "OSPARE";
@@ -145,6 +146,7 @@ const char* classOf(uint16_t objl) {
         case 97: return "PRDARE";
         case 98: return "PYLONS";
         case 107: return "RAPIDS";
+        case 109: return "RECTRC";
         case 112: return "RESARE";
         case 120: return "SPLARE";
         case 122: return "SLCONS";

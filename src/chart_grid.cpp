@@ -636,6 +636,14 @@ void collectLateralMarks(const ChartData& chart, std::vector<LateralMark>& out) 
     }
 }
 
+void collectRecommendedTracks(const ChartData& chart, std::vector<TrackLine>& out) {
+    for (const ChartFeature& f : chart.features) {
+        if ((f.objectClass != "RECTRC" && f.objectClass != "NAVLNE") || f.geometry != Geometry::Line) continue;
+        if (f.parts.empty() || f.parts[0].points.size() < 2) continue;
+        out.push_back({f.parts[0].points, f.orient});
+    }
+}
+
 std::vector<Gate> applyChannelGates(CostGrid& grid, const std::vector<LateralMark>& marks, double maxGateM,
                                     double outsidePenalty, double sideWeight, double lateralRangeM) {
     // Work in metres on a local plane anchored at the grid's north-west corner (cells are square in metres there).
@@ -737,47 +745,178 @@ std::vector<Gate> applyChannelGates(CostGrid& grid, const std::vector<LateralMar
             const float t = tOf[i];
             if (std::isnan(t) || grid.blocked({col, row})) continue;
             if (t < -0.05f || t > 1.05f) grid.setCost({col, row}, grid.cost({col, row}) * static_cast<float>(outsidePenalty));  // outside the marks
-            else grid.setGateCell({col, row}, t, axisOf[i]);                                                                 // between them
+            else { grid.setGateCell({col, row}, t, axisOf[i]); grid.markSidePreferenceSet({col, row}); }                     // between them
         }
     }
     return out;
 }
 
-void applyChannelSidePreference(CostGrid& grid, const std::vector<LateralMark>& marks, double sideWeight, double rangeM) {
-    if (sideWeight <= 0.0 || rangeM <= 0.0) return;
+
+void applyRecommendedTracks(CostGrid& grid, const std::vector<TrackLine>& tracks, double rangeM, double weight,
+                            double offsetM) {
+    if (tracks.empty() || rangeM <= 0.0 || weight <= 0.0) return;
     const size_t n = static_cast<size_t>(grid.cols()) * grid.rows();
-    std::vector<uint8_t> portSeed(n, 0), starSeed(n, 0);
-    bool anyPort = false, anyStar = false;
-    for (const LateralMark& m : marks) {
-        const Cell c = grid.cellAt(m.at);
-        if (!grid.inBounds(c)) continue;
-        const size_t i = static_cast<size_t>(c.row) * grid.cols() + c.col;
-        if (m.category == 1) { portSeed[i] = 1; anyPort = true; }
-        else if (m.category == 2) { starSeed[i] = 1; anyStar = true; }
+    std::vector<uint8_t> seed(n, 0);
+    const double stepM = grid.cellSizeM() * 0.5;
+    for (const TrackLine& tl : tracks) {
+        const size_t m = tl.points.size();
+        if (std::isnan(tl.orientDeg) || m < 2) continue;  // no charted direction of travel: no side to offset toward, skip
+        // East/north components of the charted direction of travel, to settle which way is starboard.
+        const double refX = std::sin(deg2rad(tl.orientDeg)), refY = std::cos(deg2rad(tl.orientDeg));
+        const double k = 111320.0;
+        // One segment direction per gap between points, in metres, in a single local east/north frame anchored at the
+        // line's own first point (fine over the few km a range line or recommended track spans).
+        const double cl0 = std::cos(deg2rad(tl.points[0].lat));
+        std::vector<std::pair<double, double>> segDir(m - 1, {0.0, 0.0});
+        for (size_t i = 0; i + 1 < m; ++i) {
+            const double dx = (tl.points[i + 1].lon - tl.points[i].lon) * cl0 * k;
+            const double dy = (tl.points[i + 1].lat - tl.points[i].lat) * k;
+            const double len = std::hypot(dx, dy);
+            if (len > 1.0) segDir[i] = {dx / len, dy / len};
+        }
+        // Offset every vertex, not every segment: at an interior bend, average the direction of the segment on
+        // either side first, so the two segments' offsets meet at the same point instead of jumping between two
+        // different, independently-offset lines (that jump is what turned into a zigzag in testing on issue #21).
+        std::vector<LatLon> off(m);
+        for (size_t j = 0; j < m; ++j) {
+            double dx = 0.0, dy = 0.0;
+            if (j > 0) { dx += segDir[j - 1].first; dy += segDir[j - 1].second; }
+            if (j + 1 < m) { dx += segDir[j].first; dy += segDir[j].second; }
+            const double len = std::hypot(dx, dy);
+            if (len < 1e-9) { off[j] = tl.points[j]; continue; }
+            dx /= len; dy /= len;
+            // Starboard of the direction of travel: rotate -90 degrees (east,north) -> (north,-east). Flip it if
+            // this vertex's own tangent happens to run opposite the charted ORIENT, so "starboard" stays the same
+            // side all the way along, however the line bends.
+            double px = dy, py = -dx;
+            if (px * refX + py * refY < 0.0) { px = -px; py = -py; }
+            const double cl = std::cos(deg2rad(tl.points[j].lat));
+            off[j] = {tl.points[j].lat + py * offsetM / k, tl.points[j].lon + px * offsetM / (cl * k)};
+        }
+        for (size_t i = 1; i < m; ++i) {
+            const LatLon a = off[i - 1], b = off[i];
+            const int steps = std::max(1, static_cast<int>(haversineM(a, b) / stepM));
+            for (int k2 = 0; k2 <= steps; ++k2) {
+                const double t = static_cast<double>(k2) / steps;
+                const Cell c = grid.cellAt({a.lat + t * (b.lat - a.lat), a.lon + t * (b.lon - a.lon)});
+                if (grid.inBounds(c)) seed[static_cast<size_t>(c.row) * grid.cols() + c.col] = 1;
+            }
+        }
     }
-    if (!anyPort || !anyStar) return;  // no orientation without a mark of each hand somewhere on the grid
+    // A thin, 1-2 cell wide seed line makes a narrow distance valley that closely hugs the grid, cell by cell; a
+    // steep cost gradient over that makes nearby paths tie or nearly tie on cost and the pathfinder can zigzag
+    // between them (the same crease problem applyChannelSidePreference() has, see boxBlur() above it). Blurring
+    // the distance field over a cell or two removes that without washing out the offset itself.
+    const int blurRadiusCells = std::clamp(static_cast<int>(std::lround(90.0 / grid.cellSizeM())), 1, 10);
+    const std::vector<float> dist = boxBlur(grid.distanceFromMaskM(seed), grid.cols(), grid.rows(), blurRadiusCells);
+    for (int r = 0; r < grid.rows(); ++r) {
+        for (int c = 0; c < grid.cols(); ++c) {
+            const Cell cell{c, r};
+            const size_t i = static_cast<size_t>(r) * grid.cols() + c;
+            if (grid.blocked(cell) || dist[i] >= rangeM) continue;
+            if (!std::isnan(grid.laneDirection(cell)) || grid.isZone(cell) || grid.isCaution(cell)) continue;  // not ours to touch
+            // A buoyed gate corridor already has its own, more precise answer for this cell (applyChannelGates());
+            // stacking this cost on top of that one too pulls two different ways in the same cell and can turn into
+            // a zigzag between them, found on issue #21's own benchmark route.
+            if (grid.hasSidePreference(cell)) continue;
+            // Quadratic falloff, exactly like applyShoreMargin()/applyLaneMargin(): 1 + weight right on the offset
+            // line, smoothly down to exactly 1 (no bias) at rangeM, so there is no cliff at the edge of the reach.
+            const double t = 1.0 - dist[i] / rangeM;
+            grid.setCost(cell, grid.cost(cell) * static_cast<float>(1.0 + weight * t * t));
+            grid.markSidePreferenceSet(cell);
+        }
+    }
+}
+
+/// Shared by applyBuoyChannelSides() and computeChannelCenterline(): dot-to-dot chain every port-hand mark to its
+/// nearest other port-hand mark (and the same for starboard-hand), then report each cell's position between the
+/// nearest port chain and the nearest starboard chain as t (0 at port, 1 at starboard), NaN where the two nearest
+/// chains are too far apart (beyond `rangeM` combined) to both belong to the same channel. A gap wider than
+/// `maxGapM` to the next mark of the same hand ends a chain rather than bridging two unrelated clusters into one
+/// false line.
+std::vector<float> markChainSideField(const CostGrid& grid, const std::vector<LateralMark>& marks, double rangeM,
+                                       double maxGapM) {
+    const size_t n = static_cast<size_t>(grid.cols()) * grid.rows();
+    std::vector<float> t(n, std::numeric_limits<float>::quiet_NaN());
+    std::vector<LatLon> port, star;
+    for (const LateralMark& m : marks) {
+        if (m.category == 1) port.push_back(m.at);
+        else if (m.category == 2) star.push_back(m.at);
+    }
+    if (port.empty() || star.empty()) return t;  // only one bank charted: no orientation to work from
+
+    auto buildChains = [&](const std::vector<LatLon>& pts) {
+        std::vector<std::vector<LatLon>> chains;
+        std::vector<bool> used(pts.size(), false);
+        for (size_t start = 0; start < pts.size(); ++start) {
+            if (used[start]) continue;
+            std::vector<LatLon> chain{pts[start]};
+            used[start] = true;
+            size_t cur = start;
+            for (;;) {
+                double best = maxGapM;
+                int bestIdx = -1;
+                for (size_t j = 0; j < pts.size(); ++j) {
+                    if (used[j]) continue;
+                    const double d = haversineM(pts[cur], pts[j]);
+                    if (d < best) { best = d; bestIdx = static_cast<int>(j); }
+                }
+                if (bestIdx < 0) break;
+                chain.push_back(pts[static_cast<size_t>(bestIdx)]);
+                used[static_cast<size_t>(bestIdx)] = true;
+                cur = static_cast<size_t>(bestIdx);
+            }
+            chains.push_back(std::move(chain));
+        }
+        return chains;
+    };
+    const std::vector<std::vector<LatLon>> portChains = buildChains(port);
+    const std::vector<std::vector<LatLon>> starChains = buildChains(star);
+
+    std::vector<uint8_t> portSeed(n, 0), starSeed(n, 0);
+    const double stepM = grid.cellSizeM() * 0.5;
+    auto rasterize = [&](const std::vector<std::vector<LatLon>>& chains, std::vector<uint8_t>& seed) {
+        for (const auto& chain : chains) {
+            for (size_t i = 1; i < chain.size(); ++i) {
+                const LatLon a = chain[i - 1], b = chain[i];
+                const int steps = std::max(1, static_cast<int>(haversineM(a, b) / stepM));
+                for (int k = 0; k <= steps; ++k) {
+                    const double u = static_cast<double>(k) / steps;
+                    const Cell c = grid.cellAt({a.lat + u * (b.lat - a.lat), a.lon + u * (b.lon - a.lon)});
+                    if (grid.inBounds(c)) seed[static_cast<size_t>(c.row) * grid.cols() + c.col] = 1;
+                }
+            }
+            if (chain.size() == 1) {  // a mark with no other of its hand within maxGapM: still a seed on its own
+                const Cell c = grid.cellAt(chain[0]);
+                if (grid.inBounds(c)) seed[static_cast<size_t>(c.row) * grid.cols() + c.col] = 1;
+            }
+        }
+    };
+    rasterize(portChains, portSeed);
+    rasterize(starChains, starSeed);
+
+    // Connected chains are already far smoother than the raw mark positions (no crease every time the nearest mark
+    // switches to the next one along the bank), so only a little blur is needed to settle the gradient.
+    const int blurRadiusCells = std::clamp(static_cast<int>(std::lround(150.0 / grid.cellSizeM())), 1, 20);
     const std::vector<float> dPort = grid.distanceFromMaskM(portSeed);
     const std::vector<float> dStar = grid.distanceFromMaskM(starSeed);
-    // Blurred for the actual t value and its gradient: a raw nearest-mark distance field has a crease wherever the
-    // nearest mark switches to the next one along the bank, which would otherwise make both t and the axis derived
-    // from it ripple along the length of the channel instead of varying smoothly across it.
-    const int blurRadiusCells = std::clamp(static_cast<int>(std::lround(3000.0 / grid.cellSizeM())), 1, 100);
     const std::vector<float> dPortSmooth = boxBlur(dPort, grid.cols(), grid.rows(), blurRadiusCells);
     const std::vector<float> dStarSmooth = boxBlur(dStar, grid.cols(), grid.rows(), blurRadiusCells);
 
-    // t: 0 at the port side, 1 at the starboard side, smooth in between. Left NaN unless a port and a starboard mark
-    // are each plausibly on the same channel: close enough on their own (judged on the raw distance) that the pair's
-    // combined span is under `2 * rangeM`. The span check is what matters on a wide reach with sparse marks on one
-    // bank only nearby: a lone close mark is not enough by itself, or the nearest opposite-hand mark across open
-    // water (a different, unrelated channel) could steer the route by a pairing that was never actually charted.
-    std::vector<float> t(n, std::numeric_limits<float>::quiet_NaN());
     for (size_t i = 0; i < n; ++i) {
-        if (dPort[i] + dStar[i] >= 2.0 * rangeM) continue;  // the two nearest marks are too far apart to both be this channel's
+        if (dPort[i] + dStar[i] >= 2.0 * rangeM) continue;  // the two nearest chains are too far apart to both be this channel's
         const double sum = static_cast<double>(dPortSmooth[i]) + dStarSmooth[i];
-        if (sum < 1.0) continue;  // sitting on a mark itself: no meaningful position to report
+        if (sum < 1.0) continue;  // sitting on a chain itself: no meaningful position to report
         t[i] = static_cast<float>(dPortSmooth[i] / sum);
     }
-    grid.setGateSideWeight(sideWeight);
+    return t;
+}
+
+void applyBuoyChannelSides(CostGrid& grid, const std::vector<LateralMark>& marks, double rangeM, double weight,
+                           double maxGapM) {
+    if (marks.empty() || rangeM <= 0.0 || weight <= 0.0) return;
+    const std::vector<float> t = markChainSideField(grid, marks, rangeM, maxGapM);
+    grid.setGateSideWeight(weight);
     auto at = [&](int c, int r) -> float {
         if (c < 0 || c >= grid.cols() || r < 0 || r >= grid.rows()) return std::numeric_limits<float>::quiet_NaN();
         return t[static_cast<size_t>(r) * grid.cols() + c];
@@ -786,8 +925,8 @@ void applyChannelSidePreference(CostGrid& grid, const std::vector<LateralMark>& 
         for (int c = 0; c < grid.cols(); ++c) {
             const Cell cell{c, r};
             const size_t i = static_cast<size_t>(r) * grid.cols() + c;
-            if (std::isnan(t[i]) || grid.blocked(cell) || !grid.isChannel(cell)) continue;
-            if (!std::isnan(grid.gateT(cell))) continue;  // a real nearby gate already set this precisely; keep it
+            if (std::isnan(t[i]) || grid.blocked(cell)) continue;
+            if (grid.hasSidePreference(cell)) continue;  // a gate or a recommended track already has its own answer here
             if (!std::isnan(grid.laneDirection(cell)) || grid.isZone(cell) || grid.isCaution(cell)) continue;  // not ours to touch
             // Gradient of t points from the port side toward the starboard side, the same role (ux, uy) plays in
             // applyChannelGates(); the same -90 degree rotation turns it into the direction of buoyage.
@@ -796,7 +935,8 @@ void applyChannelSidePreference(CostGrid& grid, const std::vector<LateralMark>& 
             double axis = std::atan2(gx, -gy) * 180.0 / 3.14159265358979 - 90.0;  // bearing (east = +col, north = -row)
             if (axis < 0) axis += 360.0;
             if (axis >= 360.0) axis -= 360.0;
-            grid.setGateCell(cell, t[i], static_cast<float>(axis), true);
+            grid.setGateCell(cell, t[i], static_cast<float>(axis));
+            grid.markSidePreferenceSet(cell);
         }
     }
 }

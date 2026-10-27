@@ -20,7 +20,7 @@ The hazard, restricted-area, structure, bridge and cable, cardinal and isolated-
 4. **Tide and datum.** Depths are at chart datum; there is no tide, current or squat allowance.
 5. **BRIDGE horizontal clearance and beam.** Only vertical clearance against air draft is checked. HORCLR and a beam setting are not used, and an opening bridge is treated as closed.
 6. **BOYSPP, BOYSAW, BCNSPP, LIGHTS on piles.** Special-purpose and safe-water marks are not read, and lateral marks are used to form channels but are not obstacles themselves.
-7. **RECTRC, NAVLNE, DAYMAR, LIGHTS.** Recommended tracks, leading lines and the red and white shore range marks that define a channel axis are not used.
+7. **RECTRC, NAVLNE, DAYMAR, LIGHTS.** Recommended tracks, leading lines and the red and white shore range marks that define a channel axis are parsed (classOf) but the router does not act on them: a tested `applyRecommendedTracks()` that pulls a route toward one exists but is not called, after it produced real zigzag on real charts (see `.claude/CODING_NOTES.md`, issue #21).
 8. **Inland versus international rules.** The router assumes the international rules everywhere.
 
 ## Hazards and depth
@@ -87,8 +87,8 @@ The hazard, restricted-area, structure, bridge and cable, cardinal and isolated-
 | DWRTCL (40) | Deep water route centerline | Deep water route centreline. | As DWRTPT. | 4 line | 4 | **no** |
 | RCTLPT (110) | Recommended Traffic Lane Part | Recommended traffic lane part. | Advisory lane. | 25 area | 12 | **no** |
 | RCRTCL (108) | Recommended route centerline | Recommended route centreline. | Advisory line to follow in a channel. | 27 line | 24 | **no** |
-| RECTRC (109) | Recommended track | Recommended track (dashed line), often between leading marks, with ORIENT and TRAFIC. | The "channel vector": follow it inside a confined channel. | 4,638 line, 96 area | 1,808 | **no** |
-| NAVLNE (85) | Navigation line | Navigation line: leading line / range line / bearing line. | The line drawn between the red and white shore range marks: an axis to line up on in a channel. | 2,327 line | 992 | **no** |
+| RECTRC (109) | Recommended track | Recommended track (dashed line), often between leading marks, with ORIENT and TRAFIC. | The "channel vector": follow it inside a confined channel. Parsed (classOf, `collectRecommendedTracks`) and a tested `applyRecommendedTracks()` can pull a route toward it, but the planner does not call it (see `.claude/CODING_NOTES.md`, issue #21). | 4,638 line, 96 area | 1,808 | **no** |
+| NAVLNE (85) | Navigation line | Navigation line: leading line / range line / bearing line. | The line drawn between the red and white shore range marks: an axis to line up on in a channel. As RECTRC: parsed and the same library function can use it, but the planner does not. | 2,327 line | 992 | **no** |
 | FERYRT (53) | Ferry route | Ferry route. | Crossing traffic: cross square and quickly. | 509 line, 1 area | 242 | **no** |
 
 ## Channels

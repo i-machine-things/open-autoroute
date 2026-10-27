@@ -192,7 +192,6 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     const double caution = req.caution, minLegM = req.minLegM, airDraftArg = req.airDraftM;
     double laneUse = req.laneUse;
     const bool applyTss = req.applyTss, underSail = req.underSail, useMarks = req.useMarks, useChannels = req.useChannels, useHazards = req.useHazards;
-    const bool useSidePref = req.useSidePref;
     const std::vector<std::string>& skipClasses = req.skipClasses;
     std::string routeName = req.routeName;
     const auto startedAt = std::chrono::steady_clock::now();
@@ -322,11 +321,13 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
     if (useChannels) {
         grid.markNarrowChannels(600.0);
         grid.applyChannelPreference(1500.0, 6.0);
-        // Rule 9(a) side preference across the whole charted channel, not just the local reach of a chained gate: a wide
-        // river's marks are often too far apart (across it, or along it) to ever pair into a gate, which otherwise leaves
-        // the route free to wander from one side to the other (issue #21).
-        if (useMarks && useSidePref) applyChannelSidePreference(grid, marks, 1.5, 2500.0);
     }
+    // Neither applyRecommendedTracks() (RECTRC/NAVLNE-based) nor applyBuoyChannelSides() (dot-to-dot mark chains) is
+    // called here. Both measurably produced real grid-staircase zigzag on the real benchmark routes, confirmed by
+    // eye in OpenCPN against the real charts, not just the --picture renderer (which hid it): every attempt to
+    // extend Rule 9(a) side-keeping past applyChannelGates()'s own close-paired corridors has made routes worse, not
+    // better, on real chart data (issue #21). applyChannelGates() is untouched and stays clean. See
+    // .claude/CODING_NOTES.md before trying this again.
     grid.setLaneUseFactor(laneUse);
     // Leeway: a vessel that avoids lanes also keeps a wide berth from lanes, zones and the ends of lane parts, so it prefers
     // open water to a narrow strip between a shore and a lane.
@@ -483,9 +484,11 @@ PlanResult planRoute(const PlanRequest& req, const PlanHooks& hooks) {
                 if (grid.isNarrowChannel(hc)) narrowInM += leg / steps;
                 else if (!narrowDist.empty() && narrowDist[static_cast<size_t>(hc.row) * grid.cols() + hc.col] < 1500.0f && !grid.isChannel(hc)) narrowNearOutM += leg / steps;
                 // Rule 9(a): how often the route swaps sides of a marked channel instead of keeping to the starboard one
-                // (see CostGrid::gateT and applyChannelSidePreference; issue #21). Leaving marked-channel coverage (even
-                // briefly, between two separate charted channels) resets the tracked side, so a swap only counts within
-                // one continuous marked stretch, never across the gap between two unrelated ones.
+                // (see CostGrid::gateT, applyChannelGates and applyBuoyChannelSides; issue #21). Tracked through gateT,
+                // so this does not see a stretch applyRecommendedTracks alone covers (it works by a direct cost pull,
+                // not a position gateT reports). Leaving marked-channel coverage (even briefly, between two separate
+                // charted channels) resets the tracked side, so a swap only counts within one continuous marked
+                // stretch, never across the gap between two unrelated ones.
                 const float gt = grid.gateT(hc);
                 if (!std::isnan(gt)) {
                     const int s = gt < 0.5f ? -1 : 1;
