@@ -33,6 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          persist-credentials: false
           fetch-depth: 0
       - id: t
         env:
@@ -89,9 +90,12 @@ jobs:
           apt-get install -y --no-install-recommends ca-certificates git build-essential cmake libwxgtk3.2-dev libgl-dev libglu1-mesa-dev \
                               libxml2-utils
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: OpenCPN plugin API header (the release the plugin targets)
         uses: actions/checkout@v7
         with:
+          persist-credentials: false
           repository: OpenCPN/OpenCPN
           ref: 0cd62032bc17ff004ce47f6b5dbdcccf88348400   # OpenCPN tag upstream/5.14.2+dfsg, pinned by commit (tags can move)
           path: ocpn
@@ -99,6 +103,7 @@ jobs:
       - name: OpenCPN plugin-catalog schema (to validate the catalog metadata this release generates)
         uses: actions/checkout@v7
         with:
+          persist-credentials: false
           repository: OpenCPN/plugins
           ref: master
           path: ocpn-plugins-catalog
@@ -304,6 +309,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          persist-credentials: false
           fetch-depth: 0
       - name: The release notes that would be published
         run: scripts/release_notes.sh "${{ needs.validate.outputs.tag }}" HEAD | tee -a "$GITHUB_STEP_SUMMARY"
@@ -321,6 +327,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          persist-credentials: false
           fetch-depth: 0
       - uses: actions/download-artifact@v8
         with:
