@@ -70,7 +70,7 @@ jobs:
             diff -ru current-metadata new-metadata || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: catalog-metadata
           path: new-metadata/*.xml
@@ -85,12 +85,12 @@ jobs:
     env:
       BRANCH: ${{ needs.prepare.outputs.branch }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: i-machine-things/plugins
           ref: ${{ env.BRANCH }}
           token: ${{ secrets.CATALOG_PUSH_TOKEN }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: catalog-metadata
           path: new-metadata

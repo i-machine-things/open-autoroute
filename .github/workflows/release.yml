@@ -31,7 +31,7 @@ jobs:
       dry: ${{ steps.t.outputs.dry }}
       prerelease: ${{ steps.t.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: t
@@ -88,16 +88,16 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends ca-certificates git build-essential cmake libwxgtk3.2-dev libgl-dev libglu1-mesa-dev \
                               libxml2-utils
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: OpenCPN plugin API header (the release the plugin targets)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: OpenCPN/OpenCPN
           ref: 0cd62032bc17ff004ce47f6b5dbdcccf88348400   # OpenCPN tag upstream/5.14.2+dfsg, pinned by commit (tags can move)
           path: ocpn
           sparse-checkout: include
       - name: OpenCPN plugin-catalog schema (to validate the catalog metadata this release generates)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: OpenCPN/plugins
           ref: master
@@ -128,7 +128,7 @@ jobs:
             xmllint --noout --schema ocpn-plugins-catalog/ocpn-plugin.xsd "$f"
           done
           ls -l dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-artifacts-linux
           path: dist/*
@@ -142,11 +142,11 @@ jobs:
       TAG: ${{ needs.validate.outputs.tag }}
     # UNVERIFIED: nobody has yet imported this package into a real Windows OpenCPN install (see docs/RELEASING.md).
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: OpenCPN plugin API header (the release the plugin targets)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: OpenCPN/OpenCPN
           ref: 0cd62032bc17ff004ce47f6b5dbdcccf88348400   # OpenCPN tag upstream/5.14.2+dfsg, pinned by commit (tags can move)
@@ -154,7 +154,7 @@ jobs:
           sparse-checkout: include
           persist-credentials: false
       - name: OpenCPN's prebuilt Windows import library (headers alone aren't enough to link against a DLL -- see CMakeLists.txt)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: OpenCPN/opencpn-libs
           ref: main   # this repo's default branch is "main", unlike OpenCPN/OpenCPN and OpenCPN/plugins' "master"
@@ -171,7 +171,7 @@ jobs:
         shell: bash
         run: '"$VCPKG_INSTALLATION_ROOT/vcpkg" install wxwidgets:x86-windows-static'
       - name: Set up the MSVC Developer Command Prompt (32-bit)
-        uses: seanmiddleditch/gha-setup-vsdevenv@8c6bbf80998779f2bba87b1452832e561b65fd57   # v3
+        uses: seanmiddleditch/gha-setup-vsdevenv@cf96bf5b227cac6af28c04c4a4e69286ea444163   # v5
         with:
           host_arch: x86
           arch: win32
@@ -200,7 +200,7 @@ jobs:
           pkg="dist/openautoroute-opencpn-plugin-$TAG-windows-x86.tar.gz"
           url="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/$(basename "$pkg")"
           VERSION="$OAR_VER" TARGET=msvc TARGET_VERSION=143 TARGET_ARCH=x86 plugin/catalog_metadata.sh "$pkg" "$url" dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-artifacts-windows
           path: dist/*
@@ -214,11 +214,11 @@ jobs:
       TAG: ${{ needs.validate.outputs.tag }}
     # Local ARM import confirmed; the corrected release artifact still needs testing (see docs/RELEASING.md).
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: OpenCPN plugin API header (the release the plugin targets)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: OpenCPN/OpenCPN
           ref: 0cd62032bc17ff004ce47f6b5dbdcccf88348400   # OpenCPN tag upstream/5.14.2+dfsg, pinned by commit (tags can move)
@@ -239,7 +239,7 @@ jobs:
           pkg="dist/openautoroute-opencpn-plugin-$TAG-macos-arm64.tar.gz"
           url="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/$(basename "$pkg")"
           VERSION="${TAG#v}" TARGET=darwin-wx32 TARGET_VERSION=14 TARGET_ARCH=arm64 plugin/catalog_metadata.sh "$pkg" "$url" dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-artifacts-macos
           path: dist/*
@@ -254,7 +254,7 @@ jobs:
     # UNVERIFIED: a manually-built package was confirmed to import into a real Flatpak OpenCPN 5.14.2 (see
     # flatpak/README.md and #54/#55), but this job's own output has not yet been tested the same way.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: flatpak, flatpak-builder, org.opencpn.OpenCPN and its matching Sdk (see flatpak/README.md)
@@ -266,7 +266,7 @@ jobs:
           sdk=$(flatpak info --show-sdk org.opencpn.OpenCPN)
           sudo flatpak install -y flathub "org.freedesktop.Sdk//${sdk##*/}"
       - name: OpenCPN plugin-catalog schema (to validate the catalog metadata this release generates)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: OpenCPN/plugins
           ref: master
@@ -290,7 +290,7 @@ jobs:
             plugin/catalog_metadata.sh "$pkg" "$url" dist
           xmllint --noout --schema ocpn-plugins-catalog/ocpn-plugin.xsd dist/openautoroute_pi-*.xml
           ls -l dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-artifacts-flatpak
           path: dist/*
@@ -302,7 +302,7 @@ jobs:
     if: needs.validate.outputs.dry == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: The release notes that would be published
@@ -319,10 +319,10 @@ jobs:
       TAG: ${{ needs.validate.outputs.tag }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: release-artifacts-*
           merge-multiple: true

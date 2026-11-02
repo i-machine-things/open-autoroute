@@ -23,7 +23,7 @@ jobs:
     name: Lint (warnings are errors, shell scripts, workflow YAML)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Core, tool and tests build clean with warnings as errors (gcc and clang)
         run: |
           for cxx in g++ clang++; do
@@ -44,7 +44,7 @@ jobs:
       matrix:
         cxx: [g++, clang++]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Configure, build, test with CMake
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
@@ -58,7 +58,7 @@ jobs:
     name: Tests under AddressSanitizer and UndefinedBehaviorSanitizer
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: |
           g++ -std=c++17 -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer \
               -Iinclude src/*.cpp tests/test_core.cpp -o build_san
@@ -82,9 +82,9 @@ jobs:
           SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO=sudo
           $SUDO apt-get update
           $SUDO apt-get install -y --no-install-recommends ca-certificates git build-essential cmake libwxgtk3.2-dev libgl-dev libglu1-mesa-dev
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: OpenCPN plugin API header (the release the plugin targets)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: OpenCPN/OpenCPN
           ref: 0cd62032bc17ff004ce47f6b5dbdcccf88348400   # OpenCPN tag upstream/5.14.2+dfsg, pinned by commit (tags can move)
@@ -102,7 +102,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - run: scripts/next_version.sh HEAD | tee -a "$GITHUB_STEP_SUMMARY"
